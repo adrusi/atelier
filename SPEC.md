@@ -217,10 +217,11 @@ Agent tabs can tolerate a brief flash of the wrong styles. So a tab bound to som
 
 Users will reasonably want a generic fallback, such as Dark Reader, for the many pages that will never get a bespoke style. To avoid the user having to disable Dark Reader by hand on every styled origin, atelier injects `<meta name="darkreader-lock">` at `document_start` on any page where a bespoke style matches. Dark Reader respects this tag, which sites use to opt out. This lets atelier work alongside Dark Reader without any communication between the two extensions.
 
-- The tag is injected by the same shim that applies the default source's styles (§6.1), so it is present exactly when bespoke styles are.
+- The tag is injected by the same shim that applies the default source's styles (§6.1), so it is present whenever bespoke styles are. At `document_start` it's appended to `<html>`, since `<head>` doesn't exist yet. Dark Reader checks the whole document once `<head>` appears, so it never acts, not even its first-paint fallback (R5).
+- If a style starts matching later in the same document (single-page-app navigation), the lock goes in `<head>`, the only place Dark Reader watches. Dark Reader then removes its theme.
+- If a style stops matching, the lock stays: Dark Reader wouldn't come back until a reload anyway. Within a document, once atelier has styled the page, Dark Reader stays off until reload. For single-page apps that's a reason to scope a service's styles to the whole app.
 - A per-service setting (`service.toml`) can turn the lock off, for the rare style meant to sit on top of Dark Reader.
 - The fallback's colours stay the user's business: Dark Reader's settings aren't linked to the atelier theme.
-- To verify: whether Dark Reader checks for the lock only when it initialises or also watches for it later, and therefore whether injecting at `document_start` is always early enough (R5).
 
 ---
 
@@ -523,7 +524,7 @@ atelier daemon | native-host | mcp  internal entry points
 - **R2: Emulating `prefers-color-scheme` per tab.** *Answered (spikes/r2/RESULTS.md):* full per-tab emulation, triggered by a `sessionStorage` marker. A page-world script wraps `matchMedia`. A user-script-world script rewrites `prefers-color-scheme` conditions through the CSSOM and in `media` attributes, and forces `color-scheme`. Cross-origin stylesheets, which the CSSOM won't expose, are fetched by the background, rewritten, and swapped in as copies. This covered every mechanism in the fixture, and the user's tabs were unaffected. The global `browserSettings` override is not used. Still open: rules added later through `insertRule`, `@import` in cross-origin sheets, and iframes.
 - **R3: Screenshots of background tabs.** *Answered (spikes/r3/RESULTS.md):* `tabs.captureTab` captures hidden tabs accurately except for content that depends on animation frames. CSS animations can be fast-forwarded first; content drawn by `requestAnimationFrame` needs the tab to be visible (`tab_show`). Still open: full-page captures, device pixel ratios other than 1, and minimised windows on other compositors.
 - **R4: Keeping the extension alive under Firefox MV3.** *Answered (spikes/r4/RESULTS.md):* in Firefox 156, an open native-messaging port keeps an MV3 background page resident (tested to 10 minutes idle), while one without a port is suspended after about 30 s and wakes within a second on the next event. MV3 stands. Still open: behaviour of a signed permanent install, and across sleep/resume. Reconnection and resync after the host goes away still have to be designed (§4.2).
-- **R5: Timing of the Dark Reader lock.** Whether a lock tag injected at `document_start` reliably stops Dark Reader, including on SPA navigations within an origin, where bespoke styles may start or stop matching without a page load.
+- **R5: Timing of the Dark Reader lock.** *Answered (spikes/r5/RESULTS.md):* a lock appended at `document_start` keeps Dark Reader 4.9.133 off completely. One added later works only in `<head>`. Removing it doesn't bring Dark Reader back before a reload. See §6.5. Still open: other Dark Reader versions and modes, and iframes.
 
 ---
 

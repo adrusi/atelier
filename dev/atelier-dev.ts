@@ -35,7 +35,7 @@ usage: atelier-dev <command> [args]
 
   navigate NAME URL           load URL in the first tab and wait for it
   eval NAME EXPR              evaluate EXPR in the first tab; prints the result
-  install-ext NAME PATH       install an unpacked extension as a temporary add-on
+  install-ext NAME PATH       install an extension (directory or .xpi) as a temporary add-on
   bidi NAME METHOD [PARAMS]   send one raw WebDriver BiDi command (PARAMS is JSON)
 
 The BiDi commands each open and end their own session. Firefox allows only one
@@ -96,7 +96,7 @@ async function cmdUp(args: string[]) {
   }
   for (const ext of extensions) {
     if (!isInside(ext, REPO)) die(`extension ${ext} is outside the repo, so the jail can't see it`);
-    if (!fs.existsSync(path.join(ext, "manifest.json"))) die(`no manifest.json in ${ext}`);
+    if (!isArchive(ext) && !fs.existsSync(path.join(ext, "manifest.json"))) die(`no manifest.json in ${ext}`);
   }
   if (!nativeHost && fs.existsSync(path.join(REPO, "target/debug/atelier"))) {
     nativeHost = path.join(REPO, "target/debug/atelier");
@@ -465,9 +465,15 @@ async function firstContext(bidi: Bidi): Promise<string> {
   return tree.contexts[0]?.context ?? die("Firefox has no open tabs");
 }
 
+/** Packed extensions (.xpi or .zip) install from the archive; anything else is an unpacked directory. */
+function isArchive(ext: string): boolean {
+  return /\.(xpi|zip)$/.test(ext);
+}
+
 async function installExtension(state: State, ext: string): Promise<string> {
   return withBidiSession(state, async (bidi) => {
-    const r = await bidi.send("webExtension.install", { extensionData: { type: "path", path: ext } });
+    const extensionData = isArchive(ext) ? { type: "archivePath", path: ext } : { type: "path", path: ext };
+    const r = await bidi.send("webExtension.install", { extensionData });
     return r.extension;
   });
 }

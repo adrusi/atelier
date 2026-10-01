@@ -60,7 +60,7 @@ atelier-dev screenshot dev1
 atelier-dev down dev1
 ```
 
-- `up` installs `extension/dist` automatically if it exists, unless `--extension` is given, and registers `target/debug/atelier` as the native host if it exists (override with `--native-host`).
+- `up` installs `extension/dist` automatically if it exists, unless `--extension` is given (a directory, or a packed `.xpi`), and registers `target/debug/atelier` as the native host if it exists (override with `--native-host`).
 - Extensions and the native host must be inside the repo, because that's the only part of the real filesystem the jail can see (read-only).
 - The BiDi commands each open and end their own session. **Firefox allows only one BiDi session at a time**, so these commands fail while another client (e.g. a test runner) holds one. Browsing-context IDs from one session aren't accepted by the next, so anything that needs IDs should do all its work in one session: write a script using `dev/bidi.ts` (see `spikes/r1/run.ts`).
 - `--pref` adds a line to the profile's `user.js`; the value is parsed as JSON if it can be (`--pref extensions.foo=false`). `--system-access` starts Firefox with `--remote-allow-system-access`. Even with it, BiDi can't drive privileged pages such as `moz-extension://` pages.
@@ -109,7 +109,8 @@ Instances live in `$XDG_RUNTIME_DIR/atelier-dev/<name>/` (override with `ATELIER
 | slow-stream | early first paint: the server pauses partway through the document (R1) | exists |
 | hostile-head | a page that removes `<style>` elements, rebuilds `<head>` and resets adopted stylesheets after load (R1) | exists |
 | capture | eight boxes, each coloured by a different mechanism (static CSS, timers, rAF, CSS animation, lazy image, ...), for checking what screenshots show; `?start=MS` delays the animated ones (R3) | exists |
-| spa | navigation without page loads; styles and Dark Reader lock starting or stopping mid-session (R5) | planned |
+| dark-reader | an ordinary light page reporting whether Dark Reader is acting on it, including in the first frame (R5) | exists |
+| spa | navigation without page loads, for styles that start or stop matching mid-session | planned |
 | shadow-dom | open and closed shadow roots; styles that need a script | planned |
 | hashed-classes | selector-fragility linting; canaries | planned |
 | color-scheme | every common way a page picks light or dark, including a cross-origin stylesheet (R2) | exists |
