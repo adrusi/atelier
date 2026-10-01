@@ -1,0 +1,15 @@
+{
+  "name": "atelier-extension",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.ts",
+    "watch": "node build.ts --watch",
+    "check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/firefox-webext-browser": "^143.0.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^7.0.0"
+  }
+}

@@ -1,0 +1,4 @@
+html {
+  outline: 12px solid magenta !important;
+  outline-offset: -12px !important;
+}

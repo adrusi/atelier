@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "atelier dev smoke test",
+  "description": "Draws a magenta frame around every page, to check that extensions load in dev instances.",
+  "version": "0.0.1",
+  "browser_specific_settings": { "gecko": { "id": "atelier-smoke@atelier.invalid" } },
+  "content_scripts": [
+    { "matches": ["<all_urls>"], "css": ["smoke.css"], "run_at": "document_start" }
+  ]
+}

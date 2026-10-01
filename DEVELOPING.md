@@ -1,0 +1,117 @@
+# Developing atelier
+
+Status: the dev environment (`dev/`) works. `crates/atelier` has a stub native host and `extension/` a skeleton background script, enough to run the spikes. Everything else in the layout below is still planned.
+
+Get the tools with `nix develop`, which also puts `atelier-dev` on `PATH`. Then:
+
+```sh
+cargo build                                  # target/debug/atelier
+(cd extension && npm install && npm run build)   # extension/dist; `npm run check` typechecks
+atelier-dev up                               # picks up both automatically
+```
+
+## Repo layout
+
+```
+crates/
+  atelier/          # the single binary: daemon, native-host, mcp, CLI
+  atelier-proto/    # wire-protocol types (SPEC §4.1); generates TypeScript types
+extension/          # the WebExtension (TypeScript, esbuild, web-ext; MV3)
+kit/                # agent kit: MCP prompts, skills, authoring guidance
+dev/
+  atelier-dev.ts    # the dev-environment script (below); dev/bin/atelier-dev runs it
+  sway.conf         # compositor config for dev instances
+  fixtures/         # fixture sites for tests and spikes, plus their server
+  smoke-extension/  # trivial extension for checking that extension loading works
+spikes/             # throwaway spike code (R1–R5); never imported by the real code
+flake.nix           # dev shell, packages, home-manager module
+```
+
+## Dev environments
+
+Agents and humans test atelier in **dev instances**. Each is a jailed Firefox running inside its own compositor, completely separate from the developer's real browser, home directory and desktop. Nothing in development should touch the real profile, `~/.mozilla`, or the real XDG directories.
+
+### Commands
+
+```
+atelier-dev up [--name NAME] [--visible] [--extension PATH]... [--native-host BIN] [--no-fixtures]
+atelier-dev down NAME... | --all [--keep]
+atelier-dev ls
+atelier-dev env NAME                  shell exports: ATELIER_DEV_BIDI, ATELIER_DEV_FIXTURES, ...
+atelier-dev exec NAME -- CMD [ARG]... run a command inside the instance's compositor
+atelier-dev screenshot NAME [OUT]     compositor screenshot (grim); prints the path
+atelier-dev vnc NAME [--port PORT]    serve a headless instance over VNC
+
+atelier-dev navigate NAME URL         load URL in the first tab and wait for it
+atelier-dev eval NAME EXPR            evaluate EXPR in the first tab
+atelier-dev install-ext NAME PATH     install an unpacked extension as a temporary add-on
+atelier-dev bidi NAME METHOD [PARAMS] send one raw WebDriver BiDi command
+```
+
+A typical loop:
+
+```sh
+atelier-dev up --extension dev/smoke-extension   # prints name, BiDi URL, fixture URL
+eval "$(atelier-dev env dev1)"
+atelier-dev navigate dev1 "$ATELIER_DEV_FIXTURES/basic/"
+atelier-dev screenshot dev1
+atelier-dev down dev1
+```
+
+- `up` installs `extension/dist` automatically if it exists, unless `--extension` is given, and registers `target/debug/atelier` as the native host if it exists (override with `--native-host`).
+- Extensions and the native host must be inside the repo, because that's the only part of the real filesystem the jail can see (read-only).
+- The BiDi commands each open and end their own session. **Firefox allows only one BiDi session at a time**, so these commands fail while another client (e.g. a test runner) holds one.
+- Logs for the jail, Firefox and the fixture server are in the instance's `log/` directory.
+
+Instances live in `$XDG_RUNTIME_DIR/atelier-dev/<name>/` (override with `ATELIER_DEV_ROOT`). They're on tmpfs and disposable: `down` deletes them unless given `--keep`. Several can run at once (one per parallel agent). Budget about 0.5–1 GB of RAM each.
+
+### What an instance contains
+
+- **A bubblewrap jail.** Inside it:
+  - `HOME` is the instance's own directory;
+  - the XDG runtime, state, config and data directories are private, and so are the Firefox profile and `ATELIER_DIR`;
+  - `/nix`, `/etc`, the repo and (on NixOS) `/run/current-system` are bound read-only; nothing else from the real home directory or `$XDG_RUNTIME_DIR` is visible;
+  - `PATH` is the host's, with symlinked entries such as `~/.nix-profile/bin` resolved to store paths the jail can see;
+  - sway runs under its own private session D-Bus (the nixpkgs wrapper starts one), so the jailed Firefox can never find the real one and open its windows there ("Firefox is already running").
+
+  The network is shared for now, so that fixture sites, public smoke-test sites and the BiDi port are reachable. That means the jail's localhost is the host's localhost, and abstract unix sockets (which belong to the network namespace) are shared too. That's why Xwayland is disabled in `sway.conf`: it would collide with the host's X server. Tighter network isolation (pasta/slirp4netns) can come later.
+- **Teardown:** `up` records the PID of the jail's PID-namespace init (from bwrap's `--info-fd`). `down` SIGKILLs it, and the kernel kills everything else in the namespace. PID-1 of a namespace ignores catchable signals from outside, which is why it's SIGKILL.
+- **Fonts** are bound read-only into the jail: `~/.config/fontconfig` and `~/.local/share/fonts`. Fonts matter a lot when judging a style, so instances should render like the real desktop.
+- **sway**, as the compositor:
+  - default `WLR_BACKENDS=headless`: renders for real, but nothing appears on the desktop;
+  - rendering is in software (`WLR_RENDERER=pixman`, overridable with `ATELIER_DEV_WLR_RENDERER`): GPU access inside the jail is unreliable, and software output is more reproducible across machines anyway;
+  - `--visible`: `WLR_BACKENDS=wayland`, with the host's Wayland socket (and only that socket) bound into the jail, so the whole instance shows up as a single window (**not yet tested**);
+  - sway rather than cage, so that tests can reproduce different window arrangements (one tab per window, focus, active tab per window).
+- **Firefox** from the dev shell, with a fresh profile (first-run UI suppressed) and `--remote-debugging-port` for WebDriver BiDi on a port chosen per instance. It's launched as a child of sway via `swaymsg exec`, and so is the fixture server.
+- **The dev build of the extension**, installed as a temporary add-on over BiDi (`webExtension.install`), so no signing is needed. Dev builds use their own IDs, `atelier-dev@…` for the extension and `atelier_dev` for the native host, as a second safeguard against clashing with a real install.
+- **The dev native-messaging manifest**, written into the jail's `HOME` (`~/.mozilla/native-messaging-hosts/atelier_dev.json`), never the real one. It points at a small wrapper script that runs `atelier native-host`, since Firefox can't pass arguments to a host. The stub host logs every connection and message to `~/.local/state/atelier/native-host.log` inside the instance's home.
+- **An atelier daemon** (planned) for the instance's `ATELIER_DIR`, whose socket is in the jail's runtime directory, exposed to the host through the instance directory.
+
+### Driving an instance
+
+- **From outside atelier:** WebDriver BiDi for navigation, script evaluation, screenshots and assertions, and `grim` for true compositor screenshots. Use these to check what atelier can't observe about itself (e.g. whether a page ever painted without its styles).
+- **Through atelier:** point `atelier mcp` at the instance, via `atelier-dev env`, which sets `ATELIER_DIR` and the runtime directory. That exercises the real agent-facing tools while developing them.
+- Don't use Playwright here: it uses a patched Firefox, and its extension support is weak.
+
+### Fixture sites
+
+`dev/fixtures/` holds small deterministic sites, each exercising one thing. Each instance runs `dev/fixtures/server.ts` inside the jail on its own port (`$ATELIER_DEV_FIXTURES`), serving each fixture directory at `/<name>/`. A fixture can have a `_fixture.json` that adds response headers (e.g. a CSP) or makes unknown paths serve `index.html` (for single-page apps); see the comment at the top of `server.ts`.
+
+| Fixture | Exercises | Status |
+|---|---|---|
+| basic | ordinary light page, for smoke tests | exists |
+| strict-csp | style injection under strict CSP (R1) | exists |
+| spa | navigation without page loads; styles and Dark Reader lock starting or stopping mid-session (R5) | planned |
+| shadow-dom | open and closed shadow roots; styles that need a script | planned |
+| hashed-classes | selector-fragility linting; canaries | planned |
+| own-dark-mode | sites that follow `prefers-color-scheme`; prerequisites (R2) | planned |
+| lazy-load | background-tab rendering and screenshots (R3) | planned |
+
+Write the planned ones alongside the spikes that need them.
+
+Public smoke tests use sites that don't need logging in (Wikipedia, MDN, Hacker News). **Never copy cookies or profile data from a real profile into a dev instance.** Testing on logged-in services is done by hand, by the developer, in their own browser.
+
+### Notes
+
+- Temporarily installed MV3 extensions get their content-script host permissions without a prompt: the smoke extension's `<all_urls>` CSS applies immediately. Don't assume the same for a signed install.
+- Agent harnesses may themselves run tools inside a bubblewrap sandbox (Claude Code does on Linux). Nested bwrap usually works when unprivileged user namespaces are enabled. If it doesn't, run `atelier-dev` outside the harness's sandbox.
