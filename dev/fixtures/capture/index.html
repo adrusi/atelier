@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>capture fixture</title>
+  <link rel="stylesheet" href="capture.css">
+  <script src="capture.js" defer></script>
+</head>
+<body>
+  <!-- Each box starts grey (128,128,128) and becomes its final colour through a
+       different mechanism, so a screenshot shows which mechanisms had taken
+       effect in the captured frame. Boxes are 100px squares at y=20, x=20+120n. -->
+  <div class="box" id="static"></div>   <!-- static CSS: (200,0,0) -->
+  <div class="box" id="timer"></div>    <!-- setTimeout after 300ms: (0,200,0) -->
+  <div class="box" id="raf"></div>      <!-- requestAnimationFrame: (0,0,200) -->
+  <div class="box" id="injected"></div> <!-- CSS injected by the test extension: (200,200,0) -->
+  <img class="box" id="lazy" loading="lazy" src="lazy.svg" alt="">  <!-- lazy image: (200,0,200) -->
+  <div class="box" id="late"></div>     <!-- after a fetch resolves: (0,200,200) -->
+  <div class="box" id="raf30"></div>    <!-- after 30 animation frames (from ?start=MS): (200,100,0) -->
+  <div class="box" id="anim"></div>     <!-- CSS animation (from ?start=MS), 0.5s delay: (0,100,200) -->
+</body>
+</html>

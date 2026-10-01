@@ -1,0 +1,12 @@
+html, body { margin: 0; background: rgb(10, 20, 30); }
+.box { position: absolute; top: 20px; width: 100px; height: 100px; background: rgb(128, 128, 128); }
+#static { left: 20px; background: rgb(200, 0, 0); }
+#timer { left: 140px; }
+#raf { left: 260px; }
+#injected { left: 380px; }
+#lazy { left: 500px; background: none; }
+#late { left: 620px; }
+#raf30 { left: 740px; }
+#anim { left: 860px; }
+#anim.animate { animation: to-blue 0.01s 0.5s forwards; }
+@keyframes to-blue { to { background: rgb(0, 100, 200); } }

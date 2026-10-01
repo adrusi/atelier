@@ -108,11 +108,11 @@ Instances live in `$XDG_RUNTIME_DIR/atelier-dev/<name>/` (override with `ATELIER
 | strict-csp | style injection under strict CSP (R1) | exists |
 | slow-stream | early first paint: the server pauses partway through the document (R1) | exists |
 | hostile-head | a page that removes `<style>` elements, rebuilds `<head>` and resets adopted stylesheets after load (R1) | exists |
+| capture | eight boxes, each coloured by a different mechanism (static CSS, timers, rAF, CSS animation, lazy image, ...), for checking what screenshots show; `?start=MS` delays the animated ones (R3) | exists |
 | spa | navigation without page loads; styles and Dark Reader lock starting or stopping mid-session (R5) | planned |
 | shadow-dom | open and closed shadow roots; styles that need a script | planned |
 | hashed-classes | selector-fragility linting; canaries | planned |
 | own-dark-mode | sites that follow `prefers-color-scheme`; prerequisites (R2) | planned |
-| lazy-load | background-tab rendering and screenshots (R3) | planned |
 
 Write the planned ones alongside the spikes that need them. `_shared/probe.js` is a reusable probe for style-injection tests; its header comment describes how to use it. Directories starting with `_` are served but not listed.
 

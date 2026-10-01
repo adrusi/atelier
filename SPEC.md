@@ -195,7 +195,7 @@ Agent tabs can tolerate a brief flash of the wrong styles. So a tab bound to som
 - Agent tabs are tracked by tab ID, not by position. atelier tolerates them being moved, closed or discarded, and recreates them when needed.
 - **Containers:** an agent tab opens in the same `cookieStoreId` as the tab the request came from, or the container named in the task. Otherwise it wouldn't be logged in.
 - Agent tabs are closed when their task finishes, or when their session disconnects without holding a lease.
-- **Screenshots** are the main constraint here. `captureVisibleTab` needs the tab to be the active tab in its window. `tabs.captureTab` may work on background tabs, but background tabs throttle `requestAnimationFrame` and lazy loading. See R3.
+- **Screenshots** (decided by R3): agent tabs are background tabs in the user's current window by default, captured with `tabs.captureTab`. That works for hidden tabs and gets DOM and CSS state right, including timers, lazy images and freshly injected CSS. But `requestAnimationFrame` stops while a tab is hidden, and CSS animations don't run in tabs that have never been shown. So the screenshot tool fast-forwards CSS animations before capturing, and tells the agent when content drawn by animation frames may be missing. A window on a hidden workspace behaves the same as a background tab, so the "new window" preference stays off by default.
 
 ### 6.4 UI
 
@@ -400,9 +400,9 @@ Tools for **contractors** (every call carries a task token):
   - `task_submit(summary, assumptions)`;
   - `task_decline(reason)`;
   - `task_block(question)`.
-- **Tabs:** `tab_open(url)`, `tab_navigate(url)`, `tab_reload`, `tab_close`, `tab_list`.
+- **Tabs:** `tab_open(url)`, `tab_navigate(url)`, `tab_reload`, `tab_close`, `tab_list`, and `tab_show`, which briefly brings an agent tab to the front for content that only renders while visible. `tab_show` takes focus from the user, so it's allowed only if the user's settings permit it.
 - **Looking at a page:**
-  - `screenshot(tab, {selector?, full_page?})`;
+  - `screenshot(tab, {selector?, full_page?, settle_animations = true})`, which returns a note alongside the image when the tab is hidden and content drawn by animation frames may be stale (R3);
   - `dom_query(selector, {depth, attrs})`;
   - `computed_style(selector, props)`;
   - `accessibility_tree`;
@@ -521,7 +521,7 @@ atelier daemon | native-host | mcp  internal entry points
 
 - **R1: Binding tabs to sources at `document_start`.** *Answered (spikes/r1/RESULTS.md):* a user script that inserts and maintains a `<style>` element meets every requirement (§6.1). Still open: iframes, the observer's cost on heavy pages, and the messaging-based swap for tabs bound elsewhere (§6.2), which hasn't been built yet.
 - **R2: Emulating `prefers-color-scheme` per tab.** WebExtension APIs only offer a browser-wide override (`browserSettings.overrideContentColorScheme`), which would change the user's own tabs. Fallback: when serving to an agent tab, rewrite our own `@media (prefers-color-scheme)` blocks to force one scheme. That doesn't cover the site's own media queries or `matchMedia`. Other options to look into: a dedicated check window that briefly uses the global override, or accepting partial fidelity.
-- **R3: Screenshots of background tabs.** `tabs.captureTab` on inactive tabs, and how accurate the result is given throttled rendering and lazy loading. The result decides whether the "new window" preference should be on by default.
+- **R3: Screenshots of background tabs.** *Answered (spikes/r3/RESULTS.md):* `tabs.captureTab` captures hidden tabs accurately except for content that depends on animation frames. CSS animations can be fast-forwarded first; content drawn by `requestAnimationFrame` needs the tab to be visible (`tab_show`). Still open: full-page captures, device pixel ratios other than 1, and minimised windows on other compositors.
 - **R4: Keeping the extension alive under Firefox MV3.** *Answered (spikes/r4/RESULTS.md):* in Firefox 156, an open native-messaging port keeps an MV3 background page resident (tested to 10 minutes idle), while one without a port is suspended after about 30 s and wakes within a second on the next event. MV3 stands. Still open: behaviour of a signed permanent install, and across sleep/resume. Reconnection and resync after the host goes away still have to be designed (§4.2).
 - **R5: Timing of the Dark Reader lock.** Whether a lock tag injected at `document_start` reliably stops Dark Reader, including on SPA navigations within an origin, where bespoke styles may start or stop matching without a page load.
 
