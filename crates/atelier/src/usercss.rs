@@ -638,13 +638,20 @@ fn host_of(url: &str) -> Option<String> {
     Some(host.to_ascii_lowercase())
 }
 
+impl From<&atelier_proto::Matcher> for Matcher {
+    fn from(m: &atelier_proto::Matcher) -> Self {
+        match m {
+            atelier_proto::Matcher::Url(v) => Matcher::Url(v.clone()),
+            atelier_proto::Matcher::UrlPrefix(v) => Matcher::UrlPrefix(v.clone()),
+            atelier_proto::Matcher::Domain(v) => Matcher::Domain(v.clone()),
+            atelier_proto::Matcher::Regexp(v) => Matcher::Regexp(v.clone()),
+        }
+    }
+}
+
 impl Section {
     pub fn is_global(&self) -> bool {
         self.matchers.is_empty()
-    }
-
-    pub fn applies_to(&self, url: &str) -> bool {
-        self.is_global() || self.matchers.iter().any(|m| m.matches(url))
     }
 }
 
