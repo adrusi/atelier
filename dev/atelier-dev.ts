@@ -23,7 +23,7 @@ const USAGE = `\
 usage: atelier-dev <command> [args]
 
   up [--name NAME] [--visible] [--extension PATH]... [--native-host BIN]
-     [--pref NAME=VALUE]... [--system-access] [--no-fixtures]
+     [--pref NAME=VALUE]... [--system-access] [--atelier-dir DIR] [--no-fixtures]
                               start an instance (default name: dev1, dev2, ...)
   down NAME... | --all [--keep]
                               stop instances and delete their directories
@@ -77,6 +77,7 @@ async function cmdUp(args: string[]) {
   let visible = false;
   let fixtures = true;
   let systemAccess = false;
+  let atelierDir: string | undefined;
   const extensions: string[] = [];
   let nativeHost: string | undefined;
   const prefs: string[] = [];
@@ -86,6 +87,7 @@ async function cmdUp(args: string[]) {
     else if (a === "--visible") visible = true;
     else if (a === "--no-fixtures") fixtures = false;
     else if (a === "--system-access") systemAccess = true;
+    else if (a === "--atelier-dir") atelierDir = path.resolve(args[++i]);
     else if (a === "--extension") extensions.push(path.resolve(args[++i]));
     else if (a === "--native-host") nativeHost = path.resolve(args[++i]);
     else if (a === "--pref") prefs.push(userPref(args[++i]));
@@ -125,7 +127,8 @@ async function cmdUp(args: string[]) {
   const fixturesPort = fixtures ? await freePort() : null;
 
   const jailLog = fs.openSync(path.join(p.log, "jail.log"), "a");
-  const child = spawn("bwrap", bwrapArgs(p, hostWayland), {
+  if (atelierDir && !fs.statSync(atelierDir, { throwIfNoEntry: false })?.isDirectory()) die(`--atelier-dir ${atelierDir} isn't a directory`);
+  const child = spawn("bwrap", bwrapArgs(p, hostWayland, atelierDir), {
     detached: true,
     stdio: ["ignore", jailLog, jailLog, "pipe"],
   });
@@ -290,7 +293,7 @@ async function cmdBidi(args: string[]) {
 // ---------------------------------------------------------------------------
 // Jail
 
-function bwrapArgs(p: Paths, hostWayland: string | undefined): string[] {
+function bwrapArgs(p: Paths, hostWayland: string | undefined, atelierDir: string | undefined): string[] {
   const args = [
     "--unshare-all",
     // Shared so the host can reach BiDi and the fixture server, and the jail can
@@ -313,6 +316,9 @@ function bwrapArgs(p: Paths, hostWayland: string | undefined): string[] {
     "--bind", p.dir, p.dir,
     "--ro-bind", REPO, REPO,
   );
+
+  // A host directory used as the jail's default owned directory ($XDG_DATA_HOME/atelier), read-write.
+  if (atelierDir) args.push("--bind", atelierDir, path.join(p.home, ".local/share/atelier"));
 
   // Fonts matter for judging styles, so instances should render like the real desktop.
   const realHome = os.homedir();
@@ -498,6 +504,9 @@ user_pref("browser.sessionstore.resume_from_crash", false);
 user_pref("browser.translations.automaticallyPopup", false);
 user_pref("extensions.autoDisableScopes", 0);
 user_pref("extensions.pocket.enabled", false);
+// Console output from extensions and pages goes to log/firefox.log.
+user_pref("devtools.console.stdout.chrome", true);
+user_pref("devtools.console.stdout.content", true);
 `;
 
 /** Turns NAME=VALUE into a user.js line. VALUE is JSON if it parses as JSON (true, 30000, "x"), else a string. */

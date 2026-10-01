@@ -146,7 +146,7 @@ ATELIER_DIR/
             └── checks/*.check.js
 ```
 
-- **`service.toml`** records the user's original description, a short summary written by the agent, any **prerequisites** (for example "set GitHub's appearance to 'sync with system'"), and for each theme the styles and scripts to load, with their canaries (§11).
+- **`service.toml`** (optional) records the user's original description (`description`), a short summary written by the agent (`summary`), any **prerequisites** (`prerequisites`, for example "set GitHub's appearance to 'sync with system'"), and whether to keep Dark Reader off its pages (`dark_reader_lock`, default true; §6.5). Every style file in `services/<service>/<active theme>/` is loaded. Canaries (§11) will be added here too.
 - **Service notes are independent of theme.** They record things like "the user wants the sidebar kept visible". They are written by contractors when a task lands, so later contractors inherit decisions without reading old threads.
 - **Theme notes are written only by the supervisor** (§9.3).
 - Scopes are expressed inside each style using UserCSS `@-moz-document` blocks. A service is not itself a scope.
@@ -177,7 +177,7 @@ ATELIER_DIR/
 - **Injection mechanism** (decided by R1): a user script (`userScripts.register`, USER_SCRIPT world, `document_start`) with the CSS embedded in its code inserts a `<style>` element. The element is kept as the last child of `<html>`, so it wins ties with the page's own rules, and a MutationObserver puts it back if the page removes it. In Firefox 156 this applies before first paint, isn't blocked by strict CSP, survives hydration-style clobbering, and can be removed per tab. `scripting.insertCSS` on navigation commit was measured too, and misses the first frame on every page.
 - **This makes the `userScripts` permission necessary for styles**, not only for userscripts (§12). It's optional-only in Firefox, so first-run setup includes a grant step with a real click.
 - **Changing a style** updates the user-script registration, for future loads, and the `<style>` text in tabs that are already open.
-- **Variables** are injected as a separate small stylesheet, so a change to `vars.json` re-registers one thing.
+- **Variables** are compiled into each style as `:root { --name: value; … }`, with values from `vars.json` and the style's own `@var` defaults as fallback. A change to `vars.json` produces a new bundle like any other change.
 
 ### 6.2 Binding tabs to sources
 
@@ -220,7 +220,7 @@ Users will reasonably want a generic fallback, such as Dark Reader, for the many
 - The tag is injected by the same shim that applies the default source's styles (§6.1), so it is present whenever bespoke styles are. At `document_start` it's appended to `<html>`, since `<head>` doesn't exist yet. Dark Reader checks the whole document once `<head>` appears, so it never acts, not even its first-paint fallback (R5).
 - If a style starts matching later in the same document (single-page-app navigation), the lock goes in `<head>`, the only place Dark Reader watches. Dark Reader then removes its theme.
 - If a style stops matching, the lock stays: Dark Reader wouldn't come back until a reload anyway. Within a document, once atelier has styled the page, Dark Reader stays off until reload. For single-page apps that's a reason to scope a service's styles to the whole app.
-- A per-service setting (`service.toml`) can turn the lock off, for the rare style meant to sit on top of Dark Reader.
+- A per-service setting (`service.toml`) can turn the lock off, for the rare style meant to sit on top of Dark Reader. Only sections with `@-moz-document` matchers lock: CSS outside any block (which `atelier lint` warns about in service styles) and theme-wide global styles never do, or they would switch Dark Reader off everywhere.
 - The fallback's colours stay the user's business: Dark Reader's settings aren't linked to the atelier theme.
 
 ---
@@ -490,6 +490,7 @@ atelier journal                     list landings
 atelier theme [get|set NAME]
 atelier check [SERVICE]             run checks (asks the browser to open a check tab)
 atelier lint [PATH]
+atelier match URL                   which styles (and which of their sections) apply to URL
 atelier approve FILE | --hash H
 atelier daemon | native-host | mcp  internal entry points
 ```

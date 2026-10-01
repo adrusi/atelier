@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Set up atelier</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body>
+  <main>
+    <h1>One permission to go</h1>
+    <p>atelier applies your styles with Firefox's <em>user scripts</em> feature: it's the only way to get a style into a page before the page first appears, so you never see it unstyled. Firefox asks for this permission separately, and only with a click.</p>
+    <p>atelier only runs its own code, which inserts the styles from your atelier directory into the pages they're written for.</p>
+    <button id="grant" autofocus>Allow user scripts</button>
+    <p id="result" role="status"></p>
+  </main>
+  <script src="onboarding.js" type="module"></script>
+</body>
+</html>

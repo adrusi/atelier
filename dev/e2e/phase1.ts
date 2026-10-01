@@ -1,0 +1,164 @@
+// End-to-end test for phase 1 (SPEC §15): styles in an owned directory reach
+// pages, through the daemon, native host, extension and page shim.
+//
+// Builds nothing itself: run `cargo build` and `(cd extension && npm run build)`
+// first, then from a `nix develop` shell:  node dev/e2e/phase1.ts
+
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import path from "node:path";
+import { type Bidi, evaluate, withSession } from "../bidi.ts";
+
+const NAME = "e2e-phase1";
+const instance = path.join(process.env.XDG_RUNTIME_DIR!, "atelier-dev", NAME);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const dev = (...args: string[]) => execFileSync("atelier-dev", args, { encoding: "utf8" });
+
+// Next to the instance rather than in TMPDIR, which `nix develop` deletes on
+// exit: it's kept for inspection if the test fails.
+const owned = `${instance}-owned`;
+fs.rmSync(owned, { recursive: true, force: true });
+fs.mkdirSync(owned, { recursive: true });
+const write = (file: string, content: string) => {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, content);
+};
+
+write(path.join(owned, "atelier.toml"), 'theme = "e2e"\n');
+write(path.join(owned, "themes/e2e/THEME.md"), "# e2e\n");
+const BASIC = path.join(owned, "services/fixtures/e2e/basic.user.css");
+const basicStyle = (topbar: string) => `/* ==UserStyle==
+@name Fixtures: basic
+@var color accent "Accent" #ff0000
+==/UserStyle== */
+@-moz-document domain("127.0.0.1") {
+  .topbar { background: ${topbar}; }
+  main h1 { color: var(--accent); }
+}
+`;
+write(BASIC, basicStyle("rgb(1, 2, 3)"));
+write(
+  path.join(owned, "services/fixtures/e2e/route.user.css"),
+  `@-moz-document regexp("https?://127\\\\.0\\\\.0\\\\.1:\\\\d+/basic/other") {\n  main { outline: 3px solid rgb(4, 5, 6); }\n}\n`,
+);
+
+let failures = 0;
+async function check(name: string, f: () => Promise<void>) {
+  try {
+    await f();
+    console.log(`ok    ${name}`);
+  } catch (e) {
+    failures++;
+    console.log(`FAIL  ${name}\n      ${(e as Error).message.split("\n").join("\n      ")}`);
+  }
+}
+
+async function eventually<T>(f: () => Promise<T>, ok: (v: T) => boolean, timeoutMs = 5000): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  let v = await f();
+  while (!ok(v) && Date.now() < deadline) {
+    await sleep(200);
+    v = await f();
+  }
+  return v;
+}
+
+/** The extension opens its onboarding page on install, with the grant button
+ * focused. Press Enter through the compositor (real input; see DEVELOPING.md)
+ * until the background logs that it registered user scripts. */
+async function grantUserScripts() {
+  const firefoxLog = path.join(instance, "log/firefox.log");
+  const granted = () => fs.readFileSync(firefoxLog, "utf8").includes("atelier: user scripts:");
+  await withSession(state.bidiPort, async (bidi) => {
+    await eventually(
+      async () => (await bidi.send("browsingContext.getTree", { maxDepth: 0 })).contexts.some((c: any) => c.url.endsWith("/onboarding.html")),
+      (v) => v,
+      10_000,
+    );
+  });
+  for (let attempt = 0; attempt < 3 && !granted(); attempt++) {
+    await sleep(1000);
+    dev("exec", NAME, "--", "wtype", "-s", "300", "-k", "Return");
+    await eventually(async () => granted(), (v) => v, 5000);
+  }
+  if (!granted()) throw new Error("couldn't grant the userScripts permission");
+}
+
+dev("up", "--name", NAME, "--atelier-dir", owned, "--pref", "extensions.webextOptionalPermissionPrompts=false");
+const state = JSON.parse(fs.readFileSync(path.join(instance, "state.json"), "utf8"));
+const basicUrl = `http://127.0.0.1:${state.fixturesPort}/basic/`;
+const varsJson = path.join(instance, "home/.config/atelier/vars.json");
+
+try {
+  await grantUserScripts();
+
+  await withSession(state.bidiPort, async (bidi: Bidi) => {
+    const tab = (await bidi.send("browsingContext.create", { type: "tab" })).context;
+    await bidi.send("browsingContext.activate", { context: tab });
+    const load = (url: string) => bidi.send("browsingContext.navigate", { context: tab, url, wait: "complete" });
+    const js = (expr: string) => evaluate(bidi, tab, expr);
+    const computed = (selector: string, prop: string) =>
+      js(`getComputedStyle(document.querySelector(${JSON.stringify(selector)})).${prop}`);
+
+    // Wait for the permission grant and first bundle to land.
+    await eventually(
+      async () => {
+        await load(basicUrl);
+        return js(`Boolean(document.querySelector("style[data-atelier]"))`);
+      },
+      (v) => v === true,
+      20_000,
+    );
+
+    await check("style applies on load, winning ties with the page's own rules", async () => {
+      assert.equal(await computed(".topbar", "backgroundColor"), "rgb(1, 2, 3)");
+    });
+    await check("style elements are the last children of <html>", async () => {
+      assert.equal(await js(`document.documentElement.lastElementChild.getAttribute("data-atelier")`), "services/fixtures/e2e/basic.user.css");
+    });
+    await check("@var defaults apply", async () => {
+      assert.equal(await computed("main h1", "color"), "rgb(255, 0, 0)");
+    });
+    await check("Dark Reader lock is added", async () => {
+      assert.equal(await js(`Boolean(document.querySelector('meta[name="darkreader-lock"]'))`), true);
+    });
+    await check("regexp-scoped style doesn't apply on other paths", async () => {
+      assert.equal(await computed("main", "outlineStyle"), "none");
+    });
+
+    await check("editing a style updates the open page live", async () => {
+      write(BASIC, basicStyle("rgb(7, 8, 9)"));
+      const v = await eventually(() => computed(".topbar", "backgroundColor"), (v) => v === "rgb(7, 8, 9)");
+      assert.equal(v, "rgb(7, 8, 9)");
+    });
+    await check("editing vars.json updates the open page live", async () => {
+      write(varsJson, JSON.stringify({ accent: "#00ff00" }));
+      const v = await eventually(() => computed("main h1", "color"), (v) => v === "rgb(0, 255, 0)");
+      assert.equal(v, "rgb(0, 255, 0)");
+    });
+    await check("history-API navigation re-evaluates which sections apply", async () => {
+      await js(`history.pushState({}, "", "/basic/other")`);
+      const v = await eventually(() => computed("main", "outlineColor"), (v) => v === "rgb(4, 5, 6)");
+      assert.equal(v, "rgb(4, 5, 6)");
+    });
+    await check("a fresh load gets the edited style and vars", async () => {
+      await load(basicUrl);
+      assert.equal(await computed(".topbar", "backgroundColor"), "rgb(7, 8, 9)");
+      assert.equal(await computed("main h1", "color"), "rgb(0, 255, 0)");
+    });
+    await check("removing a style removes it from open pages", async () => {
+      fs.rmSync(BASIC);
+      const v = await eventually(() => js(`document.querySelectorAll("style[data-atelier]").length`), (v) => v === 0);
+      assert.equal(v, 0);
+    });
+  });
+} finally {
+  if (failures) console.log(`\nlogs: ${path.join(instance, "log")}, ${path.join(instance, "home/.local/state/atelier")}`);
+  dev("down", "--keep", NAME);
+  if (!failures) fs.rmSync(path.join(instance), { recursive: true, force: true });
+  if (failures) console.log(`owned directory kept: ${owned}`);
+  else fs.rmSync(owned, { recursive: true, force: true });
+}
+console.log(failures ? `\n${failures} failed` : "\nall passed");
+process.exit(failures ? 1 : 0);

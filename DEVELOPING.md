@@ -1,6 +1,6 @@
 # Developing atelier
 
-Status: the dev environment (`dev/`) works. `crates/atelier` has a stub native host and `extension/` a skeleton background script, enough to run the spikes. Everything else in the layout below is still planned.
+Status: phase 1 (SPEC §15) is underway. Styles in an owned directory reach pages: `crates/atelier` has the loader, daemon, native-host relay and CLI basics, and `extension/` applies styles with the page shim. `kit/` and the rest of the later phases are still planned.
 
 Get the tools with `nix develop`, which also puts `atelier-dev` on `PATH`. Then:
 
@@ -15,7 +15,8 @@ atelier-dev up                               # picks up both automatically
 ```
 crates/
   atelier/          # the single binary: daemon, native-host, mcp, CLI
-  atelier-proto/    # wire-protocol types (SPEC §4.1); generates TypeScript types
+  atelier-proto/    # wire-protocol types (SPEC §4.1); `cargo test -p atelier-proto` regenerates
+                    # the TypeScript bindings in extension/src/proto/ (committed; don't edit by hand)
 extension/          # the WebExtension (TypeScript, esbuild, web-ext; MV3)
 kit/                # agent kit: MCP prompts, skills, authoring guidance
 dev/
@@ -36,7 +37,7 @@ Agents and humans test atelier in **dev instances**. Each is a jailed Firefox ru
 
 ```
 atelier-dev up [--name NAME] [--visible] [--extension PATH]... [--native-host BIN]
-               [--pref NAME=VALUE]... [--system-access] [--no-fixtures]
+               [--pref NAME=VALUE]... [--system-access] [--atelier-dir DIR] [--no-fixtures]
 atelier-dev down NAME... | --all [--keep]
 atelier-dev ls
 atelier-dev env NAME                  shell exports: ATELIER_DEV_BIDI, ATELIER_DEV_FIXTURES, ...
@@ -64,6 +65,8 @@ atelier-dev down dev1
 - Extensions and the native host must be inside the repo, because that's the only part of the real filesystem the jail can see (read-only).
 - The BiDi commands each open and end their own session. **Firefox allows only one BiDi session at a time**, so these commands fail while another client (e.g. a test runner) holds one. Browsing-context IDs from one session aren't accepted by the next, so anything that needs IDs should do all its work in one session: write a script using `dev/bidi.ts` (see `spikes/r1/run.ts`).
 - `--pref` adds a line to the profile's `user.js`; the value is parsed as JSON if it can be (`--pref extensions.foo=false`). `--system-access` starts Firefox with `--remote-allow-system-access`. Even with it, BiDi can't drive privileged pages such as `moz-extension://` pages.
+- `--atelier-dir DIR` binds a host directory into the jail, read-write, as its default owned directory. Use it to try real styles in a dev instance.
+- Console output from extensions and pages goes to `log/firefox.log`. The extension's background logs its connection, bundle loads and user-script registration there.
 - **Real input:** `atelier-dev exec NAME -- wtype …` types through the compositor, which produces trusted events. That's how to satisfy APIs that need a user gesture, such as `permissions.request`. Start with a delay (`wtype -s 300 …`): the first keystroke otherwise races the virtual keyboard's setup and is dropped.
 - Logs for the jail, Firefox and the fixture server are in the instance's `log/` directory.
 
@@ -96,6 +99,17 @@ Instances live in `$XDG_RUNTIME_DIR/atelier-dev/<name>/` (override with `ATELIER
 - **From outside atelier:** WebDriver BiDi for navigation, script evaluation, screenshots and assertions, and `grim` for true compositor screenshots. Use these to check what atelier can't observe about itself (e.g. whether a page ever painted without its styles).
 - **Through atelier:** point `atelier mcp` at the instance, via `atelier-dev env`, which sets `ATELIER_DIR` and the runtime directory. That exercises the real agent-facing tools while developing them.
 - Don't use Playwright here: it uses a patched Firefox, and its extension support is weak.
+
+### End-to-end tests
+
+`dev/e2e/` holds end-to-end tests that run the whole stack in a dev instance:
+owned directory, daemon, native host, extension and page shim. Build first
+(`cargo build`, `(cd extension && npm run build)`), then e.g.
+`node dev/e2e/phase1.ts`. A failing run keeps the instance and its owned
+directory (`$XDG_RUNTIME_DIR/atelier-dev/<name>{,-owned}`) for inspection.
+
+Unit and integration tests for the Rust side run with `cargo test`. Those for
+the daemon start real daemons against temporary directories.
 
 ### Fixture sites
 

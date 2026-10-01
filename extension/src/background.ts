@@ -1,31 +1,201 @@
-// Background script. For now it only holds the connection to the native host
-// and reports its own lifecycle to it, which is what spike R4 needs: whether
-// Firefox suspends an MV3 background while a native port is open (SPEC §16).
+// Background script. It keeps a connection to the daemon through the native
+// host (which also keeps this background resident; spike R4), fetches the
+// bundle of compiled styles, and registers one user script per style that
+// runs the page shim (shim.ts). When the bundle changes it updates the
+// registrations and pushes the new bundle to pages that are already open.
+
+import type { BlobChunk } from "./proto/BlobChunk";
+import type { BlobRef } from "./proto/BlobRef";
+import type { Bundle } from "./proto/Bundle";
+import type { InitializeResult } from "./proto/InitializeResult";
+import { Rpc } from "./rpc";
+import { onUserScriptConnect, type UserScript, userScripts } from "./userscripts";
 
 declare const ATELIER_NATIVE_HOST: string;
+/** The compiled page shim, inlined by build.ts. */
+declare const ATELIER_SHIM: string;
 
-const startedAt = Date.now();
-let port: browser.runtime.Port | undefined;
+/** Must match atelier_proto::PROTOCOL_VERSION. */
+const PROTOCOL_VERSION = 1;
+/** Bytes per blob/get request; the daemon caps chunks at this anyway. */
+const CHUNK = 512 * 1024;
 
-function notify(method: string, params: object) {
-  port?.postMessage({ jsonrpc: "2.0", method, params: { ...params, at: Date.now() } });
+export type State = {
+  connection: "connecting" | "connected" | "disconnected";
+  error?: string;
+  atelierDir?: string;
+  bundle?: Bundle;
+  bundleHash?: string;
+  needsPermission: boolean;
+};
+
+const state: State = { connection: "disconnected", needsPermission: !userScripts() };
+let rpc: Rpc | null = null;
+let retryDelay = 1000;
+let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+// ---------------------------------------------------------------------------
+// Connection to the daemon
+
+async function connect() {
+  clearTimeout(retryTimer);
+  if (rpc) return;
+  state.connection = "connecting";
+  const { atelierDir } = (await browser.storage.local.get("atelierDir")) as { atelierDir?: string };
+  const r = new Rpc(browser.runtime.connectNative(ATELIER_NATIVE_HOST));
+  rpc = r;
+  r.onClose = (error) => {
+    if (rpc !== r) return;
+    rpc = null;
+    state.connection = "disconnected";
+    state.error = error ?? state.error;
+    scheduleReconnect();
+  };
+  r.onNotification = (method, params) => {
+    if (method === "bundle/changed") void loadBundle(r, params as BlobRef);
+  };
+  try {
+    const init = await r.call<InitializeResult>("initialize", {
+      protocolVersion: PROTOCOL_VERSION,
+      role: "extension",
+      ...(atelierDir ? { atelierDir } : {}),
+    });
+    state.connection = "connected";
+    state.atelierDir = init.atelierDir;
+    console.info(`atelier: connected to the daemon for ${init.atelierDir}`);
+    state.error = undefined;
+    retryDelay = 1000;
+    await loadBundle(r, await r.call<BlobRef>("bundle/get"));
+  } catch (e) {
+    state.error = e instanceof Error ? e.message : String(e);
+    console.warn("atelier:", state.error);
+    if (rpc === r) {
+      rpc = null;
+      state.connection = "disconnected";
+      r.close();
+      scheduleReconnect();
+    }
+  }
 }
 
-function connect() {
-  port = browser.runtime.connectNative(ATELIER_NATIVE_HOST);
-  port.onMessage.addListener((msg) => console.debug("atelier: from host", msg));
-  port.onDisconnect.addListener((p) => {
-    console.warn("atelier: native host disconnected", p.error?.message);
-    port = undefined;
-  });
-  notify("extension/hello", { startedAt });
+function scheduleReconnect() {
+  clearTimeout(retryTimer);
+  retryTimer = setTimeout(connect, retryDelay);
+  retryDelay = Math.min(retryDelay * 2, 60_000);
 }
 
-// Event-page listeners have to be registered synchronously at the top level.
-browser.runtime.onInstalled.addListener((details) => notify("extension/installed", { reason: details.reason }));
-browser.runtime.onStartup.addListener(() => notify("extension/startup", {}));
-browser.runtime.onSuspend.addListener(() =>
-  notify("extension/suspending", { startedAt, uptimeMs: Date.now() - startedAt }),
-);
+async function loadBundle(r: Rpc, ref: BlobRef) {
+  if (ref.hash === state.bundleHash) return;
+  const parts: Uint8Array[] = [];
+  let offset = 0;
+  for (;;) {
+    const chunk = await r.call<BlobChunk>("blob/get", { hash: ref.hash, offset, len: CHUNK });
+    const bytes = Uint8Array.from(atob(chunk.data), (c) => c.charCodeAt(0));
+    parts.push(bytes);
+    offset += bytes.length;
+    if (chunk.eof) break;
+  }
+  const blob = new Uint8Array(offset);
+  let at = 0;
+  for (const p of parts) {
+    blob.set(p, at);
+    at += p.length;
+  }
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", blob));
+  const hash = Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
+  if (hash !== ref.hash) throw new Error(`bundle hash mismatch: expected ${ref.hash}, got ${hash}`);
 
-connect();
+  const bundle = JSON.parse(new TextDecoder().decode(blob)) as Bundle;
+  state.bundle = bundle;
+  state.bundleHash = hash;
+  console.info(`atelier: bundle ${hash.slice(0, 12)}: ${bundle.styles.length} styles, ${bundle.diagnostics.length} diagnostics`);
+  await applyBundle(bundle);
+}
+
+// ---------------------------------------------------------------------------
+// Applying styles
+
+const scriptId = (styleId: string) => `style:${styleId}`;
+
+async function applyBundle(bundle: Bundle) {
+  const us = userScripts();
+  state.needsPermission = !us;
+  if (!us) {
+    console.info("atelier: can't apply styles until the userScripts permission is granted");
+    return;
+  }
+
+  await us.configureWorld({ messaging: true });
+  listenToShims();
+
+  const wanted: UserScript[] = bundle.styles.map((style) => ({
+    id: scriptId(style.id),
+    matches: style.patterns,
+    js: [{ code: ATELIER_SHIM }, { code: `__atelier.add(${JSON.stringify(style)});` }],
+    runAt: "document_start",
+    world: "USER_SCRIPT",
+  }));
+  const existing = new Set((await us.getScripts()).map((s) => s.id));
+  const wantedIds = new Set(wanted.map((s) => s.id));
+  const removed = [...existing].filter((id) => !wantedIds.has(id));
+  if (removed.length) await us.unregister({ ids: removed });
+  const updates = wanted.filter((s) => existing.has(s.id));
+  if (updates.length) await us.update(updates);
+  const added = wanted.filter((s) => !existing.has(s.id));
+  if (added.length) await us.register(added);
+  console.info(`atelier: user scripts: ${added.length} added, ${updates.length} updated, ${removed.length} removed`);
+
+  for (const port of shimPorts) port.postMessage({ type: "bundle", styles: bundle.styles });
+}
+
+// Pages running the shim connect back so they can get live updates.
+const shimPorts = new Set<browser.runtime.Port>();
+
+function onShimConnect(port: browser.runtime.Port) {
+  shimPorts.add(port);
+  port.onDisconnect.addListener(() => shimPorts.delete(port));
+  // The page may have been registered from an older bundle.
+  if (state.bundle) port.postMessage({ type: "bundle", styles: state.bundle.styles });
+}
+
+function listenToShims() {
+  const event = onUserScriptConnect();
+  if (event && !event.hasListener(onShimConnect)) event.addListener(onShimConnect);
+}
+
+function notifyUrlChange(details: { tabId: number; frameId: number }) {
+  if (details.frameId !== 0) return;
+  for (const port of shimPorts) {
+    if (port.sender?.tab?.id === details.tabId) port.postMessage({ type: "url" });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Wiring. Listeners are registered synchronously, as event pages require.
+
+browser.webNavigation.onHistoryStateUpdated.addListener(notifyUrlChange);
+browser.webNavigation.onReferenceFragmentUpdated.addListener(notifyUrlChange);
+
+browser.permissions.onAdded.addListener((p) => {
+  if ((p.permissions as string[] | undefined)?.includes("userScripts") && state.bundle) void applyBundle(state.bundle);
+});
+
+browser.runtime.onInstalled.addListener((details) => {
+  if (details.reason === "install" && !userScripts()) {
+    void browser.tabs.create({ url: browser.runtime.getURL("onboarding.html") });
+  }
+});
+
+browser.runtime.onMessage.addListener((msg: unknown) => {
+  if ((msg as { type?: string })?.type === "state") return Promise.resolve(state);
+  return undefined;
+});
+
+// If the background was suspended while disconnected, this wakes it to retry.
+browser.alarms.create("reconnect", { periodInMinutes: 1 });
+browser.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === "reconnect" && !rpc) void connect();
+});
+
+listenToShims();
+void connect();
