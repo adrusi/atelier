@@ -176,7 +176,7 @@ ATELIER_DIR/
 - **Cascade origin:** styles are injected as **author-origin** CSS, the same way Stylus does it. `cssOrigin: "user"` isn't used by default: user-origin normal declarations lose to author normal declarations, so it only helps with `!important` everywhere, and it would break semantic compatibility with existing UserCSS.
 - **Injection mechanism** (decided by R1): a user script (`userScripts.register`, USER_SCRIPT world, `document_start`) with the CSS embedded in its code inserts a `<style>` element. The element is kept as the last child of `<html>`, so it wins ties with the page's own rules, and a MutationObserver puts it back if the page removes it. In Firefox 156 this applies before first paint, isn't blocked by strict CSP, survives hydration-style clobbering, and can be removed per tab. `scripting.insertCSS` on navigation commit was measured too, and misses the first frame on every page.
 - **This makes the `userScripts` permission necessary for styles**, not only for userscripts (§12). It's optional-only in Firefox, so first-run setup includes a grant step with a real click.
-- **Changing a style** updates the user-script registration, for future loads, and the `<style>` text in tabs that are already open.
+- **Changing a style** updates the user-script registration, for future loads, and the `<style>` text in tabs that are already open: shims connect back to the background and take live updates. Tabs that have no shim yet (opened before any style matched them, or before the extension started) get one injected with `userScripts.execute` when a style starts applying to them. Without that, a newly written style only showed up after a reload, which breaks the most basic authoring loop (dogfooding, examples/DOGFOODING.md).
 - **Variables** are compiled into each style as `:root { --name: value; … }`, with values from `vars.json` and the style's own `@var` defaults as fallback. A change to `vars.json` produces a new bundle like any other change.
 
 ### 6.2 Binding tabs to sources
@@ -360,6 +360,8 @@ The kit ships with atelier and is installed by `atelier setup` (§14):
   - Prefer selectors on ARIA roles and attributes and `data-testid` over hashed class names.
   - Split a service into several styles along natural seams (base, compose view, settings) so a breakage can be disabled narrowly.
   - Use scripts only for what CSS can't do.
+  - Start by inventorying the site's custom properties, and which selectors and media queries define them. On Wikipedia, one block of token overrides restyled the whole skin (examples/DOGFOODING.md).
+  - Always set default link and text colours: sites leave some links to the browser default, which is unreadable on a dark theme.
 - **Tone:** briefs and instructions are written in a collegial register, for a colleague being briefed, not as imperative commands. The kit tells agents explicitly that they may ask, push back, suggest and decline.
 
 ### 9.3 Supervisor and contractors
@@ -443,6 +445,7 @@ These scopes are the main defence against prompt injection from page content (§
 
 ### 11.2 When checks run
 
+- **Prerequisite checks (proposed, from dogfooding).** A service whose styles build on a site setting ("set Appearance to Automatic") can declare a cheap check next to the prerequisite in `service.toml`, e.g. "`<html>` has class `skin-theme-clientpref-os` or `skin-theme-clientpref-night`". The popup then says "this style needs a site setting changed" instead of the style silently doing nothing.
 - **Passive checks run during ordinary browsing**, debounced, sampled and idle-scheduled (`requestIdleCallback`), at most once per style per page load. They cover logged-in state and real content without a background crawler.
 - **Active checks run** when a task is submitted (as the gate) and when the user asks.
 
