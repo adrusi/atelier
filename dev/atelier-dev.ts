@@ -32,9 +32,11 @@ usage: atelier-dev <command> [args]
   env NAME                    print shell exports for talking to an instance
   exec NAME -- CMD [ARG]...   run a command inside the instance's compositor
   screenshot NAME [OUT]       compositor screenshot (grim); prints the path
+  capture NAME [OUT] [--full] screenshot of the first tab's page (no browser UI); --full
+                              captures the whole document, not just the viewport
   vnc NAME [--port PORT]      serve a headless instance over VNC (foreground)
 
-  navigate NAME URL           load URL in the first tab and wait for it
+  navigate NAME URL           load URL in the first tab, bring it to the front, and wait
   eval NAME EXPR              evaluate EXPR in the first tab; prints the result
   install-ext NAME PATH       install an extension (directory or .xpi) as a temporary add-on
   bidi NAME METHOD [PARAMS]   send one raw WebDriver BiDi command (PARAMS is JSON)
@@ -258,9 +260,23 @@ async function cmdNavigate(args: string[]) {
   const state = running(name);
   await withBidiSession(state, async (bidi) => {
     const context = await firstContext(bidi);
+    await bidi.send("browsingContext.activate", { context });
     const r = await bidi.send("browsingContext.navigate", { context, url, wait: "complete" });
     console.log(r.url);
   });
+}
+
+async function cmdCapture(args: string[]) {
+  const full = args.includes("--full");
+  const [name, out] = args.filter((a) => a !== "--full");
+  const state = running(name);
+  const file = out ? path.resolve(out) : path.join(instancePaths(state.name).shots, `${timestamp()}.png`);
+  await withBidiSession(state, async (bidi) => {
+    const context = await firstContext(bidi);
+    const r = await bidi.send("browsingContext.captureScreenshot", { context, origin: full ? "document" : "viewport" });
+    fs.writeFileSync(file, Buffer.from(r.data, "base64"));
+  });
+  console.log(file);
 }
 
 async function cmdEval(args: string[]) {
@@ -327,6 +343,12 @@ function bwrapArgs(p: Paths, hostWayland: string | undefined, atelierDir: string
     "--bind", p.dir, p.dir,
     "--ro-bind", REPO, REPO,
   );
+
+  // Name resolution. On NixOS (and other systemd-resolved setups),
+  // /etc/resolv.conf points into /run/systemd/resolve, and glibc asks nscd
+  // through its socket; the jail's /run is otherwise private.
+  args.push("--ro-bind-try", "/run/systemd/resolve", "/run/systemd/resolve");
+  args.push("--bind-try", "/run/nscd", "/run/nscd");
 
   // A host directory used as the jail's default owned directory ($XDG_DATA_HOME/atelier), read-write.
   if (atelierDir) args.push("--bind", atelierDir, path.join(p.home, ".local/share/atelier"));
@@ -653,6 +675,7 @@ const COMMANDS: Record<string, (args: string[]) => unknown> = {
   env: cmdEnv,
   exec: cmdExec,
   screenshot: cmdScreenshot,
+  capture: cmdCapture,
   vnc: cmdVnc,
   navigate: cmdNavigate,
   eval: cmdEval,

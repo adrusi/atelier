@@ -1,0 +1,107 @@
+/* ==UserStyle==
+@name           Hacker News (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    Catppuccin Mocha, flat, for news.ycombinator.com
+==/UserStyle== */
+
+@-moz-document domain("news.ycombinator.com") {
+  :root {
+    color-scheme: dark;
+    --base: #1e1e2e; --mantle: #181825; --crust: #11111b;
+    --surface0: #313244; --surface1: #45475a; --overlay0: #6c7086; --overlay2: #9399b2;
+    --text: #cdd6f4; --lavender: #b4befe; --blue: #89b4fa; --mauve: #cba6f7; --peach: #fab387;
+    --sans: "NotoSans NFP Cond", "Noto Sans", sans-serif;
+    --mono: "NotoSansM NFM ExtCond", "NotoSansM Nerd Font Mono", monospace;
+  }
+
+  html, body { background: var(--base); }
+  body, td, .title, .subtext, .comment, .commtext, .default, .admin, input, textarea, select {
+    font-family: var(--sans);
+  }
+  pre, code, tt { font-family: var(--mono); }
+
+  /* HN sets colours with bgcolor attributes; the CSS background wins. */
+  #hnmain {
+    background: var(--base);
+    width: 100%;
+    max-width: 1100px;
+    margin-top: 10px;
+  }
+  #hnmain > tbody > tr:first-child > td {
+    background: var(--mantle);
+    border: 1px solid var(--surface0);
+    border-radius: 8px;
+  }
+  #hnmain > tbody > tr:first-child > td > table { padding: 6px 8px !important; }
+  #hnmain > tbody > tr:first-child img { border: 0 !important; border-radius: 4px; }
+  .pagetop, .pagetop a:link, .pagetop a:visited { color: var(--overlay2); }
+  .hnname a:link, .hnname a:visited { color: var(--lavender); }
+  .topsel a:link, .topsel a:visited { color: var(--lavender); }
+
+  /* Links HN doesn't colour itself (e.g. in item text) fall back to these. */
+  a:link { color: var(--blue); }
+  a:visited { color: var(--mauve); }
+  .toptext { color: var(--text); }
+
+  /* Stories */
+  .rank { color: var(--overlay0); }
+  .titleline > a:link { color: var(--text); }
+  .titleline > a:visited { color: var(--overlay2); }
+  .sitebit, .sitebit a:link, .sitebit a:visited, .sitestr { color: var(--overlay0); }
+  .subtext, .subline, .subtext a:link, .subtext a:visited, .score, .age a { color: var(--overlay0); }
+  /* HN's 7pt is too small in a condensed face. */
+  .subtext, .comhead { font-size: 8.5pt; }
+  .subtext a:hover, .titleline > a:hover, .pagetop a:hover { text-decoration: underline; }
+
+  /* Vote arrows are a grey GIF; draw them instead. */
+  .votearrow {
+    background: none !important;
+    width: 0; height: 0;
+    border: 5px solid transparent;
+    border-bottom: 7px solid var(--overlay0);
+    margin: 2px 4px 0;
+  }
+  .votearrow.rotate180 { border-bottom-color: transparent; border-top: 7px solid var(--overlay0); }
+
+  /* Comments */
+  .commtext, .commtext.c00 { color: var(--text); }
+  .commtext a:link { color: var(--blue); }
+  .commtext a:visited { color: var(--mauve); }
+  .comhead, .comhead a:link, .comhead a:visited { color: var(--overlay2); }
+  .hnuser { color: var(--overlay2); }
+  font[color="#3c963c"] { color: #a6e3a1 !important; } /* new accounts */
+  /* Faded comments keep HN's fading steps, on Mocha greys. */
+  .c5a, .c5a a:link, .c5a a:visited { color: var(--overlay2); }
+  .c73, .c73 a:link, .c73 a:visited { color: var(--overlay0); }
+  .c82, .c82 a:link, .c82 a:visited, .c88, .c88 a:link, .c88 a:visited { color: var(--surface1); }
+  .c9c, .c9c a:link, .c9c a:visited, .cae, .cae a:link, .cae a:visited,
+  .cbe, .cbe a:link, .cbe a:visited, .cce, .cce a:link, .cce a:visited,
+  .cdd, .cdd a:link, .cdd a:visited { color: var(--surface0); }
+  .togg { color: var(--overlay0); }
+  .reply a:link, .reply a:visited { color: var(--overlay0); }
+  pre { background: var(--crust); border-radius: 8px; padding: 8px; overflow: auto; }
+
+  /* Forms */
+  input[type="text"], input:not([type]), textarea, select {
+    background: var(--crust);
+    color: var(--text);
+    border: 1px solid var(--surface1);
+    border-radius: 4px;
+    padding: 4px 6px;
+  }
+  input[type="submit"] {
+    background: var(--surface0);
+    color: var(--text);
+    border: 1px solid var(--surface1);
+    border-radius: 4px;
+    padding: 3px 12px;
+  }
+  input:focus, textarea:focus { outline: none; border-color: var(--lavender); }
+
+  /* Footer */
+  #hnmain > tbody > tr:last-child td { background: var(--base); }
+  .yclinks a:link, .yclinks a:visited, form[action="//hn.algolia.com/"] { color: var(--overlay0); }
+  #hnmain td[bgcolor="#ff6600"] ~ *, #hnmain table[bgcolor] { background: transparent; }
+  ::selection { background: #353749; color: var(--text); }
+}

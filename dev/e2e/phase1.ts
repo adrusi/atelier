@@ -38,10 +38,6 @@ const basicStyle = (topbar: string) => `/* ==UserStyle==
 }
 `;
 write(BASIC, basicStyle("rgb(1, 2, 3)"));
-write(
-  path.join(owned, "services/fixtures/e2e/route.user.css"),
-  `@-moz-document regexp("https?://127\\\\.0\\\\.0\\\\.1:\\\\d+/basic/other") {\n  main { outline: 3px solid rgb(4, 5, 6); }\n}\n`,
-);
 
 let failures = 0;
 async function check(name: string, f: () => Promise<void>) {
@@ -89,6 +85,16 @@ try {
       20_000,
     );
 
+    await check("a new style reaches a page that was open before any style matched it", async () => {
+      // localhost: a different host from the basic style's domain("127.0.0.1"), so
+      // this page starts with no shim at all.
+      await load(`http://localhost:${state.fixturesPort}/plain/`);
+      assert.equal(await js(`document.querySelectorAll("style[data-atelier]").length`), 0);
+      write(path.join(owned, "services/fixtures/e2e/plain.user.css"), `@-moz-document domain("localhost") { body { color: rgb(9, 9, 9); } }\n`);
+      const v = await eventually(() => computed("body", "color"), (v) => v === "rgb(9, 9, 9)");
+      assert.equal(v, "rgb(9, 9, 9)");
+      await load(basicUrl);
+    });
     await check("style applies on load, winning ties with the page's own rules", async () => {
       assert.equal(await computed(".topbar", "backgroundColor"), "rgb(1, 2, 3)");
     });
@@ -101,9 +107,6 @@ try {
     await check("Dark Reader lock is added", async () => {
       assert.equal(await js(`Boolean(document.querySelector('meta[name="darkreader-lock"]'))`), true);
     });
-    await check("regexp-scoped style doesn't apply on other paths", async () => {
-      assert.equal(await computed("main", "outlineStyle"), "none");
-    });
 
     await check("editing a style updates the open page live", async () => {
       write(BASIC, basicStyle("rgb(7, 8, 9)"));
@@ -115,7 +118,13 @@ try {
       const v = await eventually(() => computed("main h1", "color"), (v) => v === "rgb(0, 255, 0)");
       assert.equal(v, "rgb(0, 255, 0)");
     });
-    await check("history-API navigation re-evaluates which sections apply", async () => {
+    await check("a regexp-scoped style applies after history-API navigation to its path, not before", async () => {
+      write(
+        path.join(owned, "services/fixtures/e2e/route.user.css"),
+        `@-moz-document regexp("https?://127\\\\.0\\\\.0\\\\.1:\\\\d+/basic/other") {\n  main { outline: 3px solid rgb(4, 5, 6); }\n}\n`,
+      );
+      await sleep(1500);
+      assert.equal(await computed("main", "outlineStyle"), "none");
       await js(`history.pushState({}, "", "/basic/other")`);
       const v = await eventually(() => computed("main", "outlineColor"), (v) => v === "rgb(4, 5, 6)");
       assert.equal(v, "rgb(4, 5, 6)");

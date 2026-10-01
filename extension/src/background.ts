@@ -8,6 +8,7 @@ import type { BlobChunk } from "./proto/BlobChunk";
 import type { BlobRef } from "./proto/BlobRef";
 import type { Bundle } from "./proto/Bundle";
 import type { InitializeResult } from "./proto/InitializeResult";
+import { cssFor } from "./matching";
 import { Rpc } from "./rpc";
 import { onUserScriptConnect, type UserScript, userScripts } from "./userscripts";
 
@@ -146,6 +147,31 @@ async function applyBundle(bundle: Bundle) {
   console.info(`atelier: user scripts: ${added.length} added, ${updates.length} updated, ${removed.length} removed`);
 
   for (const port of shimPorts) port.postMessage({ type: "bundle", styles: bundle.styles });
+  await injectIntoOpenTabs(bundle);
+}
+
+/** Registered scripts only run on page loads, so pages that were already open
+ * (when a style was added, or when the extension started) have no shim. Give
+ * them one if some style now applies; it then gets live updates like any other. */
+async function injectIntoOpenTabs(bundle: Bundle) {
+  const us = userScripts();
+  if (!us) return;
+  const withShim = new Set([...shimPorts].map((p) => p.sender?.tab?.id));
+  for (const tab of await browser.tabs.query({})) {
+    if (tab.id === undefined || withShim.has(tab.id) || !tab.url || !/^(https?|file):/.test(tab.url)) continue;
+    const url = tab.url;
+    const styles = bundle.styles.filter((s) => cssFor(s, url) !== null);
+    if (styles.length === 0) continue;
+    try {
+      await us.execute({
+        target: { tabId: tab.id },
+        js: [{ code: ATELIER_SHIM }, ...styles.map((s) => ({ code: `__atelier.add(${JSON.stringify(s)});` }))],
+      });
+    } catch (e) {
+      // Restricted pages (e.g. addons.mozilla.org) refuse injection.
+      console.debug(`atelier: couldn't inject into tab ${tab.id}:`, e);
+    }
+  }
 }
 
 // Pages running the shim connect back so they can get live updates.
