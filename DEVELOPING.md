@@ -65,6 +65,7 @@ atelier-dev down dev1
 - Extensions and the native host must be inside the repo, because that's the only part of the real filesystem the jail can see (read-only).
 - The BiDi commands each open and end their own session. **Firefox allows only one BiDi session at a time**, so these commands fail while another client (e.g. a test runner) holds one. Browsing-context IDs from one session aren't accepted by the next, so anything that needs IDs should do all its work in one session: write a script using `dev/bidi.ts` (see `spikes/r1/run.ts`).
 - `--pref` adds a line to the profile's `user.js`; the value is parsed as JSON if it can be (`--pref extensions.foo=false`). `--system-access` starts Firefox with `--remote-allow-system-access`. Even with it, BiDi can't drive privileged pages such as `moz-extension://` pages.
+- `--color-scheme dark|light` sets what pages see as `prefers-color-scheme` (instances otherwise default to light).
 - `--atelier-dir DIR` binds a host directory into the jail, read-write, as its default owned directory. Use it to try real styles in a dev instance.
 - Console output from extensions and pages goes to `log/firefox.log`. The extension's background logs its connection, bundle loads and user-script registration there.
 - **Real input:** `atelier-dev exec NAME -- wtype …` types through the compositor, which produces trusted events. That's how to satisfy APIs that need a user gesture, such as `permissions.request`. Start with a delay (`wtype -s 300 …`): the first keystroke otherwise races the virtual keyboard's setup and is dropped.

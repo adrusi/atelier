@@ -24,7 +24,7 @@ usage: atelier-dev <command> [args]
 
   up [--name NAME] [--visible] [--extension PATH]... [--native-host BIN]
      [--pref NAME=VALUE]... [--system-access] [--atelier-dir DIR] [--grant-user-scripts]
-     [--no-fixtures]
+     [--color-scheme dark|light] [--no-fixtures]
                               start an instance (default name: dev1, dev2, ...)
   down NAME... | --all [--keep]
                               stop instances and delete their directories
@@ -92,6 +92,12 @@ async function cmdUp(args: string[]) {
     else if (a === "--no-fixtures") fixtures = false;
     else if (a === "--system-access") systemAccess = true;
     else if (a === "--atelier-dir") atelierDir = path.resolve(args[++i]);
+    else if (a === "--color-scheme") {
+      // What pages see as prefers-color-scheme; most atelier users run dark desktops.
+      const scheme = args[++i];
+      if (scheme !== "dark" && scheme !== "light") die("--color-scheme takes dark or light");
+      prefs.push(userPref(`layout.css.prefers-color-scheme.content-override=${scheme === "dark" ? 0 : 1}`));
+    }
     else if (a === "--grant-user-scripts") {
       grant = true;
       // Otherwise permissions.request shows a prompt that also needs answering.

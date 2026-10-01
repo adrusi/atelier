@@ -31,3 +31,31 @@ The theme is `owned/themes/roarke`, a draft read off the owner's desktop.
   a second, through file watch → daemon → extension → shim.
 - **Presentational HTML** (`bgcolor` attributes, `<font color>`) is no
   obstacle: author CSS beats presentational hints without `!important`.
+
+## Wikipedia (2026-10-01)
+
+- **Overriding the site's design tokens works very well.** Vector 2022 is
+  built on ~180 Codex tokens (CSS custom properties). One block of overrides
+  restyled the whole skin, and also Wikipedia's own night-mode fixes for
+  article content (infoboxes, hatnotes, diagrams), which would have been a lot
+  of work to redo. This bears out SPEC §9.2's advice. *Kit guidance:* the
+  first step on any site should be an inventory of its custom properties and
+  the selectors and media queries that define them. A tool for that (the
+  draft's `find_css_custom_properties`) is worth building early.
+- **Building on the site's dark mode means a prerequisite.** Anonymous
+  Wikipedia defaults to Light; the style needs Appearance → Color →
+  Automatic, recorded in `service.toml`. atelier can't tell whether the user
+  has done it. *Idea:* let a service declare a cheap prerequisite check (here,
+  "`<html>` has `skin-theme-clientpref-os` or `-night`"), so the popup can
+  say "this style needs a setting changed" instead of the style silently not
+  applying. Fits with health checks (SPEC §11).
+- **Dev instances need to prefer dark like the user's browser does.** The
+  user's desktop sets `prefer-dark` through dconf; the jail's Firefox saw
+  light. *Fixed:* `atelier-dev up --color-scheme dark`.
+- **Plain CSS can't share declarations between differently-conditioned
+  selectors** (Wikipedia's Dark is a class; its Automatic is a class plus a
+  media query). The style uses one selector for both and accepts a corner
+  case a dark-only theme never hits. Duplicating 180 declarations would be
+  worse. Not an atelier problem as such, but agents will hit it.
+- **Third-party banners** (CentralNotice) bring their own colours. Minor;
+  they're dismissable.

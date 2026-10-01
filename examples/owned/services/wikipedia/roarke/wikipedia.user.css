@@ -1,0 +1,171 @@
+/* ==UserStyle==
+@name           Wikipedia (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    Retunes Wikipedia's dark mode (Codex tokens) to Catppuccin Mocha
+==/UserStyle== */
+
+/* Wikipedia defines its colours as Codex design tokens (CSS custom properties)
+   on :root, with dark values under html.skin-theme-clientpref-night and, when
+   Appearance is Automatic, html.skin-theme-clientpref-os inside
+   @media (prefers-color-scheme: dark). Overriding the tokens restyles the skin
+   along with Wikipedia's own night-mode fixes for article content.
+
+   One selector covers both dark modes. It would also match Automatic on a
+   light desktop, which this dark-only theme never runs on. The :root adds
+   enough specificity to win whatever the load order. */
+
+@-moz-document domain("wikipedia.org") {
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) {
+    color-scheme: dark;
+
+    /* Surfaces */
+    --background-color-base: #1e1e2e;
+    --background-color-base-fixed: #1e1e2e;
+    --background-color-neutral-subtle: #181825;
+    --background-color-neutral: #313244;
+    --background-color-interactive-subtle: #181825;
+    --background-color-interactive-subtle--hover: #313244;
+    --background-color-interactive-subtle--active: #45475a;
+    --background-color-interactive: #313244;
+    --background-color-interactive--hover: #45475a;
+    --background-color-interactive--active: #585b70;
+    --background-color-button-quiet--hover: #313244;
+    --background-color-button-quiet--active: #45475a;
+    --background-color-disabled: #313244;
+    --background-color-disabled-subtle: #181825;
+    --background-color-backdrop-dark: rgba(17, 17, 27, 0.65);
+    --background-color-backdrop-light: rgba(30, 30, 46, 0.65);
+    --background-color-target-text: #353749;
+    --background-color-inverted: #cdd6f4;
+    --background-color-tab-list-item-framed--hover: #313244;
+    --background-color-tab-list-item-framed--active: #45475a;
+
+    /* Text */
+    --color-base: #cdd6f4;
+    --color-base--hover: #cdd6f4;
+    --color-base--subtle: #9399b2;
+    --color-base-fixed: #cdd6f4;
+    --color-emphasized: #cdd6f4;
+    --color-subtle: #9399b2;
+    --color-placeholder: #6c7086;
+    --color-disabled: #6c7086;
+    --color-disabled-emphasized: #9399b2;
+    --color-inverted: #1e1e2e;
+    --color-inverted-fixed: #1e1e2e;
+    --color-neutral: #9399b2;
+
+    /* Links */
+    --color-link: #89b4fa;
+    --color-link--hover: #b4befe;
+    --color-link--active: #b4befe;
+    --color-link--focus: #b4befe;
+    --color-link--visited: #cba6f7;
+    --color-link--visited--hover: #b4befe;
+    --color-link--visited--active: #b4befe;
+    --color-visited: #cba6f7;
+    --color-visited--hover: #b4befe;
+    --color-visited--active: #b4befe;
+    --color-link-red: #f38ba8;
+    --color-link-red--hover: #f5c2e7;
+    --color-link-red--active: #f5c2e7;
+    --color-link-red--focus: #f5c2e7;
+    --color-link-red--visited: #eba0ac;
+    --color-link-red--visited--hover: #f5c2e7;
+    --color-link-red--visited--active: #f5c2e7;
+
+    /* Accent: primary actions, focus, "you are here" */
+    --accent-color-base: #b4befe;
+    --color-progressive: #b4befe;
+    --color-progressive--hover: #c6cdfe;
+    --color-progressive--active: #c6cdfe;
+    --color-progressive--focus: #b4befe;
+    --color-icon-progressive: #b4befe;
+    --background-color-progressive: #b4befe;
+    --background-color-progressive--hover: #c6cdfe;
+    --background-color-progressive--active: #c6cdfe;
+    --background-color-progressive--focus: #b4befe;
+    --background-color-progressive-subtle: #303147;
+    --background-color-progressive-subtle--hover: #3a3b55;
+    --background-color-progressive-subtle--active: #3a3b55;
+    --background-color-input-binary--checked: #b4befe;
+    --border-color-progressive: #b4befe;
+    --border-color-progressive--hover: #c6cdfe;
+    --border-color-progressive--active: #c6cdfe;
+    --border-color-progressive--focus: #b4befe;
+    --border-color-input-binary--checked: #b4befe;
+    --border-color-input-binary--focus: #b4befe;
+    --outline-color-progressive--focus: #b4befe;
+    --box-shadow-color-progressive--focus: #b4befe;
+    --box-shadow-color-progressive--active: #b4befe;
+    --box-shadow-color-progressive-selected: #b4befe;
+    --box-shadow-color-progressive-selected--hover: #c6cdfe;
+    --box-shadow-color-progressive-selected--active: #c6cdfe;
+
+    /* Status stays semantic */
+    --color-destructive: #f38ba8;
+    --color-destructive--hover: #f5c2e7;
+    --color-destructive--active: #f5c2e7;
+    --color-destructive--focus: #f38ba8;
+    --color-error: #f38ba8;
+    --color-error--hover: #f5c2e7;
+    --color-error--active: #f5c2e7;
+    --color-icon-error: #f38ba8;
+    --color-warning: #f9e2af;
+    --color-icon-warning: #f9e2af;
+    --color-success: #a6e3a1;
+    --color-icon-success: #a6e3a1;
+    --color-notice: #cdd6f4;
+    --color-icon-notice: #cdd6f4;
+    --background-color-error-subtle: #382b3d;
+    --background-color-destructive-subtle: #382b3d;
+    --background-color-warning-subtle: #38363e;
+    --background-color-success-subtle: #2e363c;
+    --background-color-notice-subtle: #181825;
+    --background-color-destructive: #f38ba8;
+    --background-color-error: #f38ba8;
+    --border-color-error: #f38ba8;
+    --border-color-destructive: #f38ba8;
+    --border-color-warning: #f9e2af;
+    --border-color-success: #a6e3a1;
+    --border-color-notice: #6c7086;
+
+    /* Diffs */
+    --color-content-added: #a6e3a1;
+    --color-content-removed: #f38ba8;
+    --background-color-content-added: #2e363c;
+    --background-color-content-removed: #382b3d;
+    --border-color-content-added: #a6e3a1;
+    --border-color-content-removed: #f38ba8;
+
+    /* Borders: thin and muted */
+    --border-color-base: #45475a;
+    --border-color-subtle: #313244;
+    --border-color-muted: #313244;
+    --border-color-divider: #45475a;
+    --border-color-emphasized: #6c7086;
+    --border-color-interactive: #6c7086;
+    --border-color-interactive--hover: #9399b2;
+    --border-color-interactive--active: #b4befe;
+    --border-color-input--hover: #9399b2;
+    --border-color-input-binary: #6c7086;
+    --border-color-input-binary--hover: #9399b2;
+    --border-color-disabled: #45475a;
+    --border-color-inverted: #1e1e2e;
+
+    /* Flat: no shadows */
+    --box-shadow-color-base: transparent;
+    --box-shadow-color-alpha-base: transparent;
+  }
+
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) body {
+    font-family: "NotoSans NFP Cond", "Noto Sans", sans-serif;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(code, pre, kbd, samp, tt) {
+    font-family: "NotoSansM NFM ExtCond", "NotoSansM Nerd Font Mono", monospace;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) ::selection {
+    background: #353749;
+    color: #cdd6f4;
+  }
+}
