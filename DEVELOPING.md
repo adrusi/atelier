@@ -99,7 +99,7 @@ Instances live in `$XDG_RUNTIME_DIR/atelier-dev/<name>/` (override with `ATELIER
 
 ### Fixture sites
 
-`dev/fixtures/` holds small deterministic sites, each exercising one thing. Each instance runs `dev/fixtures/server.ts` inside the jail on its own port (`$ATELIER_DEV_FIXTURES`), serving each fixture directory at `/<name>/`. A fixture can have a `_fixture.json` that adds response headers (e.g. a CSP) or makes unknown paths serve `index.html` (for single-page apps); see the comment at the top of `server.ts`.
+`dev/fixtures/` holds small deterministic sites, each exercising one thing. Each instance runs `dev/fixtures/server.ts` inside the jail on its own port (`$ATELIER_DEV_FIXTURES`), serving each fixture directory at `/<name>/`. A fixture can have a `_fixture.json` that adds response headers (e.g. a CSP) or makes unknown paths serve `index.html` (for single-page apps), and HTML can use `{{ALT_ORIGIN}}` to reference the same server under a different origin; see the comment at the top of `server.ts`.
 
 | Fixture | Exercises | Status |
 |---|---|---|
@@ -112,7 +112,7 @@ Instances live in `$XDG_RUNTIME_DIR/atelier-dev/<name>/` (override with `ATELIER
 | spa | navigation without page loads; styles and Dark Reader lock starting or stopping mid-session (R5) | planned |
 | shadow-dom | open and closed shadow roots; styles that need a script | planned |
 | hashed-classes | selector-fragility linting; canaries | planned |
-| own-dark-mode | sites that follow `prefers-color-scheme`; prerequisites (R2) | planned |
+| color-scheme | every common way a page picks light or dark, including a cross-origin stylesheet (R2) | exists |
 
 Write the planned ones alongside the spikes that need them. `_shared/probe.js` is a reusable probe for style-injection tests; its header comment describes how to use it. Directories starting with `_` are served but not listed.
 

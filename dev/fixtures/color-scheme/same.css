@@ -1,0 +1,6 @@
+:root { color-scheme: light dark; }
+#media-same, #media-cross, #link-media { --scheme: light; }
+#light-dark { color: light-dark(rgb(1, 1, 1), rgb(2, 2, 2)); }
+@media (prefers-color-scheme: dark) {
+  #media-same { --scheme: dark; }
+}

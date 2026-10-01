@@ -12,6 +12,9 @@
 // the browser paint before the document is complete.
 //
 // Directories starting with "_" (e.g. _shared/) are served but not listed.
+//
+// In HTML files, {{ALT_ORIGIN}} is replaced with this server's address under a
+// different origin (localhost rather than 127.0.0.1), for cross-origin tests.
 
 import fs from "node:fs";
 import http from "node:http";
@@ -78,7 +81,8 @@ const server = http.createServer((req, res) => {
     file = path.join(dir, "index.html");
   }
   const type = TYPES[path.extname(file)] ?? "application/octet-stream";
-  const body = fs.readFileSync(file);
+  let body = fs.readFileSync(file);
+  if (type === TYPES[".html"]) body = Buffer.from(body.toString("utf8").replaceAll("{{ALT_ORIGIN}}", `http://localhost:${port}`));
   const text = body.toString("utf8");
   if (cfg.streamDelayMs && type === TYPES[".html"] && text.includes(FLUSH)) {
     const at = text.indexOf(FLUSH);

@@ -187,7 +187,7 @@ Every tab is bound to a source, and the owned directory is the default. Agent ta
 - a user can bind one of their own tabs to a task's tree to preview it ("try this before it lands"), which gives optional review without any approval machinery;
 - hand edits to the owned directory show up in real tabs as soon as the file is saved.
 
-Agent tabs can tolerate a brief flash of the wrong styles. So a tab bound to something other than the default may load with the default styles and then swap them out asynchronously. Only the default source has to be synchronous. Proposed mechanism (R1): the user-script shim applies the default styles, then asks the background over user-script messaging (`userScripts.configureWorld({ messaging: true })`) whether its tab is bound elsewhere, and swaps if so.
+Agent tabs can tolerate a brief flash of the wrong styles. So a tab bound to something other than the default may load with the default styles and then swap them out asynchronously. Only the default source has to be synchronous. Proposed mechanism (R1, R2): when the extension binds a tab elsewhere, it puts a marker in that tab's `sessionStorage`, which is scoped to the tab and readable synchronously at `document_start`. The user-script shim checks the marker and skips the default styles in bound tabs, then gets the bound source's styles from the background over user-script messaging (`userScripts.configureWorld({ messaging: true })`). The marker is per origin and pages can clear it, so as a fallback the shim also asks the background, asynchronously, whether its tab is bound, and swaps if so.
 
 ### 6.3 Agent tabs
 
@@ -411,7 +411,7 @@ Tools for **contractors** (every call carries a task token):
 - **Styles:**
   - `styles_reload`, which re-reads the task tree;
   - `draft_css(style_id, css)`, which applies CSS to the agent tab without writing files, for quick iteration;
-  - `color_scheme(light|dark)`, see R2.
+  - `color_scheme(tab, light|dark)`, which emulates the scheme in that tab alone and reloads it (R2). Screenshots of an emulating tab say the scheme is emulated.
 - **Checks:** `checks_run({passive, active})`, `lint`.
 - **Messages:** `message_post(to: supervisor|user|developers, body, attachments)`, `message_wait(timeout)`.
 
@@ -519,8 +519,8 @@ atelier daemon | native-host | mcp  internal entry points
 
 ## 16. Risks needing spikes
 
-- **R1: Binding tabs to sources at `document_start`.** *Answered (spikes/r1/RESULTS.md):* a user script that inserts and maintains a `<style>` element meets every requirement (§6.1). Still open: iframes, the observer's cost on heavy pages, and the messaging-based swap for tabs bound elsewhere (§6.2), which hasn't been built yet.
-- **R2: Emulating `prefers-color-scheme` per tab.** WebExtension APIs only offer a browser-wide override (`browserSettings.overrideContentColorScheme`), which would change the user's own tabs. Fallback: when serving to an agent tab, rewrite our own `@media (prefers-color-scheme)` blocks to force one scheme. That doesn't cover the site's own media queries or `matchMedia`. Other options to look into: a dedicated check window that briefly uses the global override, or accepting partial fidelity.
+- **R1: Binding tabs to sources at `document_start`.** *Answered (spikes/r1/RESULTS.md):* a user script that inserts and maintains a `<style>` element meets every requirement (§6.1). Still open: iframes, the observer's cost on heavy pages, and the swap for tabs bound elsewhere (§6.2), which hasn't been built yet. R2 found a synchronous per-tab marker (`sessionStorage`) that this can use.
+- **R2: Emulating `prefers-color-scheme` per tab.** *Answered (spikes/r2/RESULTS.md):* full per-tab emulation, triggered by a `sessionStorage` marker. A page-world script wraps `matchMedia`. A user-script-world script rewrites `prefers-color-scheme` conditions through the CSSOM and in `media` attributes, and forces `color-scheme`. Cross-origin stylesheets, which the CSSOM won't expose, are fetched by the background, rewritten, and swapped in as copies. This covered every mechanism in the fixture, and the user's tabs were unaffected. The global `browserSettings` override is not used. Still open: rules added later through `insertRule`, `@import` in cross-origin sheets, and iframes.
 - **R3: Screenshots of background tabs.** *Answered (spikes/r3/RESULTS.md):* `tabs.captureTab` captures hidden tabs accurately except for content that depends on animation frames. CSS animations can be fast-forwarded first; content drawn by `requestAnimationFrame` needs the tab to be visible (`tab_show`). Still open: full-page captures, device pixel ratios other than 1, and minimised windows on other compositors.
 - **R4: Keeping the extension alive under Firefox MV3.** *Answered (spikes/r4/RESULTS.md):* in Firefox 156, an open native-messaging port keeps an MV3 background page resident (tested to 10 minutes idle), while one without a port is suspended after about 30 s and wakes within a second on the next event. MV3 stands. Still open: behaviour of a signed permanent install, and across sleep/resume. Reconnection and resync after the host goes away still have to be designed (§4.2).
 - **R5: Timing of the Dark Reader lock.** Whether a lock tag injected at `document_start` reliably stops Dark Reader, including on SPA navigations within an origin, where bespoke styles may start or stop matching without a page load.

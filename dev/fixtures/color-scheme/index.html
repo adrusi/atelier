@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>color-scheme fixture</title>
+  <!-- Each element below finds out whether the page should be light or dark
+       through a different mechanism; window.__scheme() reports what each one
+       concluded. -->
+  <script src="scheme.js"></script>
+  <link rel="stylesheet" href="same.css">
+  <link rel="stylesheet" href="{{ALT_ORIGIN}}/color-scheme/cross.css">
+  <link rel="stylesheet" href="link-dark.css" media="(prefers-color-scheme: dark)">
+</head>
+<body>
+  <p id="media-same">@media in a same-origin stylesheet</p>
+  <p id="media-cross">@media in a cross-origin stylesheet</p>
+  <p id="link-media">&lt;link media="(prefers-color-scheme: dark)"&gt;</p>
+  <p id="light-dark">light-dark() under color-scheme: light dark</p>
+  <picture>
+    <source srcset="dark.svg" media="(prefers-color-scheme: dark)">
+    <img id="picture" src="light.svg" alt="" width="40" height="40">
+  </picture>
+</body>
+</html>

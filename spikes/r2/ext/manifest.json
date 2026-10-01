@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "atelier spike R2",
+  "version": "0.0.1",
+  "browser_specific_settings": { "gecko": { "id": "atelier-dev@atelier.invalid" } },
+  "background": { "scripts": ["background.js"] },
+  "permissions": ["tabs", "nativeMessaging", "browserSettings"],
+  "optional_permissions": ["userScripts"],
+  "host_permissions": ["<all_urls>"]
+}
