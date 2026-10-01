@@ -113,7 +113,7 @@ The extension targets **Manifest V3**:
 - §12 depends on the MV3 `userScripts` API (`configureWorld` and the `USER_SCRIPT` world). The MV2 `userScripts` API is an older, different design.
 - MV3 keeps a future Chrome port possible.
 
-MV2's one advantage is a persistent background page. In MV3 the background may be suspended when idle, so the background must be restartable anyway: the daemon holds the authoritative state, and the extension reconnects and resynchronises when it wakes up. R4 measures how often that happens in practice.
+MV2's one advantage is a persistent background page. In MV3 the background may be suspended when idle, so the background must be restartable anyway: the daemon holds the authoritative state, and the extension reconnects and resynchronises when it wakes up. R4 found that the background is not suspended while its native port is open, so in practice a restart follows the host going away, or the browser starting.
 
 ---
 
@@ -520,7 +520,7 @@ atelier daemon | native-host | mcp  internal entry points
 - **R1: Binding tabs to sources at `document_start`.** Registered content scripts apply to every matching tab, and a content script can't synchronously know its tab ID. Since only the default source needs to be synchronous, the working plan is: default styles are injected by a registered shim in a form that can be removed per tab, and a non-default tab removes them asynchronously and injects its source's styles. The spike needs to settle, all together, the injection mechanism (§6.1), behaviour under strict CSP, and resistance to the site's own scripts removing the styles.
 - **R2: Emulating `prefers-color-scheme` per tab.** WebExtension APIs only offer a browser-wide override (`browserSettings.overrideContentColorScheme`), which would change the user's own tabs. Fallback: when serving to an agent tab, rewrite our own `@media (prefers-color-scheme)` blocks to force one scheme. That doesn't cover the site's own media queries or `matchMedia`. Other options to look into: a dedicated check window that briefly uses the global override, or accepting partial fidelity.
 - **R3: Screenshots of background tabs.** `tabs.captureTab` on inactive tabs, and how accurate the result is given throttled rendering and lazy loading. The result decides whether the "new window" preference should be on by default.
-- **R4: Keeping the extension alive under Firefox MV3.** Whether event pages stay alive with a native-messaging port open, and how quickly reconnection and resync happen when they don't (§4.2). MV2 remains a fallback on Firefox, at the cost of the newer `userScripts` API.
+- **R4: Keeping the extension alive under Firefox MV3.** *Answered (spikes/r4/RESULTS.md):* in Firefox 156, an open native-messaging port keeps an MV3 background page resident (tested to 10 minutes idle), while one without a port is suspended after about 30 s and wakes within a second on the next event. MV3 stands. Still open: behaviour of a signed permanent install, and across sleep/resume. Reconnection and resync after the host goes away still have to be designed (§4.2).
 - **R5: Timing of the Dark Reader lock.** Whether a lock tag injected at `document_start` reliably stops Dark Reader, including on SPA navigations within an origin, where bespoke styles may start or stop matching without a page load.
 
 ---
