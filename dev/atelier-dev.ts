@@ -23,7 +23,8 @@ const USAGE = `\
 usage: atelier-dev <command> [args]
 
   up [--name NAME] [--visible] [--extension PATH]... [--native-host BIN]
-     [--pref NAME=VALUE]... [--system-access] [--atelier-dir DIR] [--no-fixtures]
+     [--pref NAME=VALUE]... [--system-access] [--atelier-dir DIR] [--grant-user-scripts]
+     [--no-fixtures]
                               start an instance (default name: dev1, dev2, ...)
   down NAME... | --all [--keep]
                               stop instances and delete their directories
@@ -78,6 +79,7 @@ async function cmdUp(args: string[]) {
   let fixtures = true;
   let systemAccess = false;
   let atelierDir: string | undefined;
+  let grant = false;
   const extensions: string[] = [];
   let nativeHost: string | undefined;
   const prefs: string[] = [];
@@ -88,6 +90,11 @@ async function cmdUp(args: string[]) {
     else if (a === "--no-fixtures") fixtures = false;
     else if (a === "--system-access") systemAccess = true;
     else if (a === "--atelier-dir") atelierDir = path.resolve(args[++i]);
+    else if (a === "--grant-user-scripts") {
+      grant = true;
+      // Otherwise permissions.request shows a prompt that also needs answering.
+      prefs.push(userPref("extensions.webextOptionalPermissionPrompts=false"));
+    }
     else if (a === "--extension") extensions.push(path.resolve(args[++i]));
     else if (a === "--native-host") nativeHost = path.resolve(args[++i]);
     else if (a === "--pref") prefs.push(userPref(args[++i]));
@@ -162,6 +169,10 @@ async function cmdUp(args: string[]) {
     for (const ext of extensions) {
       const id = await installExtension(state, ext);
       console.error(`installed ${path.relative(REPO, ext)} as ${id}`);
+    }
+    if (grant) {
+      await grantUserScripts(state);
+      console.error("granted the userScripts permission");
     }
   } catch (e) {
     console.error(`atelier-dev: ${(e as Error).message}; logs are in ${p.log}`);
@@ -412,6 +423,31 @@ function isAlive(state: State): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Grants the atelier extension the userScripts permission. Firefox only grants
+ * it from a real user gesture, and BiDi can't drive extension pages, so this
+ * waits for the onboarding page the extension opens on install (its button is
+ * autofocused) and presses Enter through the compositor, until the extension
+ * logs the grant.
+ */
+async function grantUserScripts(state: State) {
+  const p = instancePaths(state.name);
+  const firefoxLog = path.join(p.log, "firefox.log");
+  const granted = () => fs.existsSync(firefoxLog) && fs.readFileSync(firefoxLog, "utf8").includes("atelier: userScripts permission granted");
+  await waitFor("the onboarding page", 15_000, () =>
+    withBidiSession(state, async (bidi) =>
+      (await bidi.send("browsingContext.getTree", { maxDepth: 0 })).contexts.some((c: { url: string }) => c.url.endsWith("/onboarding.html")),
+    ),
+  );
+  for (let attempt = 0; attempt < 3 && !granted(); attempt++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    // wtype's first keystroke races the virtual keyboard's setup, hence -s.
+    swayExec(p, `grant-${attempt}`, ["wtype", "-s", "300", "-k", "Return"]);
+    await waitFor("the grant", 5000, granted).catch(() => {});
+  }
+  if (!granted()) throw new Error("couldn't grant the userScripts permission (is the atelier extension installed?)");
 }
 
 /**

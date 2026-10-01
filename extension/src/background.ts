@@ -177,7 +177,9 @@ browser.webNavigation.onHistoryStateUpdated.addListener(notifyUrlChange);
 browser.webNavigation.onReferenceFragmentUpdated.addListener(notifyUrlChange);
 
 browser.permissions.onAdded.addListener((p) => {
-  if ((p.permissions as string[] | undefined)?.includes("userScripts") && state.bundle) void applyBundle(state.bundle);
+  if (!(p.permissions as string[] | undefined)?.includes("userScripts")) return;
+  console.info("atelier: userScripts permission granted");
+  if (state.bundle) void applyBundle(state.bundle);
 });
 
 browser.runtime.onInstalled.addListener((details) => {

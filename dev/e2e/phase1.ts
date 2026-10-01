@@ -64,34 +64,12 @@ async function eventually<T>(f: () => Promise<T>, ok: (v: T) => boolean, timeout
   return v;
 }
 
-/** The extension opens its onboarding page on install, with the grant button
- * focused. Press Enter through the compositor (real input; see DEVELOPING.md)
- * until the background logs that it registered user scripts. */
-async function grantUserScripts() {
-  const firefoxLog = path.join(instance, "log/firefox.log");
-  const granted = () => fs.readFileSync(firefoxLog, "utf8").includes("atelier: user scripts:");
-  await withSession(state.bidiPort, async (bidi) => {
-    await eventually(
-      async () => (await bidi.send("browsingContext.getTree", { maxDepth: 0 })).contexts.some((c: any) => c.url.endsWith("/onboarding.html")),
-      (v) => v,
-      10_000,
-    );
-  });
-  for (let attempt = 0; attempt < 3 && !granted(); attempt++) {
-    await sleep(1000);
-    dev("exec", NAME, "--", "wtype", "-s", "300", "-k", "Return");
-    await eventually(async () => granted(), (v) => v, 5000);
-  }
-  if (!granted()) throw new Error("couldn't grant the userScripts permission");
-}
-
-dev("up", "--name", NAME, "--atelier-dir", owned, "--pref", "extensions.webextOptionalPermissionPrompts=false");
+dev("up", "--name", NAME, "--atelier-dir", owned, "--grant-user-scripts");
 const state = JSON.parse(fs.readFileSync(path.join(instance, "state.json"), "utf8"));
 const basicUrl = `http://127.0.0.1:${state.fixturesPort}/basic/`;
 const varsJson = path.join(instance, "home/.config/atelier/vars.json");
 
 try {
-  await grantUserScripts();
 
   await withSession(state.bidiPort, async (bidi: Bidi) => {
     const tab = (await bidi.send("browsingContext.create", { type: "tab" })).context;
