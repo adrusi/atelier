@@ -46,7 +46,7 @@ atelier-dev vnc NAME [--port PORT]    serve a headless instance over VNC
 
 atelier-dev navigate NAME URL         load URL in the first tab and wait for it
 atelier-dev eval NAME EXPR            evaluate EXPR in the first tab
-atelier-dev install-ext NAME PATH     install an unpacked extension as a temporary add-on
+atelier-dev install-ext NAME PATH     install an extension (directory or .xpi) as a temporary add-on
 atelier-dev bidi NAME METHOD [PARAMS] send one raw WebDriver BiDi command
 ```
 
