@@ -1,3 +1,4 @@
 /target/
 /extension/node_modules/
 /extension/dist/
+/spikes/*/last-run.json

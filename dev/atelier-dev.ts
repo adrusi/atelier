@@ -11,6 +11,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import type { Readable } from "node:stream";
+import { Bidi, fromRemoteValue, reachable as bidiReachable, withSession } from "./bidi.ts";
 
 const REPO = path.resolve(import.meta.dirname, "..");
 // Must match the dev flavor in extension/build.ts.
@@ -21,7 +22,8 @@ const ROOT = process.env.ATELIER_DEV_ROOT ?? path.join(requireEnv("XDG_RUNTIME_D
 const USAGE = `\
 usage: atelier-dev <command> [args]
 
-  up [--name NAME] [--visible] [--extension PATH]... [--native-host BIN] [--no-fixtures]
+  up [--name NAME] [--visible] [--extension PATH]... [--native-host BIN]
+     [--pref NAME=VALUE]... [--system-access] [--no-fixtures]
                               start an instance (default name: dev1, dev2, ...)
   down NAME... | --all [--keep]
                               stop instances and delete their directories
@@ -74,15 +76,19 @@ async function cmdUp(args: string[]) {
   let name: string | undefined;
   let visible = false;
   let fixtures = true;
+  let systemAccess = false;
   const extensions: string[] = [];
   let nativeHost: string | undefined;
+  const prefs: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--name") name = args[++i];
     else if (a === "--visible") visible = true;
     else if (a === "--no-fixtures") fixtures = false;
+    else if (a === "--system-access") systemAccess = true;
     else if (a === "--extension") extensions.push(path.resolve(args[++i]));
     else if (a === "--native-host") nativeHost = path.resolve(args[++i]);
+    else if (a === "--pref") prefs.push(userPref(args[++i]));
     else die(`up: unexpected argument ${a}`);
   }
   if (extensions.length === 0 && fs.existsSync(path.join(REPO, "extension/dist/manifest.json"))) {
@@ -105,7 +111,7 @@ async function cmdUp(args: string[]) {
   fs.rmSync(p.dir, { recursive: true, force: true });
   for (const d of [p.home, p.log, p.shots, p.profile]) fs.mkdirSync(d, { recursive: true });
   fs.mkdirSync(p.run, { recursive: true, mode: 0o700 });
-  fs.writeFileSync(path.join(p.profile, "user.js"), FIREFOX_PREFS);
+  fs.writeFileSync(path.join(p.profile, "user.js"), FIREFOX_PREFS + prefs.join(""));
   if (nativeHost) registerNativeHost(p, nativeHost);
 
   let hostWayland: string | undefined;
@@ -141,6 +147,8 @@ async function cmdUp(args: string[]) {
     await waitFor("sway", 15_000, () => swaySocket(p) && waylandSocket(p));
     swayExec(p, "firefox", [
       "firefox", "--profile", p.profile, "--no-remote", "--remote-debugging-port", String(bidiPort),
+      // Lets BiDi reach privileged contexts such as moz-extension:// pages.
+      ...(systemAccess ? ["--remote-allow-system-access"] : []),
     ]);
     if (fixturesPort !== null) {
       swayExec(p, "fixtures", [
@@ -448,70 +456,8 @@ function swayExec(p: Paths, label: string, argv: string[]) {
 // ---------------------------------------------------------------------------
 // WebDriver BiDi
 
-class Bidi {
-  private nextId = 1;
-  private pending = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
-
-  private ws: WebSocket;
-
-  private constructor(ws: WebSocket) {
-    this.ws = ws;
-    ws.addEventListener("message", (ev) => {
-      const msg = JSON.parse(String(ev.data));
-      const waiter = msg.id !== undefined && this.pending.get(msg.id);
-      if (!waiter) return;
-      this.pending.delete(msg.id);
-      if (msg.type === "error") waiter.reject(new Error(`${msg.error}: ${msg.message}`));
-      else waiter.resolve(msg.result);
-    });
-    ws.addEventListener("close", () => {
-      for (const w of this.pending.values()) w.reject(new Error("BiDi connection closed"));
-      this.pending.clear();
-    });
-  }
-
-  static connect(port: number): Promise<Bidi> {
-    return new Promise((resolve, reject) => {
-      const ws = new WebSocket(`ws://127.0.0.1:${port}/session`);
-      ws.addEventListener("open", () => resolve(new Bidi(ws)), { once: true });
-      ws.addEventListener("error", () => reject(new Error(`can't connect to BiDi on port ${port}`)), { once: true });
-    });
-  }
-
-  send(method: string, params: object = {}): Promise<any> {
-    const id = this.nextId++;
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
-      this.ws.send(JSON.stringify({ id, method, params }));
-    });
-  }
-
-  close() {
-    this.ws.close();
-  }
-}
-
 async function withBidiSession<T>(state: State, f: (bidi: Bidi) => Promise<T>): Promise<T> {
-  const bidi = await Bidi.connect(state.bidiPort);
-  try {
-    await bidi.send("session.new", { capabilities: {} });
-    try {
-      return await f(bidi);
-    } finally {
-      await bidi.send("session.end").catch(() => {});
-    }
-  } finally {
-    bidi.close();
-  }
-}
-
-async function bidiReachable(port: number): Promise<boolean> {
-  try {
-    (await Bidi.connect(port)).close();
-    return true;
-  } catch {
-    return false;
-  }
+  return withSession(state.bidiPort, f);
 }
 
 async function firstContext(bidi: Bidi): Promise<string> {
@@ -524,33 +470,6 @@ async function installExtension(state: State, ext: string): Promise<string> {
     const r = await bidi.send("webExtension.install", { extensionData: { type: "path", path: ext } });
     return r.extension;
   });
-}
-
-/** Converts a BiDi RemoteValue to plain JSON, as far as that's meaningful. */
-function fromRemoteValue(v: any): unknown {
-  switch (v.type) {
-    case "undefined":
-      return undefined;
-    case "null":
-      return null;
-    case "string":
-    case "number":
-    case "boolean":
-    case "bigint":
-      return v.value;
-    case "array":
-    case "set":
-      return v.value?.map(fromRemoteValue) ?? `[${v.type}]`;
-    case "object":
-    case "map":
-      return v.value
-        ? Object.fromEntries(
-            v.value.map(([k, val]: [any, any]) => [typeof k === "string" ? k : JSON.stringify(fromRemoteValue(k)), fromRemoteValue(val)]),
-          )
-        : `[${v.type}]`;
-    default:
-      return `[${v.type}]`;
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -574,6 +493,20 @@ user_pref("browser.translations.automaticallyPopup", false);
 user_pref("extensions.autoDisableScopes", 0);
 user_pref("extensions.pocket.enabled", false);
 `;
+
+/** Turns NAME=VALUE into a user.js line. VALUE is JSON if it parses as JSON (true, 30000, "x"), else a string. */
+function userPref(arg: string | undefined): string {
+  const eq = arg?.indexOf("=") ?? -1;
+  if (!arg || eq < 1) die("--pref takes NAME=VALUE");
+  const raw = arg.slice(eq + 1);
+  let value: unknown;
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    value = raw;
+  }
+  return `user_pref(${JSON.stringify(arg.slice(0, eq))}, ${JSON.stringify(value)});\n`;
+}
 
 function running(name: string | undefined): State {
   if (!name) die("name an instance (see `atelier-dev ls`)");

@@ -1,0 +1,6 @@
+/* The page's side of the cascade test in probe.js. */
+html {
+  --atelier-cascade-s1: page; --atelier-cascade-s2: page; --atelier-cascade-s3: page;
+  --atelier-cascade-s3u: page; --atelier-cascade-s4: page; --atelier-cascade-s5: page;
+}
+body { font-family: sans-serif; max-width: 40rem; margin: 2rem auto; line-height: 1.5; }

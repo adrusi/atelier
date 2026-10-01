@@ -22,6 +22,7 @@ dev/
   atelier-dev.ts    # the dev-environment script (below); dev/bin/atelier-dev runs it
   sway.conf         # compositor config for dev instances
   fixtures/         # fixture sites for tests and spikes, plus their server
+  bidi.ts           # minimal WebDriver BiDi client, used by atelier-dev and by spikes
   smoke-extension/  # trivial extension for checking that extension loading works
 spikes/             # throwaway spike code (R1–R5); never imported by the real code
 flake.nix           # dev shell, packages, home-manager module
@@ -34,7 +35,8 @@ Agents and humans test atelier in **dev instances**. Each is a jailed Firefox ru
 ### Commands
 
 ```
-atelier-dev up [--name NAME] [--visible] [--extension PATH]... [--native-host BIN] [--no-fixtures]
+atelier-dev up [--name NAME] [--visible] [--extension PATH]... [--native-host BIN]
+               [--pref NAME=VALUE]... [--system-access] [--no-fixtures]
 atelier-dev down NAME... | --all [--keep]
 atelier-dev ls
 atelier-dev env NAME                  shell exports: ATELIER_DEV_BIDI, ATELIER_DEV_FIXTURES, ...
@@ -60,7 +62,9 @@ atelier-dev down dev1
 
 - `up` installs `extension/dist` automatically if it exists, unless `--extension` is given, and registers `target/debug/atelier` as the native host if it exists (override with `--native-host`).
 - Extensions and the native host must be inside the repo, because that's the only part of the real filesystem the jail can see (read-only).
-- The BiDi commands each open and end their own session. **Firefox allows only one BiDi session at a time**, so these commands fail while another client (e.g. a test runner) holds one.
+- The BiDi commands each open and end their own session. **Firefox allows only one BiDi session at a time**, so these commands fail while another client (e.g. a test runner) holds one. Browsing-context IDs from one session aren't accepted by the next, so anything that needs IDs should do all its work in one session: write a script using `dev/bidi.ts` (see `spikes/r1/run.ts`).
+- `--pref` adds a line to the profile's `user.js`; the value is parsed as JSON if it can be (`--pref extensions.foo=false`). `--system-access` starts Firefox with `--remote-allow-system-access`. Even with it, BiDi can't drive privileged pages such as `moz-extension://` pages.
+- **Real input:** `atelier-dev exec NAME -- wtype …` types through the compositor, which produces trusted events. That's how to satisfy APIs that need a user gesture, such as `permissions.request`. Start with a delay (`wtype -s 300 …`): the first keystroke otherwise races the virtual keyboard's setup and is dropped.
 - Logs for the jail, Firefox and the fixture server are in the instance's `log/` directory.
 
 Instances live in `$XDG_RUNTIME_DIR/atelier-dev/<name>/` (override with `ATELIER_DEV_ROOT`). They're on tmpfs and disposable: `down` deletes them unless given `--keep`. Several can run at once (one per parallel agent). Budget about 0.5–1 GB of RAM each.
@@ -100,14 +104,17 @@ Instances live in `$XDG_RUNTIME_DIR/atelier-dev/<name>/` (override with `ATELIER
 | Fixture | Exercises | Status |
 |---|---|---|
 | basic | ordinary light page, for smoke tests | exists |
+| plain | minimal page carrying the style-injection probe | exists |
 | strict-csp | style injection under strict CSP (R1) | exists |
+| slow-stream | early first paint: the server pauses partway through the document (R1) | exists |
+| hostile-head | a page that removes `<style>` elements, rebuilds `<head>` and resets adopted stylesheets after load (R1) | exists |
 | spa | navigation without page loads; styles and Dark Reader lock starting or stopping mid-session (R5) | planned |
 | shadow-dom | open and closed shadow roots; styles that need a script | planned |
 | hashed-classes | selector-fragility linting; canaries | planned |
 | own-dark-mode | sites that follow `prefers-color-scheme`; prerequisites (R2) | planned |
 | lazy-load | background-tab rendering and screenshots (R3) | planned |
 
-Write the planned ones alongside the spikes that need them.
+Write the planned ones alongside the spikes that need them. `_shared/probe.js` is a reusable probe for style-injection tests; its header comment describes how to use it. Directories starting with `_` are served but not listed.
 
 Public smoke tests use sites that don't need logging in (Wikipedia, MDN, Hacker News). **Never copy cookies or profile data from a real profile into a dev instance.** Testing on logged-in services is done by hand, by the developer, in their own browser.
 

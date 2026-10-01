@@ -172,9 +172,11 @@ ATELIER_DIR/
 ### 6.1 Applying styles
 
 - The extension keeps a **cache for each source**: compiled CSS and scripts, pushed by the daemon. It is derived data and can be rebuilt at any time.
-- **Default source:** styles from the owned directory are registered with `scripting.registerContentScripts` at `document_start`, so page loads never wait on messages.
+- **Default source:** styles from the owned directory are registered as user scripts that run at `document_start` (mechanism below), so page loads never wait on messages.
 - **Cascade origin:** styles are injected as **author-origin** CSS, the same way Stylus does it. `cssOrigin: "user"` isn't used by default: user-origin normal declarations lose to author normal declarations, so it only helps with `!important` everywhere, and it would break semantic compatibility with existing UserCSS.
-- **Injection mechanism** (`<style>` element, `adoptedStyleSheets`, or `insertCSS`) is to be decided by a spike. It has to satisfy: synchronous at `document_start`; removable per tab (needed by §6.2); robust on sites with strict CSP; and hard for the site's own scripts to remove (for example SPA hydration replacing `<head>`). See R1.
+- **Injection mechanism** (decided by R1): a user script (`userScripts.register`, USER_SCRIPT world, `document_start`) with the CSS embedded in its code inserts a `<style>` element. The element is kept as the last child of `<html>`, so it wins ties with the page's own rules, and a MutationObserver puts it back if the page removes it. In Firefox 156 this applies before first paint, isn't blocked by strict CSP, survives hydration-style clobbering, and can be removed per tab. `scripting.insertCSS` on navigation commit was measured too, and misses the first frame on every page.
+- **This makes the `userScripts` permission necessary for styles**, not only for userscripts (§12). It's optional-only in Firefox, so first-run setup includes a grant step with a real click.
+- **Changing a style** updates the user-script registration, for future loads, and the `<style>` text in tabs that are already open.
 - **Variables** are injected as a separate small stylesheet, so a change to `vars.json` re-registers one thing.
 
 ### 6.2 Binding tabs to sources
@@ -185,7 +187,7 @@ Every tab is bound to a source, and the owned directory is the default. Agent ta
 - a user can bind one of their own tabs to a task's tree to preview it ("try this before it lands"), which gives optional review without any approval machinery;
 - hand edits to the owned directory show up in real tabs as soon as the file is saved.
 
-Agent tabs can tolerate a brief flash of the wrong styles. So a tab bound to something other than the default may load with the default styles and then swap them out asynchronously. Only the default source has to be synchronous. See R1.
+Agent tabs can tolerate a brief flash of the wrong styles. So a tab bound to something other than the default may load with the default styles and then swap them out asynchronously. Only the default source has to be synchronous. Proposed mechanism (R1): the user-script shim applies the default styles, then asks the background over user-script messaging (`userScripts.configureWorld({ messaging: true })`) whether its tab is bound elsewhere, and swaps if so.
 
 ### 6.3 Agent tabs
 
@@ -517,7 +519,7 @@ atelier daemon | native-host | mcp  internal entry points
 
 ## 16. Risks needing spikes
 
-- **R1: Binding tabs to sources at `document_start`.** Registered content scripts apply to every matching tab, and a content script can't synchronously know its tab ID. Since only the default source needs to be synchronous, the working plan is: default styles are injected by a registered shim in a form that can be removed per tab, and a non-default tab removes them asynchronously and injects its source's styles. The spike needs to settle, all together, the injection mechanism (§6.1), behaviour under strict CSP, and resistance to the site's own scripts removing the styles.
+- **R1: Binding tabs to sources at `document_start`.** *Answered (spikes/r1/RESULTS.md):* a user script that inserts and maintains a `<style>` element meets every requirement (§6.1). Still open: iframes, the observer's cost on heavy pages, and the messaging-based swap for tabs bound elsewhere (§6.2), which hasn't been built yet.
 - **R2: Emulating `prefers-color-scheme` per tab.** WebExtension APIs only offer a browser-wide override (`browserSettings.overrideContentColorScheme`), which would change the user's own tabs. Fallback: when serving to an agent tab, rewrite our own `@media (prefers-color-scheme)` blocks to force one scheme. That doesn't cover the site's own media queries or `matchMedia`. Other options to look into: a dedicated check window that briefly uses the global override, or accepting partial fidelity.
 - **R3: Screenshots of background tabs.** `tabs.captureTab` on inactive tabs, and how accurate the result is given throttled rendering and lazy loading. The result decides whether the "new window" preference should be on by default.
 - **R4: Keeping the extension alive under Firefox MV3.** *Answered (spikes/r4/RESULTS.md):* in Firefox 156, an open native-messaging port keeps an MV3 background page resident (tested to 10 minutes idle), while one without a port is suspended after about 30 s and wakes within a second on the next event. MV3 stands. Still open: behaviour of a signed permanent install, and across sleep/resume. Reconnection and resync after the host goes away still have to be designed (§4.2).

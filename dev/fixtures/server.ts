@@ -4,7 +4,14 @@
 // fixture may contain a _fixture.json:
 //
 //   { "headers": { "Content-Security-Policy": "..." },  // added to every response
-//     "spa": true }                                     // unknown paths serve index.html
+//     "spa": true,                                      // unknown paths serve index.html
+//     "streamDelayMs": 1500 }                           // see below
+//
+// With streamDelayMs, HTML files containing `<!-- flush -->` are sent in two
+// parts: everything before the marker, then a pause, then the rest. That makes
+// the browser paint before the document is complete.
+//
+// Directories starting with "_" (e.g. _shared/) are served but not listed.
 
 import fs from "node:fs";
 import http from "node:http";
@@ -22,7 +29,8 @@ const TYPES: Record<string, string> = {
   ".woff2": "font/woff2",
 };
 
-type FixtureConfig = { headers?: Record<string, string>; spa?: boolean };
+type FixtureConfig = { headers?: Record<string, string>; spa?: boolean; streamDelayMs?: number };
+const FLUSH = "<!-- flush -->";
 
 function fixtures(): string[] {
   return fs
@@ -30,6 +38,10 @@ function fixtures(): string[] {
     .filter((d) => d.isDirectory())
     .map((d) => d.name)
     .sort();
+}
+
+function listed(): string[] {
+  return fixtures().filter((f) => !f.startsWith("_"));
 }
 
 function config(fixture: string): FixtureConfig {
@@ -50,7 +62,7 @@ const server = http.createServer((req, res) => {
   const [, fixture, ...rest] = decodeURIComponent(url.pathname).split("/");
 
   if (!fixture) {
-    const items = fixtures().map((f) => `<li><a href="/${f}/">${f}</a></li>`).join("\n");
+    const items = listed().map((f) => `<li><a href="/${f}/">${f}</a></li>`).join("\n");
     return send(res, 200, TYPES[".html"], `<!doctype html><title>fixtures</title><ul>\n${items}\n</ul>\n`);
   }
   if (!fixtures().includes(fixture)) return send(res, 404, "text/plain", "no such fixture\n");
@@ -65,7 +77,17 @@ const server = http.createServer((req, res) => {
     if (!cfg.spa) return send(res, 404, "text/plain", "not found\n", cfg.headers);
     file = path.join(dir, "index.html");
   }
-  send(res, 200, TYPES[path.extname(file)] ?? "application/octet-stream", fs.readFileSync(file), cfg.headers);
+  const type = TYPES[path.extname(file)] ?? "application/octet-stream";
+  const body = fs.readFileSync(file);
+  const text = body.toString("utf8");
+  if (cfg.streamDelayMs && type === TYPES[".html"] && text.includes(FLUSH)) {
+    const at = text.indexOf(FLUSH);
+    res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store", ...cfg.headers });
+    res.write(text.slice(0, at));
+    setTimeout(() => res.end(text.slice(at)), cfg.streamDelayMs);
+    return;
+  }
+  send(res, 200, type, body, cfg.headers);
 });
 
 const portArg = process.argv.indexOf("--port");

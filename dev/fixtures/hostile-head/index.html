@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en" data-probes="s1 s2 s3 s3u s4 s5">
+<head>
+  <meta charset="utf-8">
+  <title>hostile-head fixture</title>
+  <script src="/_shared/probe.js"></script>
+  <link rel="stylesheet" href="/_shared/probe-page.css">
+  <script src="hostile.js"></script>
+</head>
+<body>
+  <h1>Hostile head</h1>
+  <p>Shortly after load, this page's script does what some SPA frameworks do during hydration: it removes every &lt;style&gt; element, rebuilds &lt;head&gt;, and resets document.adoptedStyleSheets. It sets data-hostile-done on &lt;html&gt; when finished.</p>
+</body>
+</html>

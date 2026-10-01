@@ -18,6 +18,7 @@
         grim
         wayvnc
         dbus
+        wtype
       ];
     in
     {
