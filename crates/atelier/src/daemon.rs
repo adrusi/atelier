@@ -8,13 +8,13 @@
 
 use crate::{loader, paths, wire};
 use atelier_proto::{
-    BlobChunk, BlobGetParams, BlobRef, Bundle, Diagnostic, InitializeParams, InitializeResult,
-    PROTOCOL_VERSION, Role, Severity, StatusResult, method,
+    BlobChunk, BlobGetParams, BlobRef, Bundle, CompiledStyle, Diagnostic, InitializeParams,
+    InitializeResult, PROTOCOL_VERSION, Role, Severity, StatusResult, method,
 };
 use base64::Engine;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -65,6 +65,9 @@ struct State {
 
 struct Inner {
     bundle: Bundle,
+    /// The last version of each style that loaded, so a save that breaks a
+    /// style doesn't unstyle open pages while it's being fixed.
+    last_good: BTreeMap<String, CompiledStyle>,
     bundle_ref: BlobRef,
     blobs: VecDeque<(String, Arc<Vec<u8>>)>,
     clients: BTreeMap<String, u32>,
@@ -79,12 +82,14 @@ impl State {
         let mut bundle = loader::load(&self.dir, &vars);
         bundle.diagnostics.extend(var_diags);
 
+        let mut inner = self.inner.lock().unwrap();
+        keep_last_good(&mut bundle, &mut inner.last_good);
         let bytes = serde_json::to_vec(&bundle).expect("bundles serialize");
         let hash = hex(&Sha256::digest(&bytes));
-        let mut inner = self.inner.lock().unwrap();
         if inner.bundle_ref.hash == hash {
             return None;
         }
+        log_changes(&inner.bundle, &bundle, &hash);
         let blob_ref = BlobRef {
             hash: hash.clone(),
             size: bytes.len() as u64,
@@ -96,6 +101,88 @@ impl State {
         inner.bundle = bundle;
         inner.bundle_ref = blob_ref.clone();
         Some(blob_ref)
+    }
+}
+
+/// Puts back the last good version of any style that failed to load, with a
+/// warning saying so, then remembers what's loaded now. Styles that are gone
+/// without errors (deleted files, a different theme) are forgotten.
+fn keep_last_good(bundle: &mut Bundle, last_good: &mut BTreeMap<String, CompiledStyle>) {
+    let loaded: BTreeSet<String> = bundle.styles.iter().map(|s| s.id.clone()).collect();
+    let broken: BTreeSet<String> = bundle
+        .diagnostics
+        .iter()
+        .filter(|d| d.severity == Severity::Error)
+        .filter_map(|d| d.path.clone())
+        .filter(|p| p.ends_with(".user.css") && !loaded.contains(p))
+        .collect();
+    for id in broken {
+        if let Some(old) = last_good.get(&id) {
+            bundle.styles.push(old.clone());
+            bundle.diagnostics.push(Diagnostic {
+                severity: Severity::Warning,
+                path: Some(id),
+                line: None,
+                message:
+                    "still applying the last version that loaded, until the errors above are fixed"
+                        .into(),
+            });
+        }
+    }
+    // The loader's order: theme-wide styles first, then services, each by path.
+    bundle
+        .styles
+        .sort_by(|a, b| (a.service.is_some(), &a.id).cmp(&(b.service.is_some(), &b.id)));
+    *last_good = bundle
+        .styles
+        .iter()
+        .map(|s| (s.id.clone(), s.clone()))
+        .collect();
+}
+
+/// Logs which styles changed and every diagnostic, so problems are visible in
+/// daemon.log without asking.
+fn log_changes(old: &Bundle, new: &Bundle, hash: &str) {
+    let before: BTreeMap<&str, &CompiledStyle> =
+        old.styles.iter().map(|s| (s.id.as_str(), s)).collect();
+    let after: BTreeMap<&str, &CompiledStyle> =
+        new.styles.iter().map(|s| (s.id.as_str(), s)).collect();
+    let added: Vec<&str> = after
+        .keys()
+        .filter(|id| !before.contains_key(*id))
+        .copied()
+        .collect();
+    let removed: Vec<&str> = before
+        .keys()
+        .filter(|id| !after.contains_key(*id))
+        .copied()
+        .collect();
+    let changed: Vec<&str> = after
+        .iter()
+        .filter(|(id, s)| before.get(*id).is_some_and(|old| old != *s))
+        .map(|(id, _)| *id)
+        .collect();
+    eprintln!(
+        "atelier daemon: bundle {} ({} styles)",
+        &hash[..12],
+        new.styles.len()
+    );
+    for (label, ids) in [("added", added), ("changed", changed), ("removed", removed)] {
+        for id in ids {
+            eprintln!("  {label:<8} {id}");
+        }
+    }
+    for d in &new.diagnostics {
+        let severity = match d.severity {
+            Severity::Error => "error",
+            Severity::Warning => "warning",
+        };
+        let place = match (&d.path, d.line) {
+            (Some(p), Some(l)) => format!("{p}:{l}: "),
+            (Some(p), None) => format!("{p}: "),
+            _ => String::new(),
+        };
+        eprintln!("  {severity:<8} {place}{}", d.message);
     }
 }
 
@@ -178,6 +265,7 @@ async fn serve(dir: PathBuf) -> std::io::Result<()> {
                 size: 0,
             },
             blobs: VecDeque::new(),
+            last_good: BTreeMap::new(),
             clients: BTreeMap::new(),
             idle_since: Some(Instant::now()),
         }),
@@ -220,7 +308,6 @@ fn watch(state: Arc<State>) -> std::io::Result<notify::RecommendedWatcher> {
             tokio::time::sleep(Duration::from_millis(150)).await;
             while rx.try_recv().is_ok() {}
             if let Some(blob_ref) = state.reload() {
-                eprintln!("atelier daemon: bundle changed ({})", &blob_ref.hash[..12]);
                 let _ = state
                     .notify
                     .send(wire::notification(method::BUNDLE_CHANGED, json!(blob_ref)));

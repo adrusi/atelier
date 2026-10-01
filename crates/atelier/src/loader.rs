@@ -24,14 +24,16 @@ use std::path::Path;
 const REMOTE_ALLOWLIST: &[&str] = &["fonts.googleapis.com", "fonts.gstatic.com"];
 
 #[derive(Debug, Default, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(default)]
 struct DirConfig {
     theme: Option<String>,
 }
+const DIR_CONFIG_KEYS: &[&str] = &["theme"];
 
-/// `services/<service>/service.toml`. Everything is optional.
+/// `services/<service>/service.toml`. Everything is optional, and problems in
+/// it are warnings: a typo shouldn't stop a service's styles from loading.
 #[derive(Debug, Default, Deserialize)]
-#[serde(default, deny_unknown_fields)]
+#[serde(default)]
 struct ServiceConfig {
     /// The user's own description of what they wanted styled.
     #[allow(dead_code)]
@@ -46,6 +48,12 @@ struct ServiceConfig {
     /// Keep Dark Reader off pages these styles apply to (SPEC §6.5). Default true.
     dark_reader_lock: Option<bool>,
 }
+const SERVICE_CONFIG_KEYS: &[&str] = &[
+    "description",
+    "summary",
+    "prerequisites",
+    "dark_reader_lock",
+];
 
 pub fn load(dir: &Path, vars: &BTreeMap<String, String>) -> Bundle {
     let mut l = Loader {
@@ -81,18 +89,12 @@ impl Loader<'_> {
 
     fn load(&mut self) {
         let config: DirConfig = match fs::read_to_string(self.dir.join("atelier.toml")) {
-            Ok(text) => match toml::from_str(&text) {
-                Ok(c) => c,
-                Err(e) => {
-                    self.diag(
-                        Severity::Error,
-                        Some("atelier.toml"),
-                        None,
-                        e.message().to_string(),
-                    );
-                    return;
+            Ok(text) => {
+                match self.parse_config(&text, "atelier.toml", DIR_CONFIG_KEYS, Severity::Error) {
+                    Some(c) => c,
+                    None => return,
                 }
-            },
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
                 self.diag(
                     Severity::Warning,
@@ -134,24 +136,67 @@ impl Loader<'_> {
         for service in subdirs(&self.dir.join("services")) {
             let config_path = format!("services/{service}/service.toml");
             let config: ServiceConfig = match fs::read_to_string(self.dir.join(&config_path)) {
-                Ok(text) => match toml::from_str(&text) {
-                    Ok(c) => c,
-                    Err(e) => {
-                        self.diag(
-                            Severity::Error,
-                            Some(&config_path),
-                            None,
-                            e.message().to_string(),
-                        );
-                        continue;
-                    }
-                },
+                Ok(text) => self
+                    .parse_config(&text, &config_path, SERVICE_CONFIG_KEYS, Severity::Warning)
+                    .unwrap_or_default(),
                 Err(_) => ServiceConfig::default(),
             };
             let lock = config.dark_reader_lock.unwrap_or(true);
-            for file in style_files(&self.dir.join("services").join(&service).join(&theme)) {
+            let styles_dir = self.dir.join("services").join(&service).join(&theme);
+            for file in files_with_suffix(&styles_dir, ".user.js") {
+                self.diag(
+                    Severity::Warning,
+                    Some(&format!("services/{service}/{theme}/{file}")),
+                    None,
+                    "userscripts aren't supported yet (SPEC §15, phase 5), so this file is ignored",
+                );
+            }
+            for file in style_files(&styles_dir) {
                 let id = format!("services/{service}/{theme}/{file}");
                 self.load_style(&id, Some(&service), lock);
+            }
+        }
+    }
+
+    /// Parses a TOML config file. Unknown keys are warnings and ignored. Other
+    /// problems are reported at `severity` and give `None`.
+    fn parse_config<T: serde::de::DeserializeOwned>(
+        &mut self,
+        text: &str,
+        path: &str,
+        known: &[&str],
+        severity: Severity,
+    ) -> Option<T> {
+        let mut table: toml::Table = match toml::from_str(text) {
+            Ok(t) => t,
+            Err(e) => {
+                let line = e.span().map(|s| text[..s.start].matches('\n').count() + 1);
+                self.diag(severity, Some(path), line, e.message().to_string());
+                return None;
+            }
+        };
+        let unknown: Vec<String> = table
+            .keys()
+            .filter(|k| !known.contains(&k.as_str()))
+            .cloned()
+            .collect();
+        for key in unknown {
+            table.remove(&key);
+            self.diag(
+                Severity::Warning,
+                Some(path),
+                None,
+                format!(
+                    "unknown setting `{key}` (known: {}); ignored",
+                    known.join(", ")
+                ),
+            );
+        }
+        match T::deserialize(toml::Value::Table(table)) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                self.diag(severity, Some(path), None, e.message().to_string());
+                None
             }
         }
     }
@@ -167,9 +212,20 @@ impl Loader<'_> {
         };
 
         let mut errors = false;
-        for (line, message) in lint_remote_urls(&source) {
+        for (line, message) in lint_remote_urls(&style, &source)
+            .into_iter()
+            .chain(lint_matchers(&style, &source))
+        {
             self.diag(Severity::Error, Some(id), line, message);
             errors = true;
+        }
+        if !source.contains("==UserStyle==") {
+            self.diag(
+                Severity::Warning,
+                Some(id),
+                None,
+                "has no `==UserStyle==` metadata block, so it's named after its file and can't declare @vars",
+            );
         }
         if service.is_some() && style.sections.iter().any(|s| s.is_global()) {
             self.diag(
@@ -288,29 +344,93 @@ fn prefix_pattern(prefix: &str) -> Option<String> {
     Some(format!("{scheme}://{host}{}*", path.replace('*', "")))
 }
 
-/// Remote URLs in `url()` and `@import` that aren't on the allowlist.
-fn lint_remote_urls(source: &str) -> Vec<(Option<usize>, String)> {
+/// Remote URLs that aren't on the allowlist, in `url()` and `@import` in the
+/// style's CSS. Matchers in `@-moz-document` preludes and comments aren't
+/// loads, so only parsed section CSS is scanned, with comments removed.
+fn lint_remote_urls(style: &UserStyle, source: &str) -> Vec<(Option<usize>, String)> {
+    let mut seen = BTreeSet::new();
+    style
+        .sections
+        .iter()
+        .flat_map(|s| remote_urls_in(&s.css))
+        .filter(|url| seen.insert(url.clone()))
+        .map(|url| {
+            (
+                line_of(source, &url),
+                format!(
+                    "loads `{url}` from a remote host, which could leak page content; styles may only load remote resources from {}",
+                    REMOTE_ALLOWLIST.join(", ")
+                ),
+            )
+        })
+        .collect()
+}
+
+/// Remote, non-allowlisted URLs loaded by `css` (one section's CSS).
+fn remote_urls_in(css: &str) -> Vec<String> {
+    let comments = regex::Regex::new(r"(?s)/\*.*?\*/").expect("static regex");
+    let css = comments.replace_all(css, "");
     let re =
         regex::Regex::new(r#"(?i)(?:url\(\s*['"]?|@import\s+['"])\s*((?:https?:)?//[^'")\s]+)"#)
             .expect("static regex");
-    re.captures_iter(source)
+    re.captures_iter(&css)
         .filter_map(|c| {
-            let url = c.get(1)?;
-            let host = url.as_str().split("//").nth(1)?.split(['/', ':', '?', '#']).next()?.to_ascii_lowercase();
-            if REMOTE_ALLOWLIST.contains(&host.as_str()) {
-                return None;
-            }
-            let line = source[..url.start()].matches('\n').count() + 1;
-            Some((
-                Some(line),
-                format!(
-                    "loads `{}` from a remote host, which could leak page content; styles may only load remote resources from {}",
-                    url.as_str(),
-                    REMOTE_ALLOWLIST.join(", ")
-                ),
-            ))
+            let url = c.get(1)?.as_str();
+            let host = url
+                .split("//")
+                .nth(1)?
+                .split(['/', ':', '?', '#'])
+                .next()?
+                .to_ascii_lowercase();
+            (!REMOTE_ALLOWLIST.contains(&host.as_str())).then(|| url.to_string())
         })
         .collect()
+}
+
+/// Matchers that can't work: `domain()` given something other than a host,
+/// and `regexp()` patterns JavaScript can't compile.
+fn lint_matchers(style: &UserStyle, source: &str) -> Vec<(Option<usize>, String)> {
+    let mut out = Vec::new();
+    for m in style.sections.iter().flat_map(|s| &s.matchers) {
+        match m {
+            usercss::Matcher::Domain(d) if d.is_empty() || d.contains(['/', ':', '*', ' ']) => out.push((
+                line_of_matcher(source, "domain", d),
+                format!("`domain(\"{d}\")` takes a host name such as \"example.com\", without a scheme, port, path or wildcard"),
+            )),
+            usercss::Matcher::Regexp(r) => {
+                if let Err(e) = regress::Regex::new(r) {
+                    out.push((
+                        line_of_matcher(source, "regexp", r),
+                        format!("`regexp()` pattern isn't a valid JavaScript regular expression: {e}"),
+                    ));
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// 1-based line of the `func(...)` matcher whose argument starts with `value`
+/// (quoted or not), falling back to the first `func(`.
+fn line_of_matcher(source: &str, func: &str, value: &str) -> Option<usize> {
+    let call = format!("{func}(");
+    let starts = || source.match_indices(&call).map(|(i, _)| i);
+    let found = starts()
+        .find(|&i| {
+            let arg = source[i + call.len()..].trim_start();
+            let arg = arg.strip_prefix(['"', '\'']).unwrap_or(arg);
+            arg.starts_with(value)
+        })
+        .or_else(|| starts().next())?;
+    Some(source[..found].matches('\n').count() + 1)
+}
+
+/// 1-based line of the first occurrence of `needle` in `source`.
+fn line_of(source: &str, needle: &str) -> Option<usize> {
+    source
+        .find(needle)
+        .map(|i| source[..i].matches('\n').count() + 1)
 }
 
 fn subdirs(dir: &Path) -> Vec<String> {
@@ -327,13 +447,17 @@ fn subdirs(dir: &Path) -> Vec<String> {
 }
 
 fn style_files(dir: &Path) -> Vec<String> {
+    files_with_suffix(dir, ".user.css")
+}
+
+fn files_with_suffix(dir: &Path, suffix: &str) -> Vec<String> {
     let mut names: Vec<String> = fs::read_dir(dir)
         .into_iter()
         .flatten()
         .flatten()
         .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
         .filter_map(|e| e.file_name().into_string().ok())
-        .filter(|n| n.ends_with(".user.css") && !n.starts_with('.'))
+        .filter(|n| n.ends_with(suffix) && !n.starts_with('.'))
         .collect();
     names.sort();
     names
@@ -468,10 +592,82 @@ mod tests {
     fn allowlisted_and_relative_urls_are_fine() {
         let css = "@import url(\"https://fonts.googleapis.com/css2?family=Inter\");\n\
                    a { background: url(/local.png); } b { background: url(data:image/png;base64,AA==); }";
-        assert!(lint_remote_urls(css).is_empty());
-        assert_eq!(
-            lint_remote_urls("@import \"//evil.example/x.css\";").len(),
-            1
+        assert!(remote_urls_in(css).is_empty());
+        assert_eq!(remote_urls_in("@import \"//evil.example/x.css\";").len(), 1);
+    }
+
+    #[test]
+    fn matcher_urls_and_comments_are_not_loads() {
+        let source = "/* see https://evil.example/notes and url(https://evil.example/x) */\n\
+                      @-moz-document url(\"https://h.example/page\"), url-prefix(\"https://h.example/\") {\n\
+                        a { color: red; } /* background: url(https://evil.example/y) */\n\
+                      }\n";
+        let style = usercss::parse(source).unwrap();
+        assert!(lint_remote_urls(&style, source).is_empty());
+    }
+
+    #[test]
+    fn unknown_service_settings_warn_but_styles_still_load() {
+        let d = fixture();
+        write(
+            d.path(),
+            "services/github/service.toml",
+            "descripton = \"typo\"\n",
+        );
+        let bundle = load(d.path(), &BTreeMap::new());
+        assert!(
+            bundle
+                .styles
+                .iter()
+                .any(|s| s.service.as_deref() == Some("github"))
+        );
+        let diag = bundle
+            .diagnostics
+            .iter()
+            .find(|d| d.path.as_deref() == Some("services/github/service.toml"))
+            .unwrap();
+        assert_eq!(diag.severity, Severity::Warning);
+        assert!(diag.message.contains("descripton"));
+    }
+
+    #[test]
+    fn bad_matchers_are_errors() {
+        let source = "@-moz-document domain(\"https://d.example/\") { a {} }\n@-moz-document regexp(\"(\") { b {} }\n";
+        let style = usercss::parse(source).unwrap();
+        let errors = lint_matchers(&style, source);
+        assert_eq!(errors.len(), 2);
+        assert_eq!(errors[0].0, Some(1));
+        assert_eq!(errors[1].0, Some(2));
+        // Lookahead is fine in JavaScript, so it's fine here too.
+        let ok = usercss::parse("@-moz-document regexp(\"https://f\\\\.com/(?!x).*\") { a {} }")
+            .unwrap();
+        assert!(lint_matchers(&ok, "").is_empty());
+    }
+
+    #[test]
+    fn userscripts_and_missing_metadata_warn() {
+        let d = fixture();
+        write(
+            d.path(),
+            "services/github/dusk/fix.user.js",
+            "// ==UserScript==\n",
+        );
+        let bundle = load(d.path(), &BTreeMap::new());
+        let warnings: Vec<_> = bundle
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity == Severity::Warning)
+            .map(|d| (d.path.clone().unwrap_or_default(), d.message.clone()))
+            .collect();
+        assert!(
+            warnings
+                .iter()
+                .any(|(p, m)| p.ends_with("fix.user.js") && m.contains("ignored"))
+        );
+        assert!(
+            warnings
+                .iter()
+                .any(|(p, m)| p.ends_with("wiki/dusk/base.user.css") && m.contains("metadata"))
         );
     }
 
@@ -484,22 +680,23 @@ mod tests {
     }
 
     #[test]
-    fn bad_service_config_is_an_error() {
+    fn broken_service_config_is_a_warning_and_falls_back_to_defaults() {
         let d = fixture();
-        write(d.path(), "services/github/service.toml", "colour = 3\n");
+        write(
+            d.path(),
+            "services/github/service.toml",
+            "dark_reader_lock = \"yes\"\n",
+        );
         let bundle = load(d.path(), &BTreeMap::new());
-        assert!(
-            !bundle
-                .styles
-                .iter()
-                .any(|s| s.service.as_deref() == Some("github"))
-        );
-        assert!(
-            bundle
-                .diagnostics
-                .iter()
-                .any(|d| d.path.as_deref() == Some("services/github/service.toml"))
-        );
+        let github = bundle
+            .styles
+            .iter()
+            .find(|s| s.service.as_deref() == Some("github"))
+            .unwrap();
+        assert!(github.dark_reader_lock);
+        assert!(bundle.diagnostics.iter().any(|d| d.path.as_deref()
+            == Some("services/github/service.toml")
+            && d.severity == Severity::Warning));
     }
 
     #[test]

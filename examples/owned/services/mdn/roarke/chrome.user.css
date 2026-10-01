@@ -1,0 +1,40 @@
+/* ==UserStyle==
+@name           MDN chrome (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    MDN's page chrome: header, menus, sidebars, focus
+==/UserStyle== */
+
+/* Surfaces only; layout is MDN's. Values are light-dark(<MDN light>, <Mocha>)
+   like the tokens in base.user.css, so MDN's Light setting is unaffected. */
+
+@-moz-document domain("developer.mozilla.org") {
+  /* The sticky header (ad banner band, navigation, breadcrumbs) is one
+     recessed strip, the way the theme treats headers. */
+  html .navigation {
+    background-color: light-dark(var(--color-background-page), #181825);
+  }
+
+  /* Navigation menus are raised panels. */
+  html .menu__panel {
+    background-color: light-dark(var(--color-background-page), #313244);
+    border-color: light-dark(var(--color-border-primary), #45475a);
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
+  }
+  html .menu__panel-content a:hover {
+    color: light-dark(var(--color-text-primary), #b4befe);
+  }
+
+  /* Form controls in the light DOM take the page font (the UA default is the
+     system UI font). Controls inside MDN's web components can't be reached. */
+  :is(input, button, select, textarea) {
+    font-family: inherit;
+  }
+
+  /* Focus: lavender, like the window manager's focused border. */
+  :focus-visible {
+    outline: 2px solid light-dark(var(--color-border-active), #b4befe);
+    outline-offset: 1px;
+  }
+}

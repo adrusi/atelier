@@ -59,3 +59,86 @@ The theme is `owned/themes/roarke`, a draft read off the owner's desktop.
   worse. Not an atelier problem as such, but agents will hit it.
 - **Third-party banners** (CentralNotice) bring their own colours. Minor;
   they're dismissable.
+
+## GitHub and MDN (2026-10-01, two subagents in parallel)
+
+Two agents, each with full access and their own dev instance, styled
+logged-out GitHub (`services/github`, ~230 Primer tokens plus component
+fixes) and MDN (`services/mdn`, its colour, font and radius tokens, written
+as `light-dark()` so MDN's own theme switch keeps working). Token overriding
+was the right approach on both. What they found about atelier:
+
+**Fixed**
+
+- **The remote-URL lint flagged things that aren't loads.** An
+  `@-moz-document url("https://…")` matcher and URLs in comments were reported
+  as remote loads. That's an error, which dropped the whole style silently.
+  The lint now scans only parsed section CSS, with comments removed.
+- **The CLI's `regexp()` matching disagreed with the browser's.** It used Rust's
+  `regex`, which lacks lookahead and lookbehind. It now uses `regress`, an
+  ECMAScript engine, and lint rejects patterns JavaScript can't compile.
+- **A typo in `service.toml` dropped the whole service.** The schema was
+  strict. Unknown keys and bad values are now warnings, and the styles still
+  load.
+- **A broken save un-styled open pages at once.** The daemon now keeps the last
+  version of a style that loaded, with a warning, until the file parses again.
+  Deleting the file still removes it.
+- **Diagnostics were invisible:** only a count reached the logs. The daemon
+  now logs which styles were added, changed or removed, and every diagnostic
+  as `path:line: message`; so does the extension.
+- **Lint let nonsense through.** `domain()` given a URL is now an error.
+  `.user.js` files (not supported yet) and files with no `==UserStyle==` block
+  are now warnings.
+- **`atelier match` was cryptic** ("sections 0") and accepted a bare host. It
+  now names each applying section and the matcher that made it apply, and
+  rejects things that aren't URLs.
+- **Every bundle change re-registered every user script.** Only scripts whose
+  code or patterns changed are updated now.
+- **Host-side `atelier status` couldn't reach an instance's daemon,** and
+  DEVELOPING.md wrongly said `atelier-dev env` handled it. There's now
+  `atelier-dev atelier NAME ARGS…`.
+- **No way to capture one element.** `atelier-dev capture --selector CSS`
+  does it now.
+
+**Open, design work (recorded in SPEC.md)**
+
+- **Shadow DOM was the main limit on MDN,** more than iframes. Custom
+  properties inherit into shadow roots, so token overrides reached most
+  components. But hard-coded colours inside them (syntax highlighting, a code
+  editor, corner radii, a search box's font) can't be reached from page CSS.
+  Proposal: style sections that the shim adds inside a named element's
+  (open) shadow root.
+- **Frames:** MDN's live samples are cross-origin iframes, and styles only go
+  into top-level documents. Restyling example output also broke a sample
+  that assumed black-on-white text, so frames should be opt-in per matcher,
+  not automatic.
+- **Nested theme scopes:** GitHub re-declares every token on inner elements
+  marked `data-color-mode`, undoing `:root` overrides there. This needs kit
+  guidance, and an inventory tool that flags it.
+- **Invalid CSS is dropped silently by the browser** (`light-dark(inherit, …)`
+  became an empty rule). Lint can't catch everything a browser rejects, so the
+  shim should report declarations the page's CSS parser dropped.
+- **The Dark Reader lock ignores media queries.** A style whose CSS is all
+  inside `@media (prefers-color-scheme: dark)` still locks Dark Reader on a
+  light desktop, where it applies nothing.
+- **The tools agents will need first,** judging by what both agents wrote by
+  hand:
+  - a custom-property inventory, grouped by selector, media query and layer;
+  - "which rules match this element, with specificity";
+  - a contrast scan;
+  - hover and focus simulation (scripted `focus()` doesn't trigger
+    `:focus-visible`);
+  - element and scrolled captures;
+  - a way to wait until a page has finished lazy-loading before capturing.
+
+**Theme questions the agents had to guess at.** These are for the theme's
+owner:
+
+- links blue versus Primer's shared "accent" family;
+- dark text on pastel status colours;
+- 4px on controls and 8px on containers when a site uses one radius token;
+- whether circles count as "pill-shaped";
+- whether green primary buttons should become lavender, even though that adds
+  more accent per screen;
+- whether to leave ads and per-area colours alone;
+- what to do with diagrams' white backdrops.

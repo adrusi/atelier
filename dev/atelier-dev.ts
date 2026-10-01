@@ -32,8 +32,11 @@ usage: atelier-dev <command> [args]
   env NAME                    print shell exports for talking to an instance
   exec NAME -- CMD [ARG]...   run a command inside the instance's compositor
   screenshot NAME [OUT]       compositor screenshot (grim); prints the path
-  capture NAME [OUT] [--full] screenshot of the first tab's page (no browser UI); --full
-                              captures the whole document, not just the viewport
+  capture NAME [OUT] [--full | --selector CSS]
+                              screenshot of the first tab's page (no browser UI): the
+                              viewport, the whole document, or one element
+  atelier NAME ARGS...        run this repo's atelier CLI against the instance's daemon
+                              (e.g. "atelier-dev atelier dev1 status")
   vnc NAME [--port PORT]      serve a headless instance over VNC (foreground)
 
   navigate NAME URL           load URL in the first tab, bring it to the front, and wait
@@ -274,15 +277,57 @@ async function cmdNavigate(args: string[]) {
 
 async function cmdCapture(args: string[]) {
   const full = args.includes("--full");
-  const [name, out] = args.filter((a) => a !== "--full");
+  const si = args.indexOf("--selector");
+  const selector = si >= 0 ? args[si + 1] : undefined;
+  const [name, out] = args.filter((a, i) => a !== "--full" && i !== si && i !== si + 1);
   const state = running(name);
   const file = out ? path.resolve(out) : path.join(instancePaths(state.name).shots, `${timestamp()}.png`);
   await withBidiSession(state, async (bidi) => {
     const context = await firstContext(bidi);
-    const r = await bidi.send("browsingContext.captureScreenshot", { context, origin: full ? "document" : "viewport" });
+    let clip: object | undefined;
+    if (selector) {
+      const found = await bidi.send("script.evaluate", {
+        expression: `document.querySelector(${JSON.stringify(selector)})`,
+        target: { context },
+        awaitPromise: false,
+        resultOwnership: "root",
+      });
+      if (found.result?.type !== "node") die(`no element matches ${selector}`);
+      clip = { type: "element", element: { sharedId: found.result.sharedId } };
+    }
+    const r = await bidi.send("browsingContext.captureScreenshot", {
+      context,
+      origin: full || selector ? "document" : "viewport",
+      ...(clip ? { clip } : {}),
+    });
     fs.writeFileSync(file, Buffer.from(r.data, "base64"));
   });
   console.log(file);
+}
+
+/**
+ * Runs the repo's atelier CLI with the instance's XDG directories, so it finds
+ * the instance's daemon. The daemon's socket is named after the owned
+ * directory's path as the jail sees it, which this reproduces. With
+ * --atelier-dir, files are under the bound host directory, not the jail path,
+ * so for lint and match use `atelier --dir <that directory>` directly.
+ */
+function cmdAtelier(args: string[]) {
+  const [name, ...rest] = args;
+  const state = running(name);
+  const p = instancePaths(state.name);
+  const r = spawnSync(path.join(REPO, "target/debug/atelier"), rest, {
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      XDG_RUNTIME_DIR: p.run,
+      XDG_STATE_HOME: path.join(p.home, ".local/state"),
+      XDG_CONFIG_HOME: path.join(p.home, ".config"),
+      XDG_DATA_HOME: path.join(p.home, ".local/share"),
+      ATELIER_DIR: path.join(p.home, ".local/share/atelier"),
+    },
+  });
+  process.exit(r.status ?? 1);
 }
 
 async function cmdEval(args: string[]) {
@@ -682,6 +727,7 @@ const COMMANDS: Record<string, (args: string[]) => unknown> = {
   exec: cmdExec,
   screenshot: cmdScreenshot,
   capture: cmdCapture,
+  atelier: cmdAtelier,
   vnc: cmdVnc,
   navigate: cmdNavigate,
   eval: cmdEval,

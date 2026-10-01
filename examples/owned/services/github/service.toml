@@ -1,0 +1,5 @@
+description = "GitHub"
+summary = "github.com (Primer UI): repository pages, file and code views, issues and pull requests, lists and search. Retunes GitHub's own dark theme to the theme by overriding its Primer design tokens."
+prerequisites = [
+  "GitHub's theme must follow the system and use the plain Dark theme for night: Settings → Appearance → Theme mode 'Sync with system', night theme 'Dark default'. This is what logged-out GitHub does already. The style only changes the 'dark' theme; Light, Dark dimmed and the high-contrast themes are left alone.",
+]

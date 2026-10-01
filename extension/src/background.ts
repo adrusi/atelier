@@ -110,6 +110,10 @@ async function loadBundle(r: Rpc, ref: BlobRef) {
   state.bundle = bundle;
   state.bundleHash = hash;
   console.info(`atelier: bundle ${hash.slice(0, 12)}: ${bundle.styles.length} styles, ${bundle.diagnostics.length} diagnostics`);
+  for (const d of bundle.diagnostics) {
+    const place = d.path ? `${d.path}${d.line ? `:${d.line}` : ""}: ` : "";
+    console.info(`atelier:   ${d.severity} ${place}${d.message}`);
+  }
   await applyBundle(bundle);
 }
 
@@ -136,11 +140,14 @@ async function applyBundle(bundle: Bundle) {
     runAt: "document_start",
     world: "USER_SCRIPT",
   }));
-  const existing = new Set((await us.getScripts()).map((s) => s.id));
+  const existing = new Map((await us.getScripts()).map((s) => [s.id, s]));
   const wantedIds = new Set(wanted.map((s) => s.id));
-  const removed = [...existing].filter((id) => !wantedIds.has(id));
+  const removed = [...existing.keys()].filter((id) => !wantedIds.has(id));
   if (removed.length) await us.unregister({ ids: removed });
-  const updates = wanted.filter((s) => existing.has(s.id));
+  // Only re-register what changed: an edit to one style shouldn't touch the rest.
+  const same = (a: UserScript, b: UserScript) =>
+    JSON.stringify([a.matches, a.js.map((j) => j.code)]) === JSON.stringify([b.matches, b.js.map((j) => j.code)]);
+  const updates = wanted.filter((s) => existing.has(s.id) && !same(existing.get(s.id)!, s));
   if (updates.length) await us.update(updates);
   const added = wanted.filter((s) => !existing.has(s.id));
   if (added.length) await us.register(added);

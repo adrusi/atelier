@@ -261,8 +261,13 @@ fn fail(e: impl std::fmt::Display) -> ExitCode {
     ExitCode::FAILURE
 }
 
-/// Lists the styles (and which of their sections) that apply to `url`.
+/// Lists the styles that apply to `url`, and which of their sections apply and why.
 pub fn match_url(dir: Option<&str>, url: &str) -> ExitCode {
+    if !url.contains("://") {
+        return fail(format!(
+            "`{url}` isn't a URL; give the full address, e.g. https://{url}/"
+        ));
+    }
     let dir = match paths::resolve_dir(dir) {
         Ok(d) => d,
         Err(e) => return fail(e),
@@ -270,31 +275,45 @@ pub fn match_url(dir: Option<&str>, url: &str) -> ExitCode {
     let bundle = load_directly(&dir);
     let mut any = false;
     for style in &bundle.styles {
-        let applying: Vec<String> = style
+        let reasons: Vec<String> = style
             .sections
             .iter()
             .enumerate()
-            .filter(|(_, s)| {
-                s.matchers.is_empty()
-                    || s.matchers
-                        .iter()
-                        .any(|m| crate::usercss::Matcher::from(m).matches(url))
-            })
-            .map(|(i, s)| {
+            .filter_map(|(i, s)| {
                 if s.matchers.is_empty() {
-                    format!("{i} (global)")
-                } else {
-                    i.to_string()
+                    return Some(format!(
+                        "section {i}: no @-moz-document block (applies everywhere)"
+                    ));
                 }
+                let hits: Vec<String> = s
+                    .matchers
+                    .iter()
+                    .filter(|m| crate::usercss::Matcher::from(*m).matches(url))
+                    .map(describe_matcher)
+                    .collect();
+                (!hits.is_empty()).then(|| format!("section {i}: {}", hits.join(", ")))
             })
             .collect();
-        if !applying.is_empty() {
+        if !reasons.is_empty() {
             any = true;
-            println!("{}  sections {}", style.id, applying.join(", "));
+            println!("{}", style.id);
+            for r in reasons {
+                println!("  {r}");
+            }
         }
     }
     if !any {
         println!("no styles apply to {url}");
     }
     ExitCode::SUCCESS
+}
+
+fn describe_matcher(m: &atelier_proto::Matcher) -> String {
+    use atelier_proto::Matcher::*;
+    match m {
+        Url(v) => format!("url(\"{v}\")"),
+        UrlPrefix(v) => format!("url-prefix(\"{v}\")"),
+        Domain(v) => format!("domain(\"{v}\")"),
+        Regexp(v) => format!("regexp(\"{v}\")"),
+    }
 }

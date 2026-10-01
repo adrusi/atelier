@@ -1,0 +1,83 @@
+/* ==UserStyle==
+@name           MDN content (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    Article bodies on MDN: code blocks, notecards, tables, the Baseline banner
+==/UserStyle== */
+
+/* Code examples, live-sample results and interactive examples are web
+   components with open shadow roots. Their internals can't be selected from
+   here, but tokens set on the host element inherit into the shadow tree, so
+   setting --color-background-secondary on the host recolours only that
+   component's code background, and leaves inline code alone.
+
+   Not reachable at all (no tokens, no ::part()):
+   - syntax-highlight colours inside <mdn-code-example> (MDN's own Prism
+     palette, hard-coded); .css-formal-syntax shares that palette and is left
+     matching it, so a page doesn't mix two syntax palettes;
+   - the CodeMirror editor in <interactive-example> (One Dark, hard-coded);
+   - the 4px corner radius of code examples;
+   - everything inside live-sample and interactive-example iframes, which are
+     separate documents on <hash>.mdnplay.dev. */
+
+@-moz-document domain("developer.mozilla.org") {
+  /* Code surfaces: crust */
+  mdn-code-example,
+  mdn-live-sample-result,
+  interactive-example {
+    --color-background-secondary: light-dark(var(--color-gray-80), #11111b);
+  }
+  .content-section pre:not(.code-example pre) {
+    background-color: light-dark(var(--color-gray-80), #11111b);
+  }
+  .content-section pre code {
+    background-color: transparent;
+  }
+
+  /* Notecards and callouts: container radius, flat */
+  html .content-section :is(.notecard, .callout) {
+    border-radius: 8px;
+  }
+
+  /* Diagrams with transparent backgrounds get a light backdrop from MDN
+     (--color-white, which base.user.css maps to the theme's text colour in
+     dark mode, so it's never pure white). Corners as containers. */
+  html .content-section :is(img, iframe) {
+    border-radius: 8px;
+  }
+
+  /* Baseline banner. Its tokens live on .baseline-indicator (own palette);
+     html raises specificity above MDN's rules. Pills are Mocha badges: dark
+     text on the status colour. */
+  html .baseline-indicator {
+    --baseline-bg: light-dark(var(--baseline-color-gray-90), #181825);
+    --baseline-border: light-dark(var(--baseline-color-gray-80), #45475a);
+    --baseline-check: light-dark(var(--baseline-color-gray-30), #9399b2);
+    --baseline-cross: light-dark(var(--baseline-color-orange-40), #fab387);
+    --baseline-note: light-dark(var(--baseline-color-gray-80), #45475a);
+    border-radius: 8px;
+  }
+  html .baseline-indicator.high {
+    --baseline-bg: light-dark(var(--baseline-color-green-90), color-mix(in srgb, #a6e3a1 8%, #1e1e2e));
+    --baseline-border: light-dark(var(--baseline-color-green-80), color-mix(in srgb, #a6e3a1 35%, #1e1e2e));
+    --baseline-check: light-dark(var(--baseline-color-green-30), #a6e3a1);
+    --baseline-note: light-dark(var(--baseline-color-green-80), color-mix(in srgb, #a6e3a1 35%, #1e1e2e));
+    --baseline-pill-bg: light-dark(#0f7a34, #a6e3a1);
+  }
+  html .baseline-indicator.low {
+    --baseline-bg: light-dark(var(--baseline-color-blue-90), color-mix(in srgb, #89b4fa 8%, #1e1e2e));
+    --baseline-border: light-dark(var(--baseline-color-blue-80), color-mix(in srgb, #89b4fa 35%, #1e1e2e));
+    --baseline-check: light-dark(var(--baseline-color-blue-30), #89b4fa);
+    --baseline-note: light-dark(var(--baseline-color-blue-80), color-mix(in srgb, #89b4fa 35%, #1e1e2e));
+    --baseline-pill-bg: light-dark(#1b6ef3, #89b4fa);
+  }
+  html .baseline-indicator.removing {
+    --baseline-bg: light-dark(var(--baseline-color-red-90), color-mix(in srgb, #f38ba8 8%, #1e1e2e));
+    --baseline-border: light-dark(var(--baseline-color-red-80), color-mix(in srgb, #f38ba8 35%, #1e1e2e));
+    --baseline-pill-bg: light-dark(#b3261e, #f38ba8);
+  }
+  html .baseline-indicator summary .pill {
+    color: light-dark(#fff, #1e1e2e);
+    border-radius: 4px;
+  }
+}

@@ -1,0 +1,99 @@
+/* ==UserStyle==
+@name           GitHub chrome (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    GitHub's header, container shapes, code blocks and inputs, in Catppuccin Mocha
+==/UserStyle== */
+
+/* The logged-out header is a Primer Brand ("marketing") component. It reads
+   --brand-* tokens, which Primer Brand declares in @layer primer-brand on
+   [data-color-mode="dark"] (the header itself) and on :root for fonts.
+   Unlayered declarations beat layered ones whatever their specificity, so
+   these only need to land on the same elements.
+
+   Everything here is scoped like tokens.user.css: GitHub's plain "dark"
+   theme while the desktop prefers dark. */
+
+@-moz-document domain("github.com") {
+  @media (prefers-color-scheme: dark) {
+    html:root:is([data-color-mode="auto"], [data-color-mode="dark"])[data-dark-theme="dark"] {
+      --brand-fontStack-sansSerif: "NotoSans NFP Cond", "Noto Sans", sans-serif;
+      --brand-fontStack-sansSerifAlt: "NotoSans NFP Cond", "Noto Sans", sans-serif;
+      --brand-fontStack-system: "NotoSans NFP Cond", "Noto Sans", sans-serif;
+      --brand-fontStack-monospace: "NotoSansM NFM ExtCond", "NotoSansM Nerd Font Mono", monospace;
+    }
+
+    html:root:is([data-color-mode="auto"], [data-color-mode="dark"])[data-dark-theme="dark"] [data-color-mode="dark"] {
+      --brand-color-canvas-default: #181825;
+      --brand-color-canvas-subtle: #1e1e2e;
+      --brand-color-canvas-muted: #181825;
+      --brand-color-canvas-inset: #11111b;
+      --brand-color-canvas-overlay: #313244;
+      --brand-color-canvas-invert: #cdd6f4;
+      --brand-color-text-default: #cdd6f4;
+      --brand-color-text-muted: #9399b2;
+      --brand-color-text-onEmphasis: #1e1e2e;
+      --brand-color-text-emphasized: #b4befe;
+      --brand-color-text-link-rest: #89b4fa;
+      --brand-color-text-link-pressed: #b4befe;
+      --brand-color-border-default: #45475a;
+      --brand-color-border-muted: #313244;
+      --brand-color-border-subtle: #313244;
+      --brand-color-focus: #b4befe;
+      --brand-color-accent-primary: #b4befe;
+      --brand-color-accent-secondary: #f9e2af;
+    }
+
+    /* Component rules are nested under the same theme selector (CSS
+       nesting), which also lifts their specificity above GitHub's. */
+    html:root:is([data-color-mode="auto"], [data-color-mode="dark"])[data-dark-theme="dark"] {
+
+      /* Containers get the theme's 8px; tokens.user.css sets Primer's shared
+         radius to the 4px of controls. CSS-module classes
+         (<Name>-module__<element>__<hash>) are matched on their prefix. */
+      :is(.Box, .markdown-body pre, .markdown-alert, .flash, .blankslate,
+          .timeline-comment, .js-comment-container,
+          [class*="IssueBody-module__commentBorder__"], [class*="TimelineRowBorder-module__"],
+          [class*="prc-Flash-Flash-"], [class*="prc-Banner-Banner-"],
+          [class*="prc-Popover-PopoverContent-"], [class*="prc-Overlay-Overlay-"],
+          [class*="prc-Blankslate-Blankslate-"]) {
+        border-radius: 8px;
+      }
+      .Box-header { border-top-left-radius: 8px; border-top-right-radius: 8px; }
+
+      /* Never pill-shaped: topic tags, labels, state badges, tokens and
+         counters are 4px. Primer's --borderRadius-full is shared with radio
+         buttons and indicator dots, so the pills are fixed per component
+         rather than through the token. Primer React classes are
+         prc-<Component>-<Element>-<hash>; the hash changes between
+         releases, so match on the prefix. */
+      :is(.topic-tag, .IssueLabel, .Label, .label, .Counter, .State,
+          .social-reaction-summary-item,
+          [class*="prc-TopicTag-TopicTag-"], [class*="prc-Label-Label-"],
+          [class*="prc-IssueLabel-IssueLabel-"], [class*="prc-Token-Token"],
+          [class*="prc-CounterLabel-CounterLabel-"], [class*="prc-StateLabel-StateLabel-"]) {
+        border-radius: 4px;
+      }
+
+      /* Code blocks and inputs are recessed (crust). Primer draws inputs on
+         --bgColor-default and blocks on --bgColor-muted, which are also the
+         page and the sidebars, so these are per component. The wrapper that
+         carries a block's copy button is as wide as the text column while
+         the <pre> can be narrower, so both are recessed. */
+      .markdown-body :is(pre, .snippet-clipboard-content, .highlight) {
+        background-color: #11111b;
+        border-radius: 8px;
+      }
+      :is(.form-control, .form-select, .FormControl-input, .FormControl-select,
+          .FormControl-textarea, .input-contrast,
+          [class*="prc-components-TextInputBaseWrapper-"]):not([disabled], [data-disabled]) {
+        background-color: #11111b;
+      }
+
+      ::selection {
+        background: #353749;
+        color: #cdd6f4;
+      }
+    }
+  }
+}

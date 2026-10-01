@@ -608,9 +608,9 @@ impl<'a> Scanner<'a> {
 // Matching
 
 impl Matcher {
-    /// Whether this matcher applies to `url`. `regexp` is evaluated with Rust's
-    /// regex engine here, which differs from JavaScript's in corner cases; the
-    /// extension's evaluation is the authoritative one.
+    /// Whether this matcher applies to `url`. `regexp` uses an ECMAScript
+    /// regular-expression engine (regress), so it agrees with the extension,
+    /// which evaluates it with JavaScript's `RegExp`.
     pub fn matches(&self, url: &str) -> bool {
         let url = url.split('#').next().unwrap_or(url);
         match self {
@@ -621,7 +621,7 @@ impl Matcher {
                 h == d || h.ends_with(&format!(".{d}"))
             }),
             Matcher::Regexp(r) => {
-                regex::Regex::new(&format!("^(?:{r})$")).is_ok_and(|re| re.is_match(url))
+                regress::Regex::new(&format!("^(?:{r})$")).is_ok_and(|re| re.find(url).is_some())
             }
         }
     }
@@ -793,5 +793,9 @@ mod tests {
         );
         assert!(Matcher::Regexp(r"https://a\.com/\d+".into()).matches("https://a.com/42"));
         assert!(!Matcher::Regexp(r"https://a\.com/\d+".into()).matches("https://a.com/42/more"));
+        // JavaScript features Rust's regex crate lacks.
+        let lookahead = Matcher::Regexp(r"https://f\.com/(?!x).*".into());
+        assert!(lookahead.matches("https://f.com/y"));
+        assert!(!lookahead.matches("https://f.com/x"));
     }
 }

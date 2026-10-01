@@ -43,6 +43,9 @@ atelier-dev ls
 atelier-dev env NAME                  shell exports: ATELIER_DEV_BIDI, ATELIER_DEV_FIXTURES, ...
 atelier-dev exec NAME -- CMD [ARG]... run a command inside the instance's compositor
 atelier-dev screenshot NAME [OUT]     compositor screenshot (grim); prints the path
+atelier-dev capture NAME [OUT] [--full | --selector CSS]
+                                      screenshot of the page itself (viewport, document, or element)
+atelier-dev atelier NAME ARGS...      run the atelier CLI against the instance's daemon
 atelier-dev vnc NAME [--port PORT]    serve a headless instance over VNC
 
 atelier-dev navigate NAME URL         load URL in the first tab and wait for it
@@ -98,7 +101,7 @@ Instances live in `$XDG_RUNTIME_DIR/atelier-dev/<name>/` (override with `ATELIER
 ### Driving an instance
 
 - **From outside atelier:** WebDriver BiDi for navigation, script evaluation, screenshots and assertions, and `grim` for true compositor screenshots. Use these to check what atelier can't observe about itself (e.g. whether a page ever painted without its styles).
-- **Through atelier:** point `atelier mcp` at the instance, via `atelier-dev env`, which sets `ATELIER_DIR` and the runtime directory. That exercises the real agent-facing tools while developing them.
+- **Through atelier:** `atelier-dev atelier NAME ARGS…` runs the CLI with the instance's XDG directories, so e.g. `status` reaches the instance's daemon. (`atelier-dev env` only exports BiDi and fixture addresses.) The same will go for `atelier mcp` once it exists, which exercises the real agent-facing tools while developing them.
 - Don't use Playwright here: it uses a patched Firefox, and its extension support is weak.
 
 ### End-to-end tests

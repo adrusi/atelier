@@ -177,6 +177,7 @@ ATELIER_DIR/
 - **Injection mechanism** (decided by R1): a user script (`userScripts.register`, USER_SCRIPT world, `document_start`) with the CSS embedded in its code inserts a `<style>` element. The element is kept as the last child of `<html>`, so it wins ties with the page's own rules, and a MutationObserver puts it back if the page removes it. In Firefox 156 this applies before first paint, isn't blocked by strict CSP, survives hydration-style clobbering, and can be removed per tab. `scripting.insertCSS` on navigation commit was measured too, and misses the first frame on every page.
 - **This makes the `userScripts` permission necessary for styles**, not only for userscripts (§12). It's optional-only in Firefox, so first-run setup includes a grant step with a real click.
 - **Changing a style** updates the user-script registration, for future loads, and the `<style>` text in tabs that are already open: shims connect back to the background and take live updates. Tabs that have no shim yet (opened before any style matched them, or before the extension started) get one injected with `userScripts.execute` when a style starts applying to them. Without that, a newly written style only showed up after a reload, which breaks the most basic authoring loop (dogfooding, examples/DOGFOODING.md).
+- **A save that breaks a style** (it no longer parses or lints) doesn't unstyle open pages: the daemon keeps serving the last version that loaded, with a warning, until the file is fixed. Deleting the file removes the style.
 - **Variables** are compiled into each style as `:root { --name: value; … }`, with values from `vars.json` and the style's own `@var` defaults as fallback. A change to `vars.json` produces a new bundle like any other change.
 
 ### 6.2 Binding tabs to sources
@@ -533,6 +534,11 @@ atelier daemon | native-host | mcp  internal entry points
 ---
 
 ## 17. Open questions
+
+- **Shadow DOM.** Custom properties inherit into shadow roots, so token overrides reach most web components. But colours and shapes hard-coded inside a component (MDN's syntax highlighting and code editor) can't be reached by page CSS. Proposal: a style section that targets a named custom element's shadow root (e.g. `@shadow mdn-code-example { … }`), which the shim adds as an adopted stylesheet inside each open shadow root, found with a MutationObserver and `customElements.whenDefined`. Closed shadow roots stay out of reach.
+- **Frames.** Styles only go into top-level documents. Registering with `allFrames`, with sections matched against each frame's own URL as Stylus does, lets a style opt in to a frame's origin. Frames that show example output (MDN's live samples) generally shouldn't be restyled, so this must stay opt-in per matcher.
+- **CSS the browser rejects.** Lint can't know everything Firefox's CSS parser drops (an invalid `light-dark(inherit, …)` silently empties a rule). The shim could compare each rule's parsed declarations with its source and report dropped ones back as diagnostics.
+- **The Dark Reader lock and media queries.** The lock is decided by URL matching alone, so a style whose CSS is entirely inside `@media (prefers-color-scheme: dark)` still locks Dark Reader on a light desktop. The shim could check whether any of the applied CSS actually matches the current media.
 
 - Should `vars.json` allow overrides per style, or per owned directory, as well as the flat global map?
 - The exact check API, `service.toml` schema and THEME.md conventions (frontmatter for parameters and palette?). These are best worked out against real services in phase 1.

@@ -217,6 +217,61 @@ fn serves_bundle_and_pushes_changes() {
 }
 
 #[test]
+fn a_broken_save_keeps_the_last_good_version() {
+    let env = Env::new();
+    let mut daemon = env.daemon();
+    let mut s = env.connect();
+    initialize(&mut s, &env.dir);
+
+    // An unclosed block: the file no longer parses.
+    write(
+        &env.dir,
+        "services/site/dusk/a.user.css",
+        "@-moz-document domain(\"example.com\") { body { color: green; }\n",
+    );
+    let changed = loop {
+        let msg = recv(&mut s);
+        if msg["method"] == json!("bundle/changed") {
+            break msg["params"].clone();
+        }
+    };
+    let bundle = fetch_bundle(&mut s, &changed);
+    assert_eq!(
+        bundle["styles"].as_array().unwrap().len(),
+        1,
+        "the style is still there"
+    );
+    assert!(
+        bundle["styles"][0]["sections"][0]["css"]
+            .as_str()
+            .unwrap()
+            .contains("red"),
+        "in its last good version"
+    );
+    let diags = bundle["diagnostics"].as_array().unwrap();
+    assert!(diags.iter().any(|d| d["severity"] == json!("error")));
+    assert!(diags.iter().any(|d| {
+        d["message"]
+            .as_str()
+            .unwrap()
+            .contains("last version that loaded")
+    }));
+
+    // Deleting it really removes it.
+    std::fs::remove_file(env.dir.join("services/site/dusk/a.user.css")).unwrap();
+    let changed = loop {
+        let msg = recv(&mut s);
+        if msg["method"] == json!("bundle/changed") {
+            break msg["params"].clone();
+        }
+    };
+    assert_eq!(fetch_bundle(&mut s, &changed)["styles"], json!([]));
+
+    daemon.kill().unwrap();
+    daemon.wait().unwrap();
+}
+
+#[test]
 fn rejects_bad_initialization() {
     let env = Env::new();
     let mut daemon = env.daemon();
