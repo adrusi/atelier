@@ -172,3 +172,17 @@ previews in each service's `previews/`. Along the way:
   5. accept normal width in the browser.
   The previews were captured before the font change, so they show the Nerd
   Font condensed face.
+
+**Update, same day: condensed Noto in Firefox, solved.** Loaded as a web
+font, the same `NotoSans.ttf` file condenses fine, so the file isn't the
+problem: Firefox doesn't apply variations to installed variable fonts, on
+any axis, and none of the font's named instances is condensed. Google
+also publishes static condensed builds. Installed into the Nix store and
+listed by fontconfig, Firefox matches them with `font-stretch`: condensed
+text renders at the same width as the Nerd Font condensed, with weights
+500 and 600 distinct, and it works alongside the variable font.
+`examples/fonts/noto-condensed.nix` packages them (Sans and Mono, all
+condensed widths). One trap on the way: fonts in a directory under `$HOME`
+that only fontconfig knew about were invisible to Firefox. Its content
+sandbox only lets pages read fonts from certain directories, which made
+an early test look like a failure.

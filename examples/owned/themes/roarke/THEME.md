@@ -71,12 +71,11 @@ Dark text (`#1e1e2e`) on these pastel colours is fine.
   Condensed is the point; it's what the whole desktop uses. Use mainline Noto
   in the browser, not the Nerd Font builds the desktop has installed (those are
   for the private-use icons the bar needs, and come as separate static fonts).
-  **Known issue (2026-10-03):** Firefox uses installed variable fonts only
-  through their named instances, and Noto Sans has no condensed ones, so
-  `font-stretch: condensed` (and `font-variation-settings`) currently render
-  at normal width. Weights 100–900 in steps of 100 work. Styles still declare
-  `font-stretch: condensed`, so they pick it up once condensed faces are
-  available (examples/DOGFOODING.md has the options).
+  Firefox doesn't apply variations to *installed* variable fonts (only to web
+  fonts), so condensed comes from static condensed faces, which need
+  installing alongside: `examples/fonts/noto-condensed.nix`. Without them,
+  `font-stretch: condensed` falls back to normal width. Weights work in steps
+  of 100.
 - Monospace: `"Noto Sans Mono", monospace`, condensed as well (it's also
   variable), matching the terminal.
 - Don't change sizes much. The browser runs at the toolkit's 1.25 scale
@@ -90,9 +89,16 @@ Dark text (`#1e1e2e`) on these pastel colours is fine.
 ## Things to avoid
 
 - Pure black or pure white anywhere.
-- Recolouring images, logos, photos or diagrams in any way, including
-  inverting them or filtering them. A diagram with a white background stays as
-  it is: any automatic method would sometimes get it wrong, and that's worse.
+- Recolouring **content images** (photos, diagrams and other images that differ
+  from page to page, such as those in a Wikipedia article) by any generic means:
+  inverting, filters, blend modes. A rule that has to work for every image on a
+  site can't understand what each one depicts, and will sometimes get it wrong.
+  A diagram with a white background stays as it is.
+
+  **Site imagery** is different: logos, icons, illustrations and other images
+  that are part of the site's own design, the same on every page. You can see
+  what each one depicts, so recolouring it to suit the theme is fine, with
+  judgement (keeping a logo recognisable, for example).
 - Making the site unrecognisable: restyle its surfaces, keep its layout.
 
 ## Out of scope

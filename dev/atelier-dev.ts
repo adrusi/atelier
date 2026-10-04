@@ -24,7 +24,7 @@ usage: atelier-dev <command> [args]
 
   up [--name NAME] [--visible] [--extension PATH]... [--native-host BIN]
      [--pref NAME=VALUE]... [--system-access] [--atelier-dir DIR] [--grant-user-scripts]
-     [--color-scheme dark|light] [--no-fixtures]
+     [--color-scheme dark|light] [--fontconfig FILE] [--no-fixtures]
                               start an instance (default name: dev1, dev2, ...)
   down NAME... | --all [--keep]
                               stop instances and delete their directories
@@ -85,6 +85,7 @@ async function cmdUp(args: string[]) {
   let systemAccess = false;
   let atelierDir: string | undefined;
   let grant = false;
+  let fontconfig: string | undefined;
   const extensions: string[] = [];
   let nativeHost: string | undefined;
   const prefs: string[] = [];
@@ -101,6 +102,7 @@ async function cmdUp(args: string[]) {
       if (scheme !== "dark" && scheme !== "light") die("--color-scheme takes dark or light");
       prefs.push(userPref(`layout.css.prefers-color-scheme.content-override=${scheme === "dark" ? 0 : 1}`));
     }
+    else if (a === "--fontconfig") fontconfig = path.resolve(args[++i]);
     else if (a === "--grant-user-scripts") {
       grant = true;
       // Otherwise permissions.request shows a prompt that also needs answering.
@@ -132,6 +134,11 @@ async function cmdUp(args: string[]) {
   for (const d of [p.home, p.log, p.shots, p.profile]) fs.mkdirSync(d, { recursive: true });
   fs.mkdirSync(p.run, { recursive: true, mode: 0o700 });
   fs.writeFileSync(path.join(p.profile, "user.js"), FIREFOX_PREFS + prefs.join(""));
+  if (fontconfig) {
+    // The jail's own user fonts.conf, in place of the developer's (see bwrapArgs).
+    fs.mkdirSync(path.join(p.home, ".config/fontconfig"), { recursive: true });
+    fs.copyFileSync(fontconfig, path.join(p.home, ".config/fontconfig/fonts.conf"));
+  }
   if (nativeHost) registerNativeHost(p, nativeHost);
 
   let hostWayland: string | undefined;
@@ -146,7 +153,7 @@ async function cmdUp(args: string[]) {
 
   const jailLog = fs.openSync(path.join(p.log, "jail.log"), "a");
   if (atelierDir && !fs.statSync(atelierDir, { throwIfNoEntry: false })?.isDirectory()) die(`--atelier-dir ${atelierDir} isn't a directory`);
-  const child = spawn("bwrap", bwrapArgs(p, hostWayland, atelierDir), {
+  const child = spawn("bwrap", bwrapArgs(p, hostWayland, atelierDir, Boolean(fontconfig)), {
     detached: true,
     stdio: ["ignore", jailLog, jailLog, "pipe"],
   });
@@ -373,7 +380,7 @@ async function cmdBidi(args: string[]) {
 // ---------------------------------------------------------------------------
 // Jail
 
-function bwrapArgs(p: Paths, hostWayland: string | undefined, atelierDir: string | undefined): string[] {
+function bwrapArgs(p: Paths, hostWayland: string | undefined, atelierDir: string | undefined, ownFontconfig = false): string[] {
   const args = [
     "--unshare-all",
     // Shared so the host can reach BiDi and the fixture server, and the jail can
@@ -411,7 +418,7 @@ function bwrapArgs(p: Paths, hostWayland: string | undefined, atelierDir: string
   const xdgConfig = process.env.XDG_CONFIG_HOME ?? path.join(realHome, ".config");
   const xdgData = process.env.XDG_DATA_HOME ?? path.join(realHome, ".local/share");
   for (const [src, dst] of [
-    [path.join(xdgConfig, "fontconfig"), path.join(p.home, ".config/fontconfig")],
+    ...(ownFontconfig ? [] : [[path.join(xdgConfig, "fontconfig"), path.join(p.home, ".config/fontconfig")]]),
     [path.join(xdgData, "fonts"), path.join(p.home, ".local/share/fonts")],
     [path.join(realHome, ".fonts"), path.join(p.home, ".fonts")],
   ]) {
