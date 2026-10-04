@@ -9,6 +9,7 @@
 import type { BlobChunk } from "./proto/BlobChunk";
 import type { BlobRef } from "./proto/BlobRef";
 import type { Bundle } from "./proto/Bundle";
+import type { Batch } from "./proto/Batch";
 import type { BundleChanged } from "./proto/BundleChanged";
 import type { InitializeResult } from "./proto/InitializeResult";
 import type { JournalEntry } from "./proto/JournalEntry";
@@ -63,6 +64,8 @@ async function connect() {
       const { source, ...ref } = params as BundleChanged;
       if (source === undefined) void loadBundle(r, ref);
       else if (sources.has(source)) void loadSource(r, source, ref);
+    } else if (method === "call/changed") {
+      void updateInboxBadge();
     } else if (method === "task/changed") {
       const task = params as Task;
       if (task.state === "landed" || task.state === "declined" || task.state === "abandoned") void closeSource(task.id);
@@ -103,6 +106,7 @@ async function connect() {
     state.error = undefined;
     retryDelay = 1000;
     await loadBundle(r, await r.call<BlobRef>("bundle/get"));
+    void updateInboxBadge();
     await bindingsLoaded;
     for (const source of new Set(bindings.values())) {
       await loadSource(r, source).catch(() => closeSource(source));
@@ -389,8 +393,77 @@ browser.runtime.onMessage.addListener((msg: unknown) => {
   if (m?.type === "site" && m.tabId !== undefined) return siteInfo(m.tabId);
   if (m?.type === "request" && m.tabId !== undefined) return request(m.tabId, m.text ?? "", Boolean(m.screenshot));
   if (m?.type === "undo" && m.seq !== undefined) return daemon().call<JournalEntry>("journal/undo", { seq: m.seq });
+  const i = msg as { type?: string; batch?: string; name?: string; answers?: unknown[]; task?: string; url?: string; stage?: string };
+  if (i?.type === "inbox") return inbox();
+  if (i?.type === "attachment" && i.batch && i.name) return attachment(i.batch, i.name);
+  if (i?.type === "answer" && i.batch) return daemon().call<Batch>("call/answer", { batch: i.batch, answers: i.answers ?? [] });
+  if (i?.type === "preview" && i.task && i.url) return preview(i.task, i.url);
+  if (i?.type === "stage") return daemon().call("call/stage", i.stage ? { stage: i.stage } : {});
+  if (i?.type === "open-inbox") return browser.tabs.create({ url: browser.runtime.getURL("inbox.html") }).then(() => true);
   return undefined;
 });
+
+// ---------------------------------------------------------------------------
+// The inbox: calls from agents (SPEC §9.5)
+
+export type Inbox = {
+  batches: Batch[];
+  /** The tasks they belong to, by id. */
+  tasks: Record<string, Task>;
+  theme: string | null;
+  stage: string | null;
+};
+
+async function inbox(): Promise<Inbox> {
+  const r = daemon();
+  const [open, all] = await Promise.all([r.call<Batch[]>("call/list", { open: true }), r.call<Batch[]>("call/list", { open: false })]);
+  // Waiting ones first, then the latest few answered, for reference.
+  const answered = all.filter((b) => b.state === "answered").slice(0, 5);
+  const batches = [...open, ...answered];
+  const tasks: Record<string, Task> = {};
+  for (const id of new Set(batches.map((b) => b.task))) {
+    tasks[id] = await r.call<Task>("task/get", { id });
+  }
+  const stage = await r.call<{ theme: string; stage: string }>("call/stage", {}).catch(() => null);
+  return { batches, tasks, theme: stage?.theme ?? null, stage: stage?.stage ?? null };
+}
+
+/** An attachment, as a data URL the inbox can show. */
+async function attachment(batch: string, name: string): Promise<string> {
+  const r = daemon();
+  const parts: Uint8Array[] = [];
+  let offset = 0;
+  for (;;) {
+    const chunk = await r.call<BlobChunk>("call/attachment", { batch, name, offset, len: CHUNK });
+    const bytes = Uint8Array.from(atob(chunk.data), (c) => c.charCodeAt(0));
+    parts.push(bytes);
+    offset += bytes.length;
+    if (chunk.eof || bytes.length === 0) break;
+  }
+  let binary = "";
+  for (const p of parts) for (let j = 0; j < p.length; j += 0x8000) binary += String.fromCharCode(...p.subarray(j, j + 0x8000));
+  const type = name.endsWith(".png") ? "image/png" : name.endsWith(".jpg") || name.endsWith(".jpeg") ? "image/jpeg" : "application/octet-stream";
+  return `data:${type};base64,${btoa(binary)}`;
+}
+
+/** Opens a page in a new tab of the user's showing a task's tree, so they
+ * can look at the work in progress before answering (SPEC §6.2). */
+async function preview(task: string, url: string): Promise<boolean> {
+  const tab = await browser.tabs.create({ url: "about:blank", active: true });
+  await bindTab(tab.id!, task);
+  await browser.tabs.update(tab.id!, { url });
+  return true;
+}
+
+/** The toolbar badge counts batches waiting on the user (not ones for the
+ * record), across all tabs. Per-tab badges (unmet prerequisites) win. */
+async function updateInboxBadge() {
+  if (!rpc || state.connection !== "connected") return;
+  const open = await rpc.call<Batch[]>("call/list", { open: true }).catch(() => []);
+  const waiting = open.filter((b) => b.wait !== "record").length;
+  await browser.action.setBadgeText({ text: waiting ? String(waiting) : "" });
+  if (waiting) await browser.action.setBadgeBackgroundColor({ color: "#b4befe" });
+}
 
 // ---------------------------------------------------------------------------
 // Requests from the popup (SPEC §6.4)

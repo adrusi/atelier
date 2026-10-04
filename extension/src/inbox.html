@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>atelier inbox</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body class="inbox">
+  <main>
+    <h1>Questions from agents</h1>
+    <p id="theme" class="theme" hidden>
+      <span id="theme-text"></span>
+      <button id="stage" type="button" class="link"></button>
+    </p>
+    <p id="status" role="status"></p>
+    <p id="empty" hidden>Nothing is waiting for you.</p>
+    <div id="open"></div>
+    <h2 id="answered-heading" hidden>Recently answered</h2>
+    <div id="answered"></div>
+  </main>
+  <script src="inbox.js" type="module"></script>
+</body>
+</html>

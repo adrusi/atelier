@@ -108,6 +108,41 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
         },
     },
     Tool {
+        name: "task_ask",
+        method: "",
+        description: "Put calls to the user: decisions you faced, as questions or as choices you made. They reach \
+            the user in the browser, with your screenshots, whether or not they're watching this conversation, and \
+            they answer a whole batch at once, so gather calls up and send them together at a natural checkpoint \
+            (a first pass is a good one) rather than one by one. For each call, say what you'd choose yourself \
+            (`choice`): then answering can be one click, and often is. `scope: theme` marks a call about the \
+            theme as a whole rather than this site; those answers can improve THEME.md for every later task. \
+            `wait` says what happens to the task: \
+            record (you go ahead with your choices; the user can revisit them later, and a changed answer becomes a \
+            new task), \
+            review (the task waits for answers before landing: you stop holding it, its tree is kept, and it comes \
+            back to the queue with the answers; meanwhile, work on something else), or \
+            block (for one question you can't make a reasonable call on yourself and that can't wait for a \
+            checkpoint; the task waits as with review). \
+            Screenshots: paths to images in the task's tree or directory, e.g. from screenshot with attach: true. \
+            Side-by-side variants (screenshots of each option, in the tree) make \"this or that?\" questions quick \
+            to answer.",
+        schema: || {
+            json!({ "type": "object", "properties": {
+                "task": task_prop(),
+                "wait": { "type": "string", "enum": ["record", "review", "block"] },
+                "summary": { "type": "string", "description": "A line to go with the batch, e.g. what state the work is in." },
+                "calls": { "type": "array", "items": { "type": "object", "properties": {
+                    "question": { "type": "string" },
+                    "context": { "type": "string", "description": "What it's about and why it matters, for someone looking at your screenshot rather than the page." },
+                    "options": { "type": "array", "items": { "type": "string" } },
+                    "choice": { "type": "string", "description": "What you'd do (or did), if you had to decide." },
+                    "scope": { "type": "string", "enum": ["site", "theme"], "description": "Default site." },
+                    "screenshots": { "type": "array", "items": { "type": "string" } }
+                }, "required": ["question"] } }
+            }, "required": ["wait", "calls"] })
+        },
+    },
+    Tool {
         name: "task_release",
         method: "",
         description: "Stop working on a task for now without finishing it: it goes back to the queue with its \
@@ -157,16 +192,16 @@ specifically. I'm developing atelier, and that's some of the most useful feedbac
 fn presence() -> &'static str {
     match std::env::var("ATELIER_SESSION").as_deref() {
         Ok("headless") => {
-            "atelier started this session by itself, and nobody is watching it, so there's no one to answer \
-             questions here, and your final message only goes to a log. What I'll read is each landing's \
-             summary and `assumptions`, so put the calls you made there. When a task is too unclear to do \
-             well that way, it's fine to decline it and say what you'd need to know; I can queue it again with \
-             more context."
+            "atelier started this session by itself, and nobody is watching this conversation: your final \
+             message only goes to a log. Questions reach me through task_ask, in the browser, whenever I next \
+             look; each task's brief says how readily to ask. What else I'll read is each landing's summary \
+             and `assumptions`."
         }
         _ => {
-            "I started this session (or asked for it), so I may well be here. If something is really mine to \
-             decide, ask me. If I don't answer, or it's a small call, make a reasonable choice and list it in \
-             `assumptions` when you submit."
+            "I started this session (or asked for it), so I may be here, but don't count on it. Put questions \
+             about the work to me with task_ask: they reach me in the browser with your screenshots, whether \
+             or not I'm watching this conversation, and they stay with the task. Each task's brief says how \
+             readily to ask. Quick things about the session itself you can just ask here."
         }
     }
 }
@@ -195,6 +230,7 @@ impl Server {
             "task_submit" => self.task_submit(args),
             "task_decline" => self.task_finish(args, tm::DECLINE, "reason"),
             "task_release" => self.task_finish(args, tm::RELEASE, "handoff"),
+            "task_ask" => self.task_ask(args),
             _ => return None,
         };
         Some(match result {
@@ -290,6 +326,18 @@ impl Server {
                 let _ = writeln!(out, "- {}{resumed}", one_line(t));
             }
         }
+        let waiting: Vec<&Task> = tasks
+            .iter()
+            .filter(|t| t.state == TaskState::Waiting)
+            .collect();
+        if !waiting.is_empty() {
+            out.push_str(
+                "\nWaiting for the user's answers (they come back to the queue when answered):\n",
+            );
+            for t in &waiting {
+                let _ = writeln!(out, "- {}", one_line(t));
+            }
+        }
         let others = tasks
             .iter()
             .filter(|t| t.state == TaskState::Claimed && !self.held.contains_key(&t.id))
@@ -362,7 +410,15 @@ impl Server {
         }
         let changes: Vec<atelier_proto::FileChange> =
             parse(self.daemon_call(tm::CHANGES, json!({ "id": id }))?)?;
-        Ok(brief(&task, &changes))
+        let batches: Vec<atelier_proto::Batch> = parse(self.daemon_call(
+            atelier_proto::call_method::LIST,
+            json!({ "open": false, "task": id }),
+        )?)?;
+        let stats: atelier_proto::CallStats = parse(self.daemon_call(
+            atelier_proto::call_method::STATS,
+            json!({ "theme": task.theme }),
+        )?)?;
+        Ok(brief(&task, &changes, &batches, &stats))
     }
 
     fn task_submit(&mut self, args: &Value) -> Result<String, String> {
@@ -413,6 +469,70 @@ impl Server {
         }
     }
 
+    fn task_ask(&mut self, args: &Value) -> Result<String, String> {
+        use atelier_proto::{Batch, Wait};
+        let id = self.task_arg(args)?;
+        let tree = self
+            .tree_of(&id)
+            .ok_or_else(|| format!("you don't hold task {id}"))?;
+        let wait = args.get("wait").and_then(Value::as_str).unwrap_or("record");
+        let calls: Vec<Value> = args
+            .get("calls")
+            .and_then(Value::as_array)
+            .cloned()
+            .ok_or("`calls` is required: a list of { question, context?, options?, choice?, scope?, screenshots? }")?;
+        let calls: Vec<Value> = calls
+            .into_iter()
+            .map(|mut c| {
+                // Screenshots become attachments, with relative paths taken
+                // as relative to the tree.
+                let shots: Vec<String> = c
+                    .get("screenshots")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .map(|p| {
+                        let p = std::path::Path::new(p);
+                        if p.is_absolute() {
+                            p.to_path_buf()
+                        } else {
+                            tree.join(p)
+                        }
+                        .display()
+                        .to_string()
+                    })
+                    .collect();
+                if let Some(o) = c.as_object_mut() {
+                    o.remove("screenshots");
+                    o.insert("attachments".into(), json!(shots));
+                }
+                c
+            })
+            .collect();
+        let batch: Batch = parse(self.daemon_call(
+            atelier_proto::call_method::POST,
+            json!({ "task": id, "session": self.session, "wait": wait, "summary": args.get("summary"), "calls": calls }),
+        )?)?;
+        let n = batch.calls.len();
+        Ok(match batch.wait {
+            Wait::Record => format!(
+                "Posted {n} call(s) for the record ({}). Carry on; if the user changes one after this lands, \
+                 that becomes a new task. task_info shows answers that come in while you're still working.",
+                batch.id
+            ),
+            Wait::Review | Wait::Block => {
+                self.held.remove(&id);
+                format!(
+                    "Posted {n} call(s) ({}). Task {id} now waits for the user's answers: you don't hold it any \
+                     more, its tree is kept, and it comes back to the queue with the answers, for whoever claims \
+                     it next (perhaps you). Its tabs keep showing the tree. Meanwhile, task_list for other work.",
+                    batch.id
+                )
+            }
+        })
+    }
+
     /// Decline or release: either way, this session lets go of the task.
     fn task_finish(&mut self, args: &Value, method: &str, field: &str) -> Result<String, String> {
         let id = self.task_arg(args)?;
@@ -452,6 +572,7 @@ fn state_name(s: TaskState) -> &'static str {
     match s {
         TaskState::Queued => "queued",
         TaskState::Claimed => "claimed",
+        TaskState::Waiting => "waiting for the user's answers",
         TaskState::Landed => "landed",
         TaskState::Declined => "declined",
         TaskState::Abandoned => "abandoned",
@@ -477,7 +598,12 @@ fn one_line(t: &Task) -> String {
 }
 
 /// What an agent needs to start (or resume) a task.
-fn brief(t: &Task, changes: &[atelier_proto::FileChange]) -> String {
+fn brief(
+    t: &Task,
+    changes: &[atelier_proto::FileChange],
+    batches: &[atelier_proto::Batch],
+    stats: &atelier_proto::CallStats,
+) -> String {
     let theme = t.theme.as_deref().unwrap_or("<theme>");
     let tree = t.tree.as_deref().unwrap_or("?");
     let exists = |rel: &str| std::path::Path::new(tree).join(rel).exists();
@@ -576,6 +702,54 @@ fn brief(t: &Task, changes: &[atelier_proto::FileChange]) -> String {
             "\n## Handoff from whoever worked on this before\n\n{h}\n"
         );
     }
+    if !batches.is_empty() {
+        out.push_str("\n## Calls put to the user\n");
+        for b in batches.iter().rev() {
+            let wait = match b.wait {
+                atelier_proto::Wait::Record => "for the record",
+                atelier_proto::Wait::Review => "for review",
+                atelier_proto::Wait::Block => "blocking",
+            };
+            let status = if b.answered.is_some() {
+                "answered"
+            } else {
+                "not answered yet"
+            };
+            let _ = writeln!(out, "\n{} ({wait}, {status}):", b.id);
+            for c in &b.calls {
+                let _ = write!(out, "- {}", c.question);
+                if let Some(choice) = &c.choice {
+                    let _ = write!(out, " [your call: {choice}]");
+                }
+                match &c.answer {
+                    Some(a) if a.kept => {
+                        let _ = write!(out, " → kept");
+                    }
+                    Some(a) => {
+                        if let Some(ch) = a
+                            .choice
+                            .as_ref()
+                            .filter(|ch| Some(*ch) != c.choice.as_ref())
+                        {
+                            let _ = write!(out, " → the user chose: {ch}");
+                        }
+                        if let Some(n) = &a.note {
+                            let _ = write!(out, " → the user said: {n}");
+                        }
+                    }
+                    None => {}
+                }
+                out.push('\n');
+            }
+        }
+        out.push_str(
+            "\nIf an answer settles something that will matter beyond this task, record it: in the \
+             service's notes.md if it's about this site, or in your summary as a suggestion for the theme if \
+             it's about the theme (so it can be worked into THEME.md or the theme notes, and the user isn't asked \
+             again).\n",
+        );
+    }
+    out.push_str(&asking(&theme_stage(tree, theme), stats));
     if !changes.is_empty() {
         out.push_str("\n## Changed in the tree so far\n\n");
         for c in changes {
@@ -609,5 +783,46 @@ fn brief(t: &Task, changes: &[atelier_proto::FileChange]) -> String {
          they carry on in this same tree, so further edits would mix with their work. Your next atelier tool \
          call tells you if that has happened."
     );
+    out
+}
+
+/// The theme's stage (SPEC §9.5), from themes/<theme>/theme.toml in the
+/// tree: `forming` unless the user says `settled`.
+fn theme_stage(tree: &str, theme: &str) -> String {
+    std::fs::read_to_string(std::path::Path::new(tree).join(format!("themes/{theme}/theme.toml")))
+        .ok()
+        .and_then(|t| t.parse::<toml::Table>().ok())
+        .and_then(|t| t.get("stage")?.as_str().map(str::to_string))
+        .filter(|s| s == "settled")
+        .unwrap_or_else(|| "forming".into())
+}
+
+/// How readily to put calls to the user, by the theme's stage.
+fn asking(stage: &str, stats: &atelier_proto::CallStats) -> String {
+    let mut out = String::from("\n## How readily to ask\n\n");
+    if stage == "settled" {
+        out.push_str(
+            "The user has marked this theme **settled**. That isn't them saying your assignment is free of \
+             ambiguity; it's them saying they expect to be satisfied with whatever provisional calls you make. \
+             So make your calls, and record them (task_ask with wait: record, or `assumptions` when you \
+             submit). Ask before landing only if you think the user would be unhappy with any call you could \
+             make on your own, or the site is territory the theme doesn't cover.\n",
+        );
+    } else {
+        out.push_str(
+            "This theme is **forming**: the user is still working out what they want, and questions help. \
+             Answers to questions about the theme improve THEME.md for every task after this one. So where \
+             the theme leaves something open, or you'd be guessing at the user's taste, ask: gather calls, and \
+             at a natural checkpoint (a first pass, with screenshots) send them with task_ask, usually as \
+             wait: review for a new site. Still say what you'd choose, so answering is quick.\n",
+        );
+    }
+    if stats.answered >= 5 {
+        let _ = writeln!(
+            out,
+            "\nSo far on this theme, the user kept {} of the {} calls they answered that came with a choice.",
+            stats.kept, stats.answered
+        );
+    }
     out
 }

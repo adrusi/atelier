@@ -193,9 +193,12 @@ impl State {
             .get(id)
             .map_err(|e| (error_code::NO_SUCH_SOURCE, e))?;
         let tree = match (&task.state, &task.tree) {
-            (atelier_proto::TaskState::Claimed | atelier_proto::TaskState::Queued, Some(t)) => {
-                PathBuf::from(t)
-            }
+            (
+                atelier_proto::TaskState::Claimed
+                | atelier_proto::TaskState::Queued
+                | atelier_proto::TaskState::Waiting,
+                Some(t),
+            ) => PathBuf::from(t),
             (atelier_proto::TaskState::Queued, None) => {
                 return Err((
                     error_code::NO_SUCH_SOURCE,
@@ -819,6 +822,7 @@ fn dispatch(state: &State, msg: Value, role: Role) -> Option<Value> {
                 .unwrap_or(false);
             Ok(start_session(state, None, in_progress, force))
         }
+        Some(m) if m.starts_with("call/") => call_call(state, m, params, role),
         Some(m) if m.starts_with("task/") || m.starts_with("journal/") => {
             task_call(state, m, params, role)
         }
@@ -913,10 +917,27 @@ fn task_call(
             let p: TaskSubmitParams = serde_json::from_value(params).map_err(bad)?;
             let vars = read_vars(&mut Vec::new());
             let (task, result) = store
-                .submit(&p.id, &p.session, &p.summary, p.assumptions, &vars, now)
+                .submit(
+                    &p.id,
+                    &p.session,
+                    &p.summary,
+                    p.assumptions.clone(),
+                    &vars,
+                    now,
+                )
                 .map_err(failed)?;
             if let SubmitResult::Landed { journal, changed } = &result {
                 announce(&task);
+                match store.record_assumptions(&task, &p.assumptions, now) {
+                    Ok(Some(batch)) => {
+                        let _ = state.notify.send(wire::notification(
+                            atelier_proto::call_method::CHANGED,
+                            json!(batch),
+                        ));
+                    }
+                    Ok(None) => {}
+                    Err(e) => eprintln!("atelier daemon: recording assumptions: {e}"),
+                }
                 run_hook(state, "on_land", &task, *journal, &p.summary, changed);
             }
             Ok(json!(result))
@@ -1123,5 +1144,134 @@ fn start_session(state: &State, task: Option<&str>, in_progress: bool, force: bo
             eprintln!("atelier daemon: couldn't start a session: {e}");
             json!({ "started": false, "reason": e })
         }
+    }
+}
+
+/// Calls: batches of questions and assumptions (SPEC §9.5).
+fn call_call(
+    state: &State,
+    method_name: &str,
+    params: Value,
+    role: Role,
+) -> Result<Value, (i64, String)> {
+    use atelier_proto::{CallAnswerParams, CallPostParams, call_method as cm};
+    let bad = |e: serde_json::Error| (wire::code::INVALID_PARAMS, e.to_string());
+    let failed = |e: String| (error_code::TASK_REFUSED, e);
+    let now = now_ms();
+    let store = state.tasks.lock().unwrap();
+    let changed = |batch: &atelier_proto::Batch| {
+        let _ = state
+            .notify
+            .send(wire::notification(cm::CHANGED, json!(batch)));
+    };
+    let announce = |task: &atelier_proto::Task| {
+        let _ = state.notify.send(wire::notification(
+            atelier_proto::task_method::CHANGED,
+            json!(task),
+        ));
+    };
+    match method_name {
+        cm::POST => {
+            let p: CallPostParams = serde_json::from_value(params).map_err(bad)?;
+            let (task, batch) = store.post(p, now).map_err(failed)?;
+            announce(&task);
+            changed(&batch);
+            Ok(json!(batch))
+        }
+        cm::LIST => {
+            let open = params.get("open").and_then(Value::as_bool).unwrap_or(true);
+            let task = params.get("task").and_then(Value::as_str);
+            Ok(json!(store.batches(open, task).map_err(failed)?))
+        }
+        cm::ANSWER => {
+            let p: CallAnswerParams = serde_json::from_value(params).map_err(bad)?;
+            let theme = state.inner.lock().unwrap().default.bundle.theme.clone();
+            let (batch, requeued, revisions) = store.answer(p, theme, now).map_err(failed)?;
+            changed(&batch);
+            for t in requeued.iter().chain(&revisions) {
+                announce(t);
+            }
+            // Answers are the user asking for work to go on.
+            if role != Role::Mcp && (requeued.is_some() || !revisions.is_empty()) {
+                let in_progress = store
+                    .list(Some(atelier_proto::TaskState::Claimed), now)
+                    .is_ok_and(|t| !t.is_empty());
+                start_session(
+                    state,
+                    requeued
+                        .as_ref()
+                        .or(revisions.first())
+                        .map(|t| t.id.as_str()),
+                    in_progress,
+                    false,
+                );
+            }
+            Ok(json!(batch))
+        }
+        cm::ATTACHMENT => {
+            let s = |k: &str| {
+                params
+                    .get(k)
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            };
+            let n = |k: &str| params.get(k).and_then(Value::as_u64).unwrap_or(0);
+            Ok(json!(
+                store
+                    .attachment(&s("batch"), &s("name"), n("offset"), n("len"))
+                    .map_err(failed)?
+            ))
+        }
+        cm::STATS => {
+            let theme = params
+                .get("theme")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .or_else(|| state.inner.lock().unwrap().default.bundle.theme.clone());
+            Ok(json!(store.stats(theme.as_deref()).map_err(failed)?))
+        }
+        cm::STAGE => {
+            let internal = |e: String| (wire::code::INTERNAL, e);
+            let theme = state
+                .inner
+                .lock()
+                .unwrap()
+                .default
+                .bundle
+                .theme
+                .clone()
+                .ok_or((
+                    error_code::TASK_REFUSED,
+                    "atelier.toml names no theme".to_string(),
+                ))?;
+            let path = state.dir.join("themes").join(&theme).join("theme.toml");
+            let mut table: toml::Table = fs::read_to_string(&path)
+                .ok()
+                .and_then(|t| t.parse().ok())
+                .unwrap_or_default();
+            if let Some(stage) = params.get("stage").and_then(Value::as_str) {
+                if stage != "forming" && stage != "settled" {
+                    return Err((
+                        wire::code::INVALID_PARAMS,
+                        "stage is forming or settled".into(),
+                    ));
+                }
+                table.insert("stage".into(), toml::Value::String(stage.into()));
+                let text = toml::to_string(&table).map_err(|e| internal(e.to_string()))?;
+                fs::create_dir_all(path.parent().expect("has parent"))
+                    .map_err(|e| internal(e.to_string()))?;
+                fs::write(&path, text).map_err(|e| internal(e.to_string()))?;
+            }
+            let stage = table
+                .get("stage")
+                .and_then(|v| v.as_str())
+                .unwrap_or("forming");
+            Ok(json!({ "theme": theme, "stage": stage }))
+        }
+        other => Err((
+            wire::code::METHOD_NOT_FOUND,
+            format!("unknown method `{other}`"),
+        )),
     }
 }

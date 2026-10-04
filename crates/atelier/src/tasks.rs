@@ -11,6 +11,8 @@
 //! daemon is the only writer.
 
 use crate::loader;
+
+mod calls;
 use atelier_proto::{
     ChangeKind, FileChange, JournalEntry, Lease, Severity, SubmitProblem, SubmitResult, Task,
     TaskCreateParams, TaskKind, TaskOutcome, TaskState,
@@ -738,6 +740,7 @@ fn state_name(s: TaskState) -> &'static str {
     match s {
         TaskState::Queued => "queued",
         TaskState::Claimed => "claimed",
+        TaskState::Waiting => "waiting for the user's answers",
         TaskState::Landed => "landed",
         TaskState::Declined => "declined",
         TaskState::Abandoned => "abandoned",
@@ -880,17 +883,17 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
     use atelier_proto::TaskBrief;
 
-    struct Env {
+    pub(super) struct Env {
         _tmp: tempfile::TempDir,
-        dir: PathBuf,
-        store: Store,
+        pub(super) dir: PathBuf,
+        pub(super) store: Store,
     }
 
-    fn env() -> Env {
+    pub(super) fn env() -> Env {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path().join("owned");
         let state = tmp.path().join("state");
@@ -910,13 +913,13 @@ mod tests {
         }
     }
 
-    fn put(root: &Path, path: &str, text: &str) {
+    pub(super) fn put(root: &Path, path: &str, text: &str) {
         let p = root.join(path);
         fs::create_dir_all(p.parent().unwrap()).unwrap();
         fs::write(p, text).unwrap();
     }
 
-    fn create(e: &Env, service: Option<&str>) -> Task {
+    pub(super) fn create(e: &Env, service: Option<&str>) -> Task {
         e.store
             .create(
                 TaskCreateParams {
@@ -937,11 +940,11 @@ mod tests {
             .unwrap()
     }
 
-    fn tree(task: &Task) -> PathBuf {
+    pub(super) fn tree(task: &Task) -> PathBuf {
         PathBuf::from(task.tree.as_ref().unwrap())
     }
 
-    fn submit(e: &Env, id: &str) -> SubmitResult {
+    pub(super) fn submit(e: &Env, id: &str) -> SubmitResult {
         e.store
             .submit(
                 id,

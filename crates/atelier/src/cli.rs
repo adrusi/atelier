@@ -475,6 +475,45 @@ pub fn tasks(dir: Option<&str>, args: &[String]) -> ExitCode {
             ),
             None => return fail("usage: atelier task abandon ID [REASON]"),
         },
+        (Some("calls"), _) => client
+            .call(atelier_proto::call_method::LIST, json!({ "open": true }))
+            .map(|v| {
+                for b in v.as_array().into_iter().flatten() {
+                    println!(
+                        "{}  {:<6}  {}",
+                        b["id"].as_str().unwrap_or("?"),
+                        b["wait"].as_str().unwrap_or("?"),
+                        b["summary"].as_str().unwrap_or("")
+                    );
+                    for (i, c) in b["calls"].as_array().into_iter().flatten().enumerate() {
+                        let choice = c["choice"]
+                            .as_str()
+                            .map(|c| format!("  [agent's call: {c}]"))
+                            .unwrap_or_default();
+                        println!(
+                            "    {}. {}{choice}",
+                            i + 1,
+                            c["question"].as_str().unwrap_or("")
+                        );
+                    }
+                }
+                Value::Null
+            }),
+        // Answers as JSON, one per call in order: {"choice": …, "note": …};
+        // calls left out keep the agent's choice.
+        (Some("answer"), Some(batch)) => {
+            let answers: Value = match arg(2).map(serde_json::from_str).transpose() {
+                Ok(a) => a.unwrap_or(json!([])),
+                Err(e) => return fail(format!("answers must be JSON: {e}")),
+            };
+            client.call(
+                atelier_proto::call_method::ANSWER,
+                json!({ "batch": batch, "answers": answers }),
+            )
+        }
+        (Some("stage"), stage) => {
+            client.call(atelier_proto::call_method::STAGE, json!({ "stage": stage }))
+        }
         (Some("session"), Some("start")) => client.call(
             atelier_proto::method::SESSION_START,
             json!({ "force": args.iter().any(|a| a == "--force") }),

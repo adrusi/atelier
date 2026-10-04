@@ -22,7 +22,7 @@ if (!flavor) throw new Error(`unknown build flavor ${flavorName}`);
 const root = import.meta.dirname;
 const src = path.join(root, "src");
 const dist = path.join(root, "dist");
-const STATIC = ["onboarding.html", "popup.html", "ui.css"];
+const STATIC = ["onboarding.html", "popup.html", "inbox.html", "ui.css"];
 
 async function buildShim(): Promise<string> {
   const r = await esbuild.build({
@@ -43,7 +43,7 @@ function copyStatic() {
 
 async function options(): Promise<esbuild.BuildOptions> {
   return {
-    entryPoints: ["background.ts", "popup.ts", "onboarding.ts"].map((f) => path.join(src, f)),
+    entryPoints: ["background.ts", "popup.ts", "onboarding.ts", "inbox.ts"].map((f) => path.join(src, f)),
     outdir: dist,
     bundle: true,
     format: "esm",

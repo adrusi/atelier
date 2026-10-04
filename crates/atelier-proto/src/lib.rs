@@ -292,6 +292,28 @@ pub mod task_method {
     pub const UNDO: &str = "journal/undo";
 }
 
+/// Calls: questions and assumptions, posted in batches (SPEC §9.5).
+pub mod call_method {
+    /// [`CallPostParams`] → [`Batch`]. A `review` or `block` batch parks
+    /// the task until it's answered.
+    pub const POST: &str = "call/post";
+    /// `{ "open"?: bool, "task"?: … }` → `Vec<Batch>`, newest first.
+    pub const LIST: &str = "call/list";
+    /// [`CallAnswerParams`] → [`Batch`]. Answers a whole batch.
+    pub const ANSWER: &str = "call/answer";
+    /// `{ "batch": …, "name": …, "offset": …, "len": … }` → [`BlobChunk`]:
+    /// an attachment's bytes, in chunks small enough for native messaging.
+    pub const ATTACHMENT: &str = "call/attachment";
+    /// Notification from the daemon: a [`Batch`] was posted or answered.
+    pub const CHANGED: &str = "call/changed";
+    /// `{ "theme": … }` → [`CallStats`]: how often the user kept agents' calls.
+    pub const STATS: &str = "call/stats";
+    /// `{ "stage"?: "forming" | "settled" }` → `{ "theme": …, "stage": … }`:
+    /// the active theme's stage (SPEC §9.5), set first if `stage` is given.
+    /// It lives in themes/<theme>/theme.toml, a file the user owns.
+    pub const STAGE: &str = "call/stage";
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
@@ -311,6 +333,9 @@ pub enum TaskState {
     Queued,
     /// A session holds the lease and is working in the task's tree.
     Claimed,
+    /// Parked until the user answers a batch of calls (SPEC §9.5); its tree
+    /// is kept, and it goes back to the queue with the answers.
+    Waiting,
     Landed,
     Declined,
     Abandoned,
@@ -505,4 +530,152 @@ pub struct JournalEntry {
     pub undone_by: Option<u64>,
     /// Set on an undo entry: the landing it undid.
     pub undo_of: Option<u64>,
+}
+
+// ---------------------------------------------------------------------------
+// Calls (SPEC §9.5).
+
+/// What a batch asks of whoever receives it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum Wait {
+    /// The agent went ahead with its choices; these are for the user to
+    /// revisit if they like.
+    Record,
+    /// Answers wanted before the work lands: the task waits.
+    Review,
+    /// The agent can't make a reasonable call alone: the task waits.
+    Block,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum CallScope {
+    /// About this site only.
+    Site,
+    /// About the theme: the answer may change THEME.md or the theme's notes.
+    Theme,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum Addressee {
+    Supervisor,
+    User,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum BatchState {
+    Open,
+    Answered,
+}
+
+/// A decision an agent faced.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Call {
+    pub question: String,
+    /// What it's about and why it matters, for someone who hasn't seen the page.
+    #[serde(default)]
+    pub context: Option<String>,
+    /// The choices considered, if it's a choice.
+    #[serde(default)]
+    pub options: Vec<String>,
+    /// The agent's provisional choice, if it has one.
+    #[serde(default)]
+    pub choice: Option<String>,
+    #[serde(default = "site_scope")]
+    pub scope: CallScope,
+    /// File names in the batch's directory (screenshots, mostly).
+    #[serde(default)]
+    pub attachments: Vec<String>,
+    #[serde(default)]
+    pub answer: Option<Answer>,
+}
+
+fn site_scope() -> CallScope {
+    CallScope::Site
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Answer {
+    /// The option chosen, if any.
+    pub choice: Option<String>,
+    /// Anything the user added, in their words.
+    pub note: Option<String>,
+    /// The user kept the agent's provisional choice, with nothing to add.
+    pub kept: bool,
+    pub time: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Batch {
+    pub id: String,
+    pub task: String,
+    /// Who it's for. Everything goes to the user while there's no separate
+    /// supervisor (SPEC §9.5).
+    pub to: Addressee,
+    pub wait: Wait,
+    /// The agent's note to go with it ("a first pass; three things to decide").
+    pub summary: Option<String>,
+    pub calls: Vec<Call>,
+    pub state: BatchState,
+    pub created: u64,
+    pub answered: Option<u64>,
+    /// The page the task is about, and its service, for showing the batch.
+    pub origin: Option<String>,
+    pub service: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CallPostParams {
+    pub task: String,
+    pub session: String,
+    pub wait: Wait,
+    #[serde(default)]
+    pub summary: Option<String>,
+    /// Calls with `attachments` as paths to copy in (from the task's
+    /// directory); `answer` is ignored.
+    pub calls: Vec<Call>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CallAnswerParams {
+    pub batch: String,
+    /// One per call, in order. A call left out keeps the agent's choice.
+    pub answers: Vec<AnswerInput>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AnswerInput {
+    #[serde(default)]
+    pub choice: Option<String>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct CallStats {
+    /// Answered calls that had a provisional choice.
+    pub answered: u32,
+    /// Of those, how many the user kept.
+    pub kept: u32,
 }

@@ -25,7 +25,7 @@ atelier keeps userstyles that make the websites a user visits match their deskto
 The styles live in an owned directory of plain files: themes/<theme>/THEME.md describes the look the user \
 wants, and services/<service>/ holds each site's styles (service.toml, notes.md, and <theme>/*.user.css \
 in UserCSS format: a ==UserStyle== metadata comment and @-moz-document sections).\n\n\
-Work arrives as tasks (task_list, task_claim). A claimed task gives you a copy of the owned directory, its \
+Work arrives as tasks (task_list, task_claim), and questions for the user go through task_ask. A claimed task gives you a copy of the owned directory, its \
 tree, to edit with your file tools; task_submit checks your changes and lands them in the owned directory, \
 where the user's tabs pick them up, with a journal entry the user can undo. Work through tasks rather than \
 editing the owned directory directly: only landings are recorded, undoable, and passed to the user's hooks.\n\n\
@@ -130,7 +130,8 @@ const TOOLS: &[Tool] = &[
                 "format": { "type": "string", "enum": ["png", "jpeg"], "description": "Default png." },
                 "settleAnimations": { "type": "boolean", "description": "Fast-forward CSS animations first. Default true." },
                 "scale": { "type": "number", "description": "Pixels per CSS pixel. Default 1; use 2–4 to inspect small elements." },
-                "returnImage": { "type": "boolean", "description": "With saveAs: also return the image. Default false." },
+                "returnImage": { "type": "boolean", "description": "With saveAs or attach: also return the image. Default false." },
+                "attach": { "type": "boolean", "description": "Save the image for task_ask (outside the tree, so it won't land); the result gives its path. JPEG." },
                 "saveAs": { "type": "string", "description": "Also save the image at this path, relative to the task's tree (or the owned directory), e.g. services/example/roarke/previews/home.jpg. A .jpg name saves JPEG (smaller; preferred for previews)." }
             }, "required": ["tab"] })
         },
@@ -458,6 +459,20 @@ impl Server {
             }
         }
         let tab = args.get("tab").and_then(Value::as_i64);
+        // attach: true saves next to the task's tree, for task_ask, where it won't land.
+        if args.as_object_mut().and_then(|a| a.remove("attach")) == Some(json!(true)) {
+            let Some(dir) = self
+                .task_for_tab(tab)
+                .and_then(|t| self.tree_of(&t))
+                .and_then(|tree| tree.parent().map(|d| d.join("scratch")))
+            else {
+                return tool_error(
+                    "attach saves a screenshot for task_ask, so it needs a tab for a task you hold",
+                );
+            };
+            let n = std::fs::read_dir(&dir).map_or(0, |d| d.count()) + 1;
+            args["saveAs"] = json!(dir.join(format!("shot-{n}.jpg")).display().to_string());
+        }
         let save_as = match args.as_object_mut().and_then(|a| a.remove("saveAs")) {
             Some(Value::String(p)) => match self.save_path(&p, tab) {
                 Ok(path) => {
@@ -551,13 +566,24 @@ impl Server {
         unreachable!()
     }
 
+    /// The task a tab shows: the one it was opened for, or the one task held.
+    fn task_for_tab(&self, tab: Option<i64>) -> Option<String> {
+        tab.and_then(|t| self.tab_tasks.get(&t).cloned())
+            .filter(|t| self.held.contains_key(t))
+            .or_else(|| (self.held.len() == 1).then(|| self.held.keys().next().unwrap().clone()))
+    }
+
     /// Where `saveAs` writes: inside the tree of the task the tab is bound
     /// to (or the one task held), else the owned directory; as an image.
+    /// An absolute path is accepted only in the task's scratch space (attach).
     fn save_path(&self, rel: &str, tab: Option<i64>) -> Result<PathBuf, String> {
-        let base = tab
-            .and_then(|t| self.tab_tasks.get(&t))
-            .and_then(|task| self.tree_of(task))
-            .or_else(|| (self.held.len() == 1).then(|| self.held.values().next().unwrap().clone()));
+        let base = self.task_for_tab(tab).and_then(|t| self.tree_of(&t));
+        if let Some(tree) = &base
+            && let Some(scratch) = tree.parent().map(|d| d.join("scratch"))
+            && std::path::Path::new(rel).starts_with(&scratch)
+        {
+            return Ok(PathBuf::from(rel));
+        }
         let rel_path = std::path::Path::new(rel);
         let ok_ext = [".png", ".jpg", ".jpeg"].iter().any(|e| rel.ends_with(e));
         if rel_path.is_absolute()

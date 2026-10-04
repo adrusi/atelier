@@ -1,3 +1,4 @@
+[hidden] { display: none !important; }
 :root { color-scheme: light dark; font: 14px/1.45 system-ui, sans-serif; }
 body { margin: 0; }
 main { max-width: 36rem; margin: 3rem auto; padding: 0 1rem; }
@@ -22,3 +23,28 @@ ul.tasks .state.claimed { opacity: 1; }
 details { margin-top: 1rem; font-size: 0.9rem; }
 summary { cursor: default; opacity: 0.7; }
 details dl { margin-top: 0.4rem; }
+button.inbox { display: block; width: 100%; margin: 0 0 0.25rem; text-align: left; }
+
+/* The inbox */
+body.inbox main { max-width: 46rem; }
+.theme { font-size: 0.9rem; opacity: 0.85; }
+button.link { background: none; border: none; padding: 0; margin: 0; color: LinkText; text-decoration: underline; cursor: pointer; font: inherit; }
+.batch { border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 8px; padding: 0.75rem 1rem; margin: 1rem 0; }
+.batch.block { border-color: color-mix(in srgb, CanvasText 45%, transparent); }
+.batch header { display: flex; gap: 0.75rem; align-items: baseline; flex-wrap: wrap; }
+.batch header .site { font-weight: 600; }
+.batch header .what { opacity: 0.8; }
+.batch .wait { margin: 0.25rem 0 0; font-size: 0.85rem; opacity: 0.75; }
+.batch .summary { margin: 0.5rem 0; }
+ol.calls { padding-left: 1.3rem; }
+li.call { margin: 0.9rem 0; }
+li.call .q { font-weight: 600; margin: 0; }
+li.call .context, li.call .scope { margin: 0.2rem 0; font-size: 0.9rem; opacity: 0.8; }
+li.call .answer { margin: 0.2rem 0; font-size: 0.9rem; }
+.shots { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.4rem 0; }
+.shots img { max-width: 14rem; max-height: 10rem; border: 1px solid color-mix(in srgb, CanvasText 18%, transparent); border-radius: 4px; cursor: zoom-in; }
+.shots img.zoom { max-width: 100%; max-height: none; cursor: zoom-out; }
+fieldset.options { border: none; padding: 0; margin: 0.35rem 0; display: grid; gap: 0.2rem; }
+fieldset.options .mine { opacity: 0.7; font-size: 0.85rem; }
+.batch footer { display: flex; gap: 0.75rem; align-items: baseline; }
+.batch .sent { font-size: 0.9rem; opacity: 0.8; }

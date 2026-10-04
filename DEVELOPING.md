@@ -113,8 +113,9 @@ owned directory, daemon, native host, extension and page shim. Build first
 `node dev/e2e/phase1.ts` (styles reaching pages), `node dev/e2e/tools.ts`
 (the agent tools, driven through `atelier mcp` the way a harness would),
 `node dev/e2e/sources.ts` (tabs bound to a task's tree),
-`node dev/e2e/tasks.ts` (a task from queue to landing through `atelier mcp`), and
-`node dev/e2e/popup.ts` (requests and undo from the popup, driven by keystrokes). A failing run keeps the instance and its owned
+`node dev/e2e/tasks.ts` (a task from queue to landing through `atelier mcp`),
+`node dev/e2e/popup.ts` (requests and undo from the popup, driven by keystrokes), and
+`node dev/e2e/calls.ts` (questions from agents, the inbox, answers, theme stage). A failing run keeps the instance and its owned
 directory (`$XDG_RUNTIME_DIR/atelier-dev/<name>{,-owned}`) for inspection.
 
 Unit and integration tests for the Rust side run with `cargo test`. Those for

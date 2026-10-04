@@ -65,6 +65,21 @@ async function render() {
     el("send").textContent = styled ? "Ask for a change" : "Style this site";
     await renderSite(tab!.id!);
   }
+  void renderInbox(state);
+}
+
+/** Agents' questions waiting on the user, from any site. Fetched after the
+ * rest of the popup has rendered, so it never holds that up. */
+async function renderInbox(state: State) {
+  if (state.connection === "connected") {
+    const inbox = (await browser.runtime.sendMessage({ type: "inbox" }).catch(() => null)) as { batches: { wait: string; state: string }[] } | null;
+    const waiting = inbox?.batches.filter((b) => b.state === "open" && b.wait !== "record").length ?? 0;
+    const record = inbox?.batches.filter((b) => b.state === "open" && b.wait === "record").length ?? 0;
+    el("inbox").hidden = waiting + record === 0;
+    el("inbox").textContent =
+      waiting > 0 ? `${waiting} question${waiting === 1 ? "" : "s"} from agents, waiting for you` : `${record} set${record === 1 ? "" : "s"} of calls to look over`;
+  }
+
 }
 
 function describe(t: Task, undone: boolean): string {
@@ -74,6 +89,8 @@ function describe(t: Task, undone: boolean): string {
       return t.tree ? "waiting to be picked up again" : "waiting for a session";
     case "claimed":
       return "being worked on";
+    case "waiting":
+      return "waiting for your answers (in the inbox)";
     case "landed":
       return t.outcome?.kind === "landed" ? `done: ${t.outcome.summary.split("\n")[0]}` : "done";
     case "declined":
@@ -138,6 +155,11 @@ el("ask").addEventListener("submit", async (e) => {
   } finally {
     send.disabled = false;
   }
+});
+
+el("inbox").addEventListener("click", async () => {
+  await browser.runtime.sendMessage({ type: "open-inbox" });
+  window.close();
 });
 
 el("undo").addEventListener("click", async () => {

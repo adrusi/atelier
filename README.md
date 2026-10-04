@@ -73,6 +73,14 @@ atelier undo             # undo the most recent landing
 atelier task list        # the queue
 ```
 
+Agents put questions to you in atelier's **inbox** (linked from the toolbar
+button, which shows how many are waiting): batched, with screenshots, and with
+the agent's own choice preselected, so keeping it is one click. While your
+theme is new, agents ask readily, since your answers sharpen it. Once styles
+meet your bar without back-and-forth, mark the theme *settled* (in the inbox,
+or `atelier stage settled`), and they'll make their own calls and record
+them for you to revisit.
+
 To commit each landing to git (or anything else), set a hook in
 `~/.config/atelier/config.toml`:
 

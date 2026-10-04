@@ -26,6 +26,11 @@ usage: atelier [--dir DIR] <command>
   task claim [ID] [--session NAME] | submit ID [--session NAME] SUMMARY
                         tasks (SPEC §8)
   undo [SEQ]            undo a landing (default: the most recent)
+  calls                 questions and calls from agents, waiting for an answer
+  answer BATCH [JSON]   answer a batch: JSON [{\"choice\": …, \"note\": …}, …] per call;
+                        calls left out keep the agent's choice
+  stage [forming|settled]
+                        the active theme's stage (SPEC §9.5), set if given
   session start [--force]
                         start an agent session with [session] command from config.toml
   journal               landings and undos, newest first
@@ -70,7 +75,7 @@ fn main() -> ExitCode {
         "mcp" => mcp::run(dir.as_deref()),
         "status" => cli::status(dir.as_deref()),
         "lint" => cli::lint(dir.as_deref()),
-        "task" | "undo" | "journal" | "session" => {
+        "task" | "undo" | "journal" | "session" | "calls" | "answer" | "stage" => {
             args.insert(0, command.clone());
             cli::tasks(dir.as_deref(), &args)
         }
