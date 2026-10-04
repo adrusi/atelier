@@ -396,6 +396,47 @@ The kit ships with atelier and is installed by `atelier setup` (§14):
 
 Before landing, contractors distil any lasting decisions from their threads into the service's `notes.md`. Threads themselves are state and are eventually pruned.
 
+### 9.5 Questions, answers, and the theme's lifecycle (proposed)
+
+An author agent with an underspecified task has three moves: make a call itself and record it, ask the supervisor (who may have context the brief lacks), or ask the user. All three are right sometimes. Two failures sit on either side. The user gets a dozen questions per task. Or agents deliver work they aren't confident in, from a brief that was never enough. Design goals:
+
+- **Batched by default, with pictures.** Most questions wait for a natural checkpoint, usually after a first pass, and go to the user together, with screenshots (and side-by-side variants where the question is "this or that?"). Answering a batch should take a minute.
+- **An escape hatch.** Some uncertainty doesn't fit a checkpoint ("this domain hosts three different products; which one did you mean?"), and the agent must be able to ask straight away, at the cost of parking the task.
+- **Never the same question twice.** Answers improve the persistent documents (theme, notes, briefs), and the supervisor decides how. They aren't pasted into notes as Q&A.
+- **Tuned to the theme's maturity.** A new theme should generate many questions, and they should improve THEME.md. A settled theme should be set-and-forget.
+
+#### Calls: questions and assumptions are one thing
+
+A **call** is a decision an agent faced: the question, what it's about (a page, an element, the theme), the options considered, the agent's provisional choice (if it has one), visual aids, and whether the question concerns this site or the theme as a whole. Assumptions and questions are both calls. An assumption is a call with a provisional choice that the agent was comfortable acting on. A question is a call the agent wants answered first. A blocking question is a call with no acceptable provisional choice.
+
+Calls are posted in batches. Each call in a batch is marked:
+
+- **For the record:** the agent goes ahead and lands with its choices, and the batch shows up in the inbox as decisions the user may revisit. Answering one differently queues a `revise` carrying the answer. This is what `task_submit`'s `assumptions` become.
+- **Before landing:** the task parks (`awaiting user`) with its tree, and the session moves on to other work. The answers come back with the task when it's next claimed. The tree may hold variants for the user to pick between.
+- **Blocking:** the same, but a single call can be sent at any time, not only at a checkpoint. The UI marks it as the agent needing the user, with the agent's reason.
+
+Tools (contractor): `task_ask(calls, wait: record | review | block)`, with screenshots attached by path or taken by `screenshot(..., attach: true)`. The agent sees answers in `task_info` and in the brief when it reclaims the task.
+
+#### The supervisor in the loop
+
+- **Before the user:** a contractor's calls go to the supervisor first. It answers what it can from THEME.md, the theme and service notes, and earlier answers (a searchable log in the state directory), and forwards the rest. It can merge questions from several tasks into one batch ("three sites raised how to treat code blocks"). A blocking call is forwarded at once.
+- **After the user:** answered calls go back through the supervisor before the contractor sees them. It decides whether an answer changes something persistent: a site-specific answer goes into that service's `notes.md` (by the contractor, as part of its landing); a theme-level answer goes into the theme notes (the supervisor's `notes` task) or becomes a proposed edit to THEME.md; an answer that shows the brief was missing something improves the brief, and the briefs of other queued tasks it affects.
+- **THEME.md stays the user's.** Agents never land changes to it. The supervisor *proposes* edits as a diff, which the user accepts, edits or declines in the inbox. An accepted edit lands like any other change (journal, undo, hooks).
+- With no separate supervisor (one session doing everything), the session plays both parts in turn, and the work prompt says so.
+
+#### The theme's lifecycle
+
+Users won't write a good THEME.md in one go. They write a first draft, see styles, answer questions, and the theme sharpens: dogfooding this repo went exactly that way (examples/DOGFOODING.md). After a while, the theme is settled and the user just wants new sites styled. So each theme has a **stage**, in `themes/<theme>/theme.toml`:
+
+- **`forming`** (the default for a new theme): agents ask readily, at checkpoints, and treat any gap in the theme as a question worth asking, since the answer improves THEME.md for every later task. Before-landing review is the norm for `create` tasks. The supervisor proposes THEME.md edits as answers come in.
+- **`settled`**: agents make calls and record them, and only ask when the answer would substantially change the result, or the site is new territory the theme doesn't cover (a kind of page no other service has). Theme-level questions are rare, and when they come they're proposals.
+
+The stage is the user's to set (from the inbox, or the file). The supervisor suggests moving to `settled` when the evidence says so. The best evidence is **how often the user keeps the agent's provisional choice**: if the user accepts 9 calls in 10 unchanged, agents are asking too much. That rate is tracked per theme and shown to agents in their briefs, so they calibrate to this user rather than to a guess. A user who edits THEME.md heavily later (a new direction) can move it back to `forming`.
+
+#### The inbox
+
+A page in the extension (the sidebar, or a tab): batches grouped by task, each with its screenshots, the calls as cards, options as buttons, the provisional choice preselected (so "keep all" is one click), and free text for anything else. Blocking calls come first. THEME.md proposals show as diffs. The toolbar badge counts batches waiting. No alerts or notifications beyond the badge.
+
 ---
 
 ## 10. MCP surface (draft)
@@ -559,7 +600,7 @@ atelier daemon | native-host | mcp  internal entry points
 
 - **Shadow DOM.** Custom properties inherit into shadow roots, so token overrides reach most web components. But colours and shapes hard-coded inside a component (MDN's syntax highlighting and code editor) can't be reached by page CSS. Proposal: a style section that targets a named custom element's shadow root (e.g. `@shadow mdn-code-example { … }`), which the shim adds as an adopted stylesheet inside each open shadow root, found with a MutationObserver and `customElements.whenDefined`. Closed shadow roots stay out of reach.
 - **Frames.** Styles only go into top-level documents. Registering with `allFrames`, with sections matched against each frame's own URL as Stylus does, lets a style opt in to a frame's origin. Frames that show example output (MDN's live samples) generally shouldn't be restyled, so this must stay opt-in per matcher.
-- **When to assume, ask the supervisor, or ask the user.** An author agent with an underspecified task can make a call and record it, ask the supervisor (who may have the context: the theme's history, what other contractors decided), or escalate to the user. All three are right sometimes. The hard part is calibration: the user shouldn't get a dozen questions per task, and agents shouldn't be left to deliver work they aren't confident in from a brief that was never enough. Probably some mix of: briefs that the supervisor extends before delegating (§9.3); questions batched per task and asked at natural points (after a first pass, with screenshots), not as they arise; the user's answers distilled into theme and service notes so the same question isn't asked twice; and a per-user dial for how much to ask. Phase 3 should start from what agents actually wanted to ask in the dogfooding runs (examples/DOGFOODING.md).
+- **Calibrating questions** (§9.5): the rates and thresholds there are guesses until agents and users have used it.
 - **CSS the browser rejects.** Lint can't know everything Firefox's CSS parser drops (an invalid `light-dark(inherit, …)` silently empties a rule). The shim could compare each rule's parsed declarations with its source and report dropped ones back as diagnostics.
 - **The Dark Reader lock and media queries.** The lock is decided by URL matching alone, so a style whose CSS is entirely inside `@media (prefers-color-scheme: dark)` still locks Dark Reader on a light desktop. The shim could check whether any of the applied CSS actually matches the current media.
 
