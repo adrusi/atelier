@@ -1,4 +1,4 @@
-import type { State } from "./background";
+import type { State, Unmet } from "./background";
 import { cssFor } from "./matching";
 import { USER_SCRIPTS_PERMISSION } from "./userscripts";
 
@@ -12,7 +12,8 @@ function item(text: string, title?: string) {
 }
 
 async function render() {
-  const state = (await browser.runtime.sendMessage({ type: "state" })) as State;
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  const state = (await browser.runtime.sendMessage({ type: "state", tabId: tab?.id })) as State & { unmet: Unmet[] };
   const status = el("status");
   status.replaceChildren();
   const row = (k: string, v: string) => {
@@ -28,12 +29,14 @@ async function render() {
   row("styles", String(state.bundle?.styles.length ?? 0));
   el("grant").hidden = !state.needsPermission;
 
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
   const page = el("page");
   page.replaceChildren();
   const applying = (state.bundle?.styles ?? []).filter((s) => tab?.url && cssFor(s, tab.url) !== null);
   if (applying.length === 0) page.append(item("No styles apply here."));
   for (const s of applying) page.append(item(s.name, s.id));
+
+  el("unmet-heading").hidden = state.unmet.length === 0;
+  el("unmet").replaceChildren(...state.unmet.map((u) => item(u.description, u.style)));
 
   const problems = state.bundle?.diagnostics ?? [];
   el("problems-heading").hidden = problems.length === 0;

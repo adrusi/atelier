@@ -13,7 +13,9 @@
 //! with errors is left out of the bundle while the rest still load.
 
 use crate::usercss::{self, UserStyle};
-use atelier_proto::{Bundle, CompiledSection, CompiledStyle, Diagnostic, Matcher, Severity};
+use atelier_proto::{
+    Bundle, CompiledSection, CompiledStyle, Diagnostic, Matcher, Prerequisite, Severity,
+};
 use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -43,11 +45,36 @@ struct ServiceConfig {
     summary: Option<String>,
     /// Things the user has to set on the site for the styles to work, e.g.
     /// "set Appearance to 'sync with system'".
-    #[allow(dead_code)]
-    prerequisites: Vec<String>,
+    prerequisites: Vec<PrerequisiteConfig>,
     /// Keep Dark Reader off pages these styles apply to (SPEC §6.5). Default true.
     dark_reader_lock: Option<bool>,
 }
+/// A prerequisite: just a description, or a table with an optional check.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum PrerequisiteConfig {
+    Text(String),
+    Checked {
+        description: String,
+        check: Option<String>,
+    },
+}
+
+impl From<&PrerequisiteConfig> for Prerequisite {
+    fn from(p: &PrerequisiteConfig) -> Self {
+        match p {
+            PrerequisiteConfig::Text(description) => Prerequisite {
+                description: description.clone(),
+                check: None,
+            },
+            PrerequisiteConfig::Checked { description, check } => Prerequisite {
+                description: description.clone(),
+                check: check.clone(),
+            },
+        }
+    }
+}
+
 const SERVICE_CONFIG_KEYS: &[&str] = &[
     "description",
     "summary",
@@ -130,7 +157,7 @@ impl Loader<'_> {
 
         for file in style_files(&self.dir.join("themes").join(&theme).join("global")) {
             let id = format!("themes/{theme}/global/{file}");
-            self.load_style(&id, None, false);
+            self.load_style(&id, None, false, &[]);
         }
 
         for service in subdirs(&self.dir.join("services")) {
@@ -142,6 +169,11 @@ impl Loader<'_> {
                 Err(_) => ServiceConfig::default(),
             };
             let lock = config.dark_reader_lock.unwrap_or(true);
+            let prerequisites: Vec<Prerequisite> = config
+                .prerequisites
+                .iter()
+                .map(Prerequisite::from)
+                .collect();
             let styles_dir = self.dir.join("services").join(&service).join(&theme);
             for file in files_with_suffix(&styles_dir, ".user.js") {
                 self.diag(
@@ -153,7 +185,7 @@ impl Loader<'_> {
             }
             for file in style_files(&styles_dir) {
                 let id = format!("services/{service}/{theme}/{file}");
-                self.load_style(&id, Some(&service), lock);
+                self.load_style(&id, Some(&service), lock, &prerequisites);
             }
         }
     }
@@ -201,7 +233,13 @@ impl Loader<'_> {
         }
     }
 
-    fn load_style(&mut self, id: &str, service: Option<&str>, dark_reader_lock: bool) {
+    fn load_style(
+        &mut self,
+        id: &str,
+        service: Option<&str>,
+        dark_reader_lock: bool,
+        prerequisites: &[Prerequisite],
+    ) {
         let source = match fs::read_to_string(self.dir.join(id)) {
             Ok(s) => s,
             Err(e) => return self.diag(Severity::Error, Some(id), None, e.to_string()),
@@ -238,9 +276,14 @@ impl Loader<'_> {
         if errors {
             return;
         }
-        self.bundle
-            .styles
-            .push(compile(id, service, dark_reader_lock, &style, self.vars));
+        self.bundle.styles.push(compile(
+            id,
+            service,
+            dark_reader_lock,
+            prerequisites,
+            &style,
+            self.vars,
+        ));
     }
 }
 
@@ -248,6 +291,7 @@ fn compile(
     id: &str,
     service: Option<&str>,
     dark_reader_lock: bool,
+    prerequisites: &[Prerequisite],
     style: &UserStyle,
     vars: &BTreeMap<String, String>,
 ) -> CompiledStyle {
@@ -284,6 +328,7 @@ fn compile(
         vars_css,
         patterns: patterns(&style.sections),
         sections,
+        prerequisites: prerequisites.to_vec(),
         dark_reader_lock,
     }
 }
@@ -697,6 +742,41 @@ mod tests {
         assert!(bundle.diagnostics.iter().any(|d| d.path.as_deref()
             == Some("services/github/service.toml")
             && d.severity == Severity::Warning));
+    }
+
+    #[test]
+    fn prerequisites_reach_the_service_styles() {
+        let d = fixture();
+        write(
+            d.path(),
+            "services/github/service.toml",
+            "prerequisites = [\"plain\", { description = \"checked\", check = \"html.dark\" }]\n",
+        );
+        let bundle = load(d.path(), &BTreeMap::new());
+        let github = bundle
+            .styles
+            .iter()
+            .find(|s| s.service.as_deref() == Some("github"))
+            .unwrap();
+        assert_eq!(
+            github.prerequisites,
+            [
+                Prerequisite {
+                    description: "plain".into(),
+                    check: None
+                },
+                Prerequisite {
+                    description: "checked".into(),
+                    check: Some("html.dark".into())
+                },
+            ]
+        );
+        assert!(
+            bundle
+                .diagnostics
+                .iter()
+                .all(|d| d.path.as_deref() != Some("services/github/service.toml"))
+        );
     }
 
     #[test]

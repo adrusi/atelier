@@ -61,6 +61,7 @@ async function connect() {
     tools.handle(method, params, {
       bundle: () => state.bundle,
       hasShim: (tabId) => [...shimPorts].some((p) => p.sender?.tab?.id === tabId),
+      unmet: (tabId) => unmetByTab.get(tabId) ?? [],
     });
   try {
     const init = await r.call<InitializeResult>("initialize", {
@@ -191,9 +192,27 @@ async function injectIntoOpenTabs(bundle: Bundle) {
 // Pages running the shim connect back so they can get live updates.
 const shimPorts = new Set<browser.runtime.Port>();
 
+/** Prerequisites the page in each tab reported as unmet (SPEC §5.2). */
+export type Unmet = { style: string; description: string };
+const unmetByTab = new Map<number, Unmet[]>();
+
+function setUnmet(tabId: number, unmet: Unmet[]) {
+  if (unmet.length) unmetByTab.set(tabId, unmet);
+  else unmetByTab.delete(tabId);
+  void browser.action.setBadgeText({ tabId, text: unmet.length ? "!" : "" });
+  if (unmet.length) void browser.action.setBadgeBackgroundColor({ tabId, color: "#fab387" });
+}
+
 function onShimConnect(port: browser.runtime.Port) {
   shimPorts.add(port);
-  port.onDisconnect.addListener(() => shimPorts.delete(port));
+  const tabId = port.sender?.tab?.id;
+  port.onMessage.addListener((msg: any) => {
+    if (msg?.type === "prerequisites" && tabId !== undefined && port.sender?.frameId === 0) setUnmet(tabId, msg.unmet ?? []);
+  });
+  port.onDisconnect.addListener(() => {
+    shimPorts.delete(port);
+    if (tabId !== undefined && port.sender?.frameId === 0) setUnmet(tabId, []);
+  });
   // The page may have been registered from an older bundle.
   if (state.bundle) port.postMessage({ type: "bundle", styles: state.bundle.styles });
 }
@@ -229,7 +248,8 @@ browser.runtime.onInstalled.addListener((details) => {
 });
 
 browser.runtime.onMessage.addListener((msg: unknown) => {
-  if ((msg as { type?: string })?.type === "state") return Promise.resolve(state);
+  const m = msg as { type?: string; tabId?: number };
+  if (m?.type === "state") return Promise.resolve({ ...state, unmet: m.tabId === undefined ? [] : (unmetByTab.get(m.tabId) ?? []) });
   return undefined;
 });
 

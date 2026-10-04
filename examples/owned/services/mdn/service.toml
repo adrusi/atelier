@@ -1,5 +1,7 @@
 description = "MDN Web Docs"
 summary = "developer.mozilla.org: reference and guide pages, the home and search pages, compat tables and code examples. Retunes MDN's own dark mode by overriding its colour tokens, which also reach into its web components' shadow roots."
-prerequisites = [
-  "In MDN's Theme menu, leave the theme on OS default (follows the desktop's dark preference) or pick Dark. The style recolours only MDN's dark mode; in Light it changes just the fonts and corner radii.",
-]
+
+[[prerequisites]]
+description = "In MDN's Theme menu, leave the theme on OS default (follows the desktop's dark preference) or pick Dark. The style recolours only MDN's dark mode; in Light it changes just the fonts and corner radii."
+# Matches when the site is in a mode this style restyles.
+check = "html:not([data-theme=\"light\"])"

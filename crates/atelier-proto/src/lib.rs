@@ -158,9 +158,23 @@ pub struct CompiledStyle {
     /// WebExtension match patterns covering every section, for registering the
     /// style; the extension still checks each section's matchers precisely.
     pub patterns: Vec<String>,
+    /// Site settings the style depends on (from its service's service.toml).
+    pub prerequisites: Vec<Prerequisite>,
     /// Add `<meta name="darkreader-lock">` on pages where one of this style's
     /// sections with matchers applies (SPEC §6.5). Global sections never lock.
     pub dark_reader_lock: bool,
+}
+
+/// Something the user has to set on the site for a style to work (SPEC §5.2).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Prerequisite {
+    /// What to do, for the user.
+    pub description: String,
+    /// A CSS selector that matches something in the page when the
+    /// prerequisite is met, so pages can tell the user when it isn't.
+    pub check: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]

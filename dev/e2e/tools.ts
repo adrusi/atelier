@@ -24,6 +24,16 @@ fs.writeFileSync(
   `/* ==UserStyle==\n@name tokens fixture\n==/UserStyle== */\n@-moz-document url-prefix("http://127.0.0.1:") {\n  .note { font-weight: 600; }\n}\n`,
 );
 
+// One prerequisite the fixture meets, one it doesn't.
+fs.writeFileSync(
+  path.join(owned, "services/fixtures/service.toml"),
+  `prerequisites = [
+  { description = "met", check = "header[data-theme]" },
+  { description = "Turn on the site's dark mode", check = "html.dark" },
+  "no check, so never reported",
+]\n`,
+);
+
 dev("up", "--name", NAME, "--atelier-dir", owned, "--grant-user-scripts");
 const state = JSON.parse(fs.readFileSync(path.join(instance, "state.json"), "utf8"));
 const fixture = `http://127.0.0.1:${state.fixturesPort}/tokens/`;
@@ -150,6 +160,9 @@ try {
     const r = await tool("styles_status", { tab });
     assert.deepEqual(r.tab.applying, ["services/fixtures/e2e/tokens.user.css"]);
     assert.equal(r.tab.shim, true);
+    assert.deepEqual(r.tab.unmetPrerequisites, [
+      { style: "services/fixtures/e2e/tokens.user.css", description: "Turn on the site's dark mode" },
+    ]);
   });
 
   await check("tab_navigate and tab_close", async () => {

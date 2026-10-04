@@ -13,6 +13,8 @@ export type ToolContext = {
   bundle: () => Bundle | undefined;
   /** Whether the page in this tab is running the style shim. */
   hasShim: (tabId: number) => boolean;
+  /** Prerequisites the page in this tab reported as unmet. */
+  unmet: (tabId: number) => { style: string; description: string }[];
 };
 
 const INVALID_PARAMS = -32602;
@@ -246,6 +248,7 @@ const handlers: Record<string, Handler> = {
         ...describeTab(tab),
         applying: (bundle?.styles ?? []).filter((s) => tab.url && cssFor(s, tab.url) !== null).map((s) => s.id),
         shim: ctx.hasShim(tab.id!),
+        unmetPrerequisites: ctx.unmet(tab.id!),
       };
     }
     return out;

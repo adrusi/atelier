@@ -14,6 +14,7 @@ import { cssFor, locksDarkReader } from "./matching";
 import type { CompiledStyle } from "./proto/CompiledStyle";
 
 type Message = { type: "bundle"; styles: CompiledStyle[] } | { type: "url" };
+type Unmet = { style: string; description: string };
 
 class Shim {
   private order: string[] = [];
@@ -22,6 +23,7 @@ class Shim {
   private locked = false;
   private observing = false;
   private port: browser.runtime.Port | null = null;
+  private reported = "[]";
 
   add(style: CompiledStyle) {
     if (!this.styles.has(style.id)) this.order.push(style.id);
@@ -67,6 +69,39 @@ class Shim {
     if (lock) this.addLock();
     this.keepLast();
     this.observe();
+    // Sites often set the classes a check looks for from scripts in <head>,
+    // so check once the document has been parsed.
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => this.checkPrerequisites(), { once: true });
+    } else {
+      this.checkPrerequisites();
+    }
+  }
+
+  /** Tells the background which applying styles' prerequisites aren't met
+   * here (SPEC §5.2), so the user hears about it rather than seeing a style
+   * that seems to do nothing. */
+  private checkPrerequisites() {
+    const href = location.href;
+    const unmet: Unmet[] = [];
+    for (const id of this.order) {
+      const style = this.styles.get(id)!;
+      if (cssFor(style, href) === null) continue;
+      for (const p of style.prerequisites) {
+        if (!p.check) continue;
+        let met = true;
+        try {
+          met = document.querySelector(p.check) !== null;
+        } catch {
+          // An invalid selector can't tell us anything.
+        }
+        if (!met) unmet.push({ style: id, description: p.description });
+      }
+    }
+    const json = JSON.stringify(unmet);
+    if (json === this.reported || !this.port) return;
+    this.reported = json;
+    this.port.postMessage({ type: "prerequisites", unmet });
   }
 
   /** Dark Reader only looks for a lock added later inside <head>, and doesn't
@@ -112,6 +147,9 @@ class Shim {
       else if (m.type === "url") this.render();
     });
     this.port.onDisconnect.addListener(() => (this.port = null));
+    // If the page had already loaded (the shim was injected into an open tab),
+    // render() checked before there was a port to report on.
+    if (document.readyState !== "loading") this.checkPrerequisites();
   }
 }
 

@@ -1,5 +1,7 @@
 description = "Wikipedia"
 summary = "Wikipedia (Vector 2022 skin), all languages. Retunes Wikipedia's own dark mode to the theme by overriding its Codex design tokens."
-prerequisites = [
-  "In Wikipedia's Appearance menu, set Color to Automatic (follows the desktop's dark preference) or Dark. The style only changes Wikipedia's dark mode; it leaves Light alone.",
-]
+
+[[prerequisites]]
+description = "In Wikipedia's Appearance menu, set Color to Automatic (follows the desktop's dark preference) or Dark. The style only changes Wikipedia's dark mode; it leaves Light alone."
+# Matches when the site is in a mode this style restyles.
+check = "html:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os)"
