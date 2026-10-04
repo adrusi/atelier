@@ -9,3 +9,16 @@ dt { opacity: 0.7; }
 dd { margin: 0; overflow-wrap: anywhere; }
 ul { margin: 0; padding-left: 1.1rem; }
 button { font: inherit; padding: 0.35rem 0.9rem; margin-top: 0.75rem; }
+textarea { font: inherit; width: 100%; box-sizing: border-box; padding: 0.35rem 0.5rem; resize: vertical; }
+label.check { display: flex; gap: 0.4rem; align-items: center; margin-top: 0.35rem; font-size: 0.9rem; }
+.row { display: flex; gap: 0.75rem; align-items: baseline; }
+.row [role="status"] { font-size: 0.9rem; opacity: 0.8; }
+#landing p { margin: 0; }
+ul.tasks { list-style: none; padding: 0; }
+ul.tasks li { margin: 0.3rem 0; }
+ul.tasks .what { display: block; }
+ul.tasks .state { display: block; font-size: 0.85rem; opacity: 0.7; }
+ul.tasks .state.claimed { opacity: 1; }
+details { margin-top: 1rem; font-size: 0.9rem; }
+summary { cursor: default; opacity: 0.7; }
+details dl { margin-top: 0.4rem; }

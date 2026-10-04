@@ -6,14 +6,41 @@
   <link rel="stylesheet" href="ui.css">
 </head>
 <body class="popup">
-  <dl id="status"></dl>
   <button id="grant" hidden>Allow user scripts</button>
   <h2>On this page</h2>
   <ul id="page"></ul>
   <h2 id="unmet-heading" hidden>Needs a site setting</h2>
   <ul id="unmet"></ul>
+
+  <form id="ask" hidden>
+    <h2 id="ask-heading">Something's off?</h2>
+    <textarea id="request" rows="3"></textarea>
+    <label class="check"><input type="checkbox" id="attach" checked> Include a screenshot of this page</label>
+    <div class="row">
+      <button id="send" type="submit">Ask</button>
+      <span id="sent" role="status"></span>
+    </div>
+  </form>
+
+  <h2 id="tasks-heading" hidden>Requests for this site</h2>
+  <ul id="tasks" class="tasks"></ul>
+
+  <section id="landing" hidden>
+    <h2>Last change here</h2>
+    <p id="landing-summary"></p>
+    <div class="row">
+      <button id="undo" type="button">Undo it</button>
+      <span id="undone" role="status"></span>
+    </div>
+  </section>
+
   <h2 id="problems-heading" hidden>Problems</h2>
   <ul id="problems"></ul>
+
+  <details id="details">
+    <summary>atelier</summary>
+    <dl id="status"></dl>
+  </details>
   <script src="popup.js" type="module"></script>
 </body>
 </html>

@@ -216,6 +216,9 @@ Agents get bound tabs with `tab/open { url, task }`, and `tab/bind { tab, task |
   - per-style on/off toggles;
   - undo the most recent landing for this service;
   - when a session is needed but none is connected: a **Start session** button, if a spawn command is configured (§9.1).
+
+  *Implemented (phase 3a):* the popup asks **Style this site** (a `create` task; the description defaults to "Style <host>", the text box adds detail) on pages no service's styles apply to, and **Something's off?** (a `revise` task for that service) on pages they do. Either can attach a screenshot of the visible page (on by default), which the daemon stores with the task and the brief lists for the agent (`brief.attachments`). The request carries the page's URL and container. The popup lists the site's recent requests and their state, refreshing while it's open, and offers undo for the latest landing on the site's service that hasn't been undone. Region selection, per-style toggles and a Start session button are still to come. `popup.html?tab=ID` shows the popup for any tab as a page of its own, which is how `dev/e2e/popup.ts` drives it.
+
 - **Sidebar panel** (the "inbox"):
   - message threads with agents, for questions, reports and suggestions (§9.4);
   - the task queue and task states;

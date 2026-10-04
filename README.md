@@ -51,8 +51,11 @@ Claude Code:
 claude mcp add --scope user atelier -- atelier mcp
 ```
 
-Then start a session on the queue with the `work` prompt, which Claude Code
-offers as a command:
+Ask for things from atelier's toolbar button: **Style this site** on a page
+with no style yet, or **Something's off?** on one that has one, optionally
+with a screenshot of what you're looking at. Requests go into a queue. To
+work through it, start a session with the `work` prompt, which Claude Code
+offers as a command (or have atelier start one for you; see below):
 
 ```
 /mcp__atelier__work style lobste.rs
@@ -84,18 +87,18 @@ starting one yourself, give it a command in `~/.config/atelier/config.toml`:
 ```toml
 [session]
 start = "spawn"   # or "headless" for a command nobody watches; "pull" (default) never starts one
-command = 'foot -D {dir} claude /mcp__atelier__work'
+command = 'foot -D {dir} claude --add-dir {state} /mcp__atelier__work'
 ```
 
-`{dir}` is the owned directory and `{task}` the task that prompted the
-session, both already shell-quoted, so leave them outside quotes. Inside a
+`{dir}` is the owned directory, `{state}` atelier's state directory for it
+(where agents edit their copies of your styles, so Claude Code needs
+`--add-dir` for it), and `{task}` the task that prompted the session, all
+already shell-quoted, so leave them outside quotes. Inside a
 quoted script, use `$ATELIER_DIR` and `$ATELIER_TASK_ID` instead. A session
 starts when a request arrives and no session is working or waiting. Try your
 command with `atelier session start`. Whether a headless command is allowed
 under your harness's plan is yours to check.
 
-Requests from the browser itself ("Style this", "Something's off") are still
-to come (SPEC.md §6.4).
 
 ## Watching agents work
 

@@ -331,6 +331,11 @@ pub struct TaskBrief {
     /// The Firefox container (cookieStoreId) the request came from.
     #[serde(default)]
     pub container: Option<String>,
+    /// Files that came with the request (a screenshot of the page), as
+    /// absolute paths in the task's directory. Filled in by the daemon.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<String>>", optional)]
+    pub attachments: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -391,6 +396,20 @@ pub struct TaskCreateParams {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub service: Option<String>,
     pub brief: TaskBrief,
+    /// Files to attach, stored with the task (`brief.attachments` lists them).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<Upload>>", optional)]
+    pub uploads: Vec<Upload>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Upload {
+    /// A file name, e.g. `page.jpg`.
+    pub name: String,
+    /// The contents, base64-encoded.
+    pub data: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]

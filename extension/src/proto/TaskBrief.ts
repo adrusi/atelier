@@ -16,4 +16,9 @@ note: string | null,
 /**
  * The Firefox container (cookieStoreId) the request came from.
  */
-container: string | null, };
+container: string | null, 
+/**
+ * Files that came with the request (a screenshot of the page), as
+ * absolute paths in the task's directory. Filled in by the daemon.
+ */
+attachments?: Array<string>, };

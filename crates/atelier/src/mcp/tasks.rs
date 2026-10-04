@@ -489,6 +489,14 @@ fn brief(t: &Task, changes: &[atelier_proto::FileChange]) -> String {
     if let Some(note) = &t.brief.note {
         let _ = writeln!(out, "Note: {note}");
     }
+    for a in &t.brief.attachments {
+        let what = if a.ends_with(".jpg") || a.ends_with(".png") {
+            "a screenshot of the page as the user saw it when asking; look at it with your file tools"
+        } else {
+            "read it with your file tools"
+        };
+        let _ = writeln!(out, "Attached: {a} ({what})");
+    }
     match &t.service {
         Some(s) => {
             let _ = writeln!(out, "Service: {s} (services/{s}/)");

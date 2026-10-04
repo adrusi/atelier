@@ -12,7 +12,9 @@
 //!
 //! `command` is a string, run with `sh -c` after its placeholders are
 //! replaced by shell-quoted values, or an array, run directly with each
-//! placeholder replaced as is. Placeholders: `{dir}` (the owned directory)
+//! placeholder replaced as is. Placeholders: `{dir}` (the owned directory),
+//! `{state}` (its state directory, where task trees are: harnesses that
+//! confine edits to a directory need it, e.g. Claude Code's `--add-dir`),
 //! and `{task}` (the task that prompted it, or empty). The command also gets
 //! ATELIER_DIR, ATELIER_TASK_ID and ATELIER_SESSION (`spawn` or `headless`)
 //! in its environment; `atelier mcp` reads the last one, so a headless agent
@@ -119,19 +121,17 @@ fn shell_quote(s: &str) -> String {
 
 /// The program and arguments to run.
 pub fn render(template: &Template, dir: &Path, task: Option<&str>) -> Vec<String> {
+    let state = paths::state_dir(dir).display().to_string();
     let dir = dir.display().to_string();
     let task = task.unwrap_or_default();
+    let fill = |s: &str, quote: fn(&str) -> String| {
+        s.replace("{dir}", &quote(&dir))
+            .replace("{state}", &quote(&state))
+            .replace("{task}", &quote(task))
+    };
     match template {
-        Template::Shell(s) => vec![
-            "sh".into(),
-            "-c".into(),
-            s.replace("{dir}", &shell_quote(&dir))
-                .replace("{task}", &shell_quote(task)),
-        ],
-        Template::Argv(a) => a
-            .iter()
-            .map(|arg| arg.replace("{dir}", &dir).replace("{task}", task))
-            .collect(),
+        Template::Shell(s) => vec!["sh".into(), "-c".into(), fill(s, shell_quote)],
+        Template::Argv(a) => a.iter().map(|arg| fill(arg, str::to_string)).collect(),
     }
 }
 

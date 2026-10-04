@@ -11,6 +11,7 @@ import type { BlobRef } from "./proto/BlobRef";
 import type { Bundle } from "./proto/Bundle";
 import type { BundleChanged } from "./proto/BundleChanged";
 import type { InitializeResult } from "./proto/InitializeResult";
+import type { JournalEntry } from "./proto/JournalEntry";
 import type { Task } from "./proto/Task";
 import { cssFor } from "./matching";
 import { Rpc } from "./rpc";
@@ -383,10 +384,84 @@ browser.runtime.onInstalled.addListener((details) => {
 });
 
 browser.runtime.onMessage.addListener((msg: unknown) => {
-  const m = msg as { type?: string; tabId?: number };
+  const m = msg as { type?: string; tabId?: number; text?: string; screenshot?: boolean; seq?: number };
   if (m?.type === "state") return Promise.resolve({ ...state, unmet: m.tabId === undefined ? [] : (unmetByTab.get(m.tabId) ?? []) });
+  if (m?.type === "site" && m.tabId !== undefined) return siteInfo(m.tabId);
+  if (m?.type === "request" && m.tabId !== undefined) return request(m.tabId, m.text ?? "", Boolean(m.screenshot));
+  if (m?.type === "undo" && m.seq !== undefined) return daemon().call<JournalEntry>("journal/undo", { seq: m.seq });
   return undefined;
 });
+
+// ---------------------------------------------------------------------------
+// Requests from the popup (SPEC §6.4)
+
+function daemon(): Rpc {
+  if (!rpc || state.connection !== "connected") throw new Error("atelier's daemon isn't connected, so requests can't be made right now.");
+  return rpc;
+}
+
+/** The service whose styles apply to a URL, if any. */
+function serviceAt(url: string): string | null {
+  return state.bundle?.styles.find((s) => s.service && cssFor(s, url) !== null)?.service ?? null;
+}
+
+const hostOf = (url: string | null | undefined) => {
+  try {
+    return url ? new URL(url).hostname : "";
+  } catch {
+    return "";
+  }
+};
+
+export type SiteInfo = {
+  host: string;
+  service: string | null;
+  /** Requests for this site, newest first. */
+  tasks: Task[];
+  /** The latest landing on this site's service that can still be undone. */
+  landing: JournalEntry | null;
+  /** Tasks whose landing has since been undone. */
+  undone: string[];
+};
+
+async function siteInfo(tabId: number): Promise<SiteInfo> {
+  const tab = await browser.tabs.get(tabId);
+  const host = hostOf(tab.url);
+  const service = tab.url ? serviceAt(tab.url) : null;
+  const r = daemon();
+  const [tasks, journal] = await Promise.all([r.call<Task[]>("task/list", {}), r.call<JournalEntry[]>("journal/list", {})]);
+  const here = tasks
+    .filter((t) => (service !== null && t.service === service) || (host !== "" && hostOf(t.brief.origin) === host))
+    .reverse()
+    .slice(0, 5);
+  const landing =
+    service === null
+      ? null
+      : (journal.find((e) => e.undoOf === null && e.undoneBy === null && e.files.some((f) => f.path.startsWith(`services/${service}/`))) ?? null);
+  const undone = journal.filter((e) => e.task !== null && e.undoOf === null && e.undoneBy !== null).map((e) => e.task!);
+  return { host, service, tasks: here, landing, undone };
+}
+
+/** Queues a request for the page in a tab: a revise if a style applies
+ * there, otherwise a create. With a screenshot of what the user sees. */
+async function request(tabId: number, text: string, screenshot: boolean): Promise<Task> {
+  const r = daemon();
+  const tab = await browser.tabs.get(tabId);
+  const service = tab.url ? serviceAt(tab.url) : null;
+  const description = text.trim() || (service === null ? `Style ${hostOf(tab.url)}` : "");
+  if (!description) throw new Error("Say what you'd like changed.");
+  const uploads: { name: string; data: string }[] = [];
+  if (screenshot) {
+    const dataUrl: string = await (browser.tabs as any).captureTab(tabId, { format: "jpeg", quality: 85 });
+    uploads.push({ name: "page.jpg", data: dataUrl.split(",", 2)[1] });
+  }
+  return r.call<Task>("task/create", {
+    kind: service === null ? "create" : "revise",
+    ...(service === null ? {} : { service }),
+    brief: { description, origin: tab.url ?? null, container: tab.cookieStoreId ?? null },
+    uploads,
+  });
+}
 
 // If the background was suspended while disconnected, this wakes it to retry.
 browser.alarms.create("reconnect", { periodInMinutes: 1 });

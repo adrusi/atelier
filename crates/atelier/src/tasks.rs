@@ -27,6 +27,8 @@ pub const LEASE_MS: u64 = 10 * 60 * 1000;
 /// The journal keeps at least this many entries, and anything younger than JOURNAL_MAX_AGE_MS.
 const JOURNAL_KEEP: usize = 50;
 const JOURNAL_MAX_AGE_MS: u64 = 90 * 24 * 60 * 60 * 1000;
+/// The largest file a request may attach.
+const MAX_ATTACHMENT: usize = 16 * 1024 * 1024;
 /// Conflicting files are sent back to the agent in full up to this size.
 const MAX_CONFLICT_TEXT: u64 = 256 * 1024;
 
@@ -99,12 +101,18 @@ impl Store {
         if let Some(s) = &params.service {
             check_name("service", s)?;
         }
+        let id = new_id(now);
+        let mut brief = params.brief;
+        brief.attachments = Vec::new();
+        for upload in &params.uploads {
+            brief.attachments.push(self.attach(&id, upload)?);
+        }
         let task = Task {
-            id: new_id(now),
+            id,
             kind: params.kind,
             service: params.service,
             theme,
-            brief: params.brief,
+            brief,
             state: TaskState::Queued,
             lease: None,
             tree: None,
@@ -115,6 +123,40 @@ impl Store {
         };
         self.save(&task)?;
         Ok(task)
+    }
+
+    /// Stores a file that came with a request in the task's directory, and
+    /// returns its path.
+    fn attach(&self, id: &str, upload: &atelier_proto::Upload) -> Result<String> {
+        use base64::Engine;
+        let name: String = upload
+            .name
+            .chars()
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || "._-".contains(c) {
+                    c
+                } else {
+                    '_'
+                }
+            })
+            .take(64)
+            .collect();
+        if name.is_empty() || name.starts_with('.') {
+            return Err(format!("`{}` isn't a usable attachment name", upload.name));
+        }
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&upload.data)
+            .map_err(|e| format!("attachment {name}: {e}"))?;
+        if bytes.len() > MAX_ATTACHMENT {
+            return Err(format!(
+                "attachment {name} is {} bytes; the limit is {MAX_ATTACHMENT}",
+                bytes.len()
+            ));
+        }
+        let path = self.task_dir(id).join("attachments").join(&name);
+        fs::create_dir_all(path.parent().expect("has parent")).map_err(err)?;
+        write_atomic(&path, &bytes).map_err(err)?;
+        Ok(path.display().to_string())
     }
 
     /// All tasks, oldest first, after returning expired claims to the queue.
@@ -885,7 +927,9 @@ mod tests {
                         origin: None,
                         note: None,
                         container: None,
+                        attachments: Vec::new(),
                     },
+                    uploads: Vec::new(),
                 },
                 Some("t".into()),
                 1000,
