@@ -70,7 +70,7 @@ atelier-dev down dev1
 - `--pref` adds a line to the profile's `user.js`; the value is parsed as JSON if it can be (`--pref extensions.foo=false`). `--system-access` starts Firefox with `--remote-allow-system-access`. Even with it, BiDi can't drive privileged pages such as `moz-extension://` pages.
 - `--fontconfig FILE` installs FILE as the jail's user `fonts.conf`, instead of binding the developer's fontconfig directory. Fonts it adds with `<dir>` must be in the Nix store, or somewhere else Firefox's content sandbox allows reading: a directory under the repo looks fine to `fc-list` but isn't visible to pages.
 - `--color-scheme dark|light` sets what pages see as `prefers-color-scheme` (instances otherwise default to light).
-- `--atelier-dir DIR` binds a host directory into the jail, read-write, as its default owned directory. Use it to try real styles in a dev instance.
+- `--atelier-dir DIR` makes a host directory the instance's owned directory, bound read-write at the same path inside the jail, so host-side tools (`atelier-dev atelier`, `atelier mcp`) reach the same daemon and files. Use it to try real styles in a dev instance.
 - Console output from extensions and pages goes to `log/firefox.log`. The extension's background logs its connection, bundle loads and user-script registration there.
 - **Real input:** `atelier-dev exec NAME -- wtype …` types through the compositor, which produces trusted events. That's how to satisfy APIs that need a user gesture, such as `permissions.request`. Start with a delay (`wtype -s 300 …`): the first keystroke otherwise races the virtual keyboard's setup and is dropped.
 - Logs for the jail, Firefox and the fixture server are in the instance's `log/` directory.

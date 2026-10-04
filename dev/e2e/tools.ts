@@ -144,6 +144,16 @@ try {
     assert.match(content[1].text, /background/);
   });
 
+  await check("screenshot saveAs writes into the owned directory, and refuses paths outside it", async () => {
+    const content = await tool("screenshot", { tab, saveAs: "services/fixtures/e2e/previews/tokens.jpg" });
+    assert.equal(content[0].mimeType, "image/jpeg");
+    assert.match(content.at(-1).text, /Saved to/);
+    const saved = fs.readFileSync(path.join(owned, "services/fixtures/e2e/previews/tokens.jpg"));
+    assert.equal(saved[0], 0xff); // JPEG magic
+    const outside = await rpc("tools/call", { name: "screenshot", arguments: { tab, saveAs: "../escape.png" } });
+    assert.equal(outside.result.isError, true);
+  });
+
   await check("force_state shows hover and focus-visible styles, and clears them", async () => {
     await tool("force_state", { tab, selector: "a.button", states: ["hover", "focus-visible"] });
     const forced = await tool("computed_style", { tab, selector: "a.button", properties: ["color", "outline-color"] });

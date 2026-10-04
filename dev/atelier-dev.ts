@@ -56,6 +56,8 @@ type State = {
   bidiPort: number;
   fixturesPort: number | null;
   visible: boolean;
+  /** The owned directory, if --atelier-dir gave one; otherwise the jail's default. */
+  atelierDir?: string;
   created: string;
 };
 
@@ -167,6 +169,7 @@ async function cmdUp(args: string[]) {
     bidiPort,
     fixturesPort,
     visible,
+    ...(atelierDir ? { atelierDir } : {}),
     created: new Date().toISOString(),
   };
   fs.writeFileSync(p.state, JSON.stringify(state, null, 2) + "\n");
@@ -317,9 +320,8 @@ async function cmdCapture(args: string[]) {
 /**
  * Runs the repo's atelier CLI with the instance's XDG directories, so it finds
  * the instance's daemon. The daemon's socket is named after the owned
- * directory's path as the jail sees it, which this reproduces. With
- * --atelier-dir, files are under the bound host directory, not the jail path,
- * so for lint and match use `atelier --dir <that directory>` directly.
+ * directory's path, which this reproduces (an --atelier-dir directory has the
+ * same path inside the jail as outside).
  */
 function cmdAtelier(args: string[]) {
   const [name, ...rest] = args;
@@ -333,7 +335,7 @@ function cmdAtelier(args: string[]) {
       XDG_STATE_HOME: path.join(p.home, ".local/state"),
       XDG_CONFIG_HOME: path.join(p.home, ".config"),
       XDG_DATA_HOME: path.join(p.home, ".local/share"),
-      ATELIER_DIR: path.join(p.home, ".local/share/atelier"),
+      ATELIER_DIR: state.atelierDir ?? path.join(p.home, ".local/share/atelier"),
     },
   });
   process.exit(r.status ?? 1);
@@ -411,7 +413,11 @@ function bwrapArgs(p: Paths, hostWayland: string | undefined, atelierDir: string
   args.push("--bind-try", "/run/nscd", "/run/nscd");
 
   // A host directory used as the jail's default owned directory ($XDG_DATA_HOME/atelier), read-write.
-  if (atelierDir) args.push("--bind", atelierDir, path.join(p.home, ".local/share/atelier"));
+  // A host directory as the owned directory, read-write, at the same path
+  // inside the jail as outside: the daemon is identified by the directory's
+  // path, so host-side clients (atelier-dev atelier, atelier mcp) find the
+  // same daemon and write to the same files.
+  if (atelierDir) args.push("--bind", atelierDir, atelierDir);
 
   // Fonts matter for judging styles, so instances should render like the real desktop.
   const realHome = os.homedir();
@@ -439,6 +445,7 @@ function bwrapArgs(p: Paths, hostWayland: string | undefined, atelierDir: string
     // Software rendering: GPU access inside the jail is unreliable, and
     // software output is more reproducible across machines anyway.
     WLR_RENDERER: process.env.ATELIER_DEV_WLR_RENDERER ?? "pixman",
+    ...(atelierDir ? { ATELIER_DIR: atelierDir } : {}),
   };
   for (const k of ["LANG", "LC_ALL", "TZ", "LOCALE_ARCHIVE", "TZDIR"]) {
     if (process.env[k]) env[k] = process.env[k]!;

@@ -79,7 +79,9 @@ const TOOLS: &[Tool] = &[
             maxHeight pixels), or one element (selector). CSS animations are fast-forwarded first, so entrance \
             animations don't leave content invisible. Agent tabs are in the background, where Firefox doesn't run \
             animation frames, so content drawn by JavaScript animation (canvases) can be stale; the result says so \
-            when it applies. Prefer selector captures for details: whole pages are large and hard to read.",
+            when it applies. Prefer selector captures for details: whole pages are large and hard to read. \
+            With saveAs, the image is also written into the owned directory: that's how to leave the preview \
+            screenshots each style keeps in its previews/ folder (SPEC.md §5.2).",
         schema: || {
             json!({ "type": "object", "properties": {
                 "tab": tab_prop(),
@@ -87,7 +89,8 @@ const TOOLS: &[Tool] = &[
                 "fullPage": { "type": "boolean", "description": "Capture the whole page rather than the viewport." },
                 "maxHeight": { "type": "integer", "description": "Height limit for fullPage, in CSS pixels. Default 4000." },
                 "format": { "type": "string", "enum": ["png", "jpeg"], "description": "Default png." },
-                "settleAnimations": { "type": "boolean", "description": "Fast-forward CSS animations first. Default true." }
+                "settleAnimations": { "type": "boolean", "description": "Fast-forward CSS animations first. Default true." },
+                "saveAs": { "type": "string", "description": "Also save the image at this path, relative to the owned directory, e.g. services/example/roarke/previews/home.jpg. A .jpg name saves JPEG (smaller; preferred for previews)." }
             }, "required": ["tab"] })
         },
     },
@@ -286,9 +289,32 @@ impl Server {
         let Some(tool) = TOOLS.iter().find(|t| t.name == name) else {
             return tool_error(format!("unknown tool `{name}`"));
         };
-        let args = params.get("arguments").cloned().unwrap_or(json!({}));
+        let mut args = params.get("arguments").cloned().unwrap_or(json!({}));
+        let save_as = match args.as_object_mut().and_then(|a| a.remove("saveAs")) {
+            Some(Value::String(p)) => match self.save_path(&p) {
+                Ok(path) => {
+                    if p.ends_with(".jpg") || p.ends_with(".jpeg") {
+                        args["format"] = json!("jpeg");
+                    }
+                    Some(path)
+                }
+                Err(e) => return tool_error(e),
+            },
+            Some(_) => return tool_error("`saveAs` must be a string"),
+            None => None,
+        };
         match self.browser_call(tool.method, args) {
-            Ok(result) => tool_result(tool.name, result),
+            Ok(mut result) => {
+                if let Some(path) = save_as {
+                    let note = match save_image(&result, &path) {
+                        Ok(()) => format!("Saved to {}.", path.display()),
+                        Err(e) => format!("Couldn't save to {}: {e}", path.display()),
+                    };
+                    let notes = result["notes"].as_array().cloned().unwrap_or_default();
+                    result["notes"] = json!([notes, vec![json!(note)]].concat());
+                }
+                tool_result(tool.name, result)
+            }
             Err(message) => tool_error(message),
         }
     }
@@ -316,6 +342,23 @@ impl Server {
             }
         }
         unreachable!()
+    }
+
+    /// Where `saveAs` writes: inside the owned directory, as an image.
+    fn save_path(&self, rel: &str) -> Result<PathBuf, String> {
+        let rel_path = std::path::Path::new(rel);
+        let ok_ext = [".png", ".jpg", ".jpeg"].iter().any(|e| rel.ends_with(e));
+        if rel_path.is_absolute()
+            || rel_path
+                .components()
+                .any(|c| matches!(c, std::path::Component::ParentDir))
+            || !ok_ext
+        {
+            return Err(format!(
+                "`saveAs` must be a relative path inside the owned directory, ending in .png, .jpg or .jpeg (got `{rel}`)"
+            ));
+        }
+        Ok(self.dir.join(rel_path))
     }
 
     fn connect(&self) -> Result<Client, String> {
@@ -365,6 +408,18 @@ fn tool_result(tool: &str, mut result: Value) -> Value {
         obj.remove("data");
     }
     json!({ "content": [{ "type": "text", "text": serde_json::to_string_pretty(&result).unwrap_or_default() }] })
+}
+
+fn save_image(result: &Value, path: &std::path::Path) -> io::Result<()> {
+    use base64::Engine;
+    let data = result["data"].as_str().unwrap_or_default();
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(io::Error::other)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, bytes)
 }
 
 fn tool_error(message: impl Into<String>) -> Value {
