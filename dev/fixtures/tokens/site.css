@@ -19,3 +19,6 @@ h1 { color: var(--color-fg); }
 .title { color: var(--color-accent); }
 #title { letter-spacing: 0.02em; }
 .faint { color: #dddddd; }
+a.button { color: var(--color-fg); }
+a.button:hover { color: rgb(1, 2, 3); }
+a.button:focus-visible { outline: 2px solid rgb(4, 5, 6); }

@@ -185,6 +185,23 @@ const TOOLS: &[Tool] = &[
         },
     },
     Tool {
+        name: "force_state",
+        method: "page/force_state",
+        description: "Show an element as if hovered, focused or pressed, so you can check and screenshot those \
+            styles: agent tabs have no real pointer or keyboard focus, and scripted focus() doesn't trigger \
+            :focus-visible. Like devtools' \"force element state\": rules using the states are cloned with an \
+            attribute in place of the pseudo-class. States stay forced until you call this again (states: [] \
+            clears them); only one element at a time. Rules in unreadable cross-origin stylesheets aren't cloned.",
+        schema: || {
+            json!({ "type": "object", "properties": {
+                "tab": tab_prop(),
+                "selector": { "type": "string" },
+                "states": { "type": "array", "items": { "type": "string", "enum": ["hover", "active", "focus", "focus-visible", "focus-within"] },
+                            "description": "States to force; [] clears." }
+            }, "required": ["tab", "selector", "states"] })
+        },
+    },
+    Tool {
         name: "styles_status",
         method: "styles/status",
         description: "The active theme, how many styles are loaded, and every diagnostic from loading them (with \

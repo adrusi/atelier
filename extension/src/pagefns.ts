@@ -365,3 +365,55 @@ export function contrast(minRatio: number, limit: number) {
   failures.sort((a: any, b: any) => a.ratio - b.ratio);
   return { checked, failing: failures.length, failures: failures.slice(0, limit), unknownBackground: unknown };
 }
+
+/** Forces pseudo-class states on an element, like devtools' "force element
+ * state": every readable rule using one of the states is cloned with the
+ * pseudo-class replaced by an attribute, which is then set on the element
+ * (and its ancestors, for :hover, :active and :focus-within, which apply
+ * there too). The clones come after all other styles, so at equal
+ * specificity they can win slightly more often than the real state would.
+ * An empty `states` clears everything forced. */
+export function forceState(selector: string, states: string[]) {
+  const KNOWN = ["hover", "active", "focus", "focus-visible", "focus-within"];
+  const attr = (s: string) => `data-atelier-force-${s}`;
+  document.querySelector("style[data-atelier-force]")?.remove();
+  for (const s of KNOWN) for (const e of document.querySelectorAll(`[${attr(s)}]`)) e.removeAttribute(attr(s));
+  if (!states.length) return { cleared: true };
+  const unknown = states.filter((s) => !KNOWN.includes(s));
+  if (unknown.length) return { error: `unknown states: ${unknown.join(", ")}; known: ${KNOWN.join(", ")}` };
+  const el = document.querySelector(selector);
+  if (!el) return null;
+
+  const pattern = new RegExp(`:(${states.map((s) => s.replace(/-/g, "\\-")).join("|")})(?![\\w-])`, "g");
+  const clones: string[] = [];
+  const visit = (rules: CSSRuleList, wrap: (css: string) => string) => {
+    for (const r of rules as any) {
+      if (r.selectorText !== undefined && r.style) {
+        pattern.lastIndex = 0;
+        if (pattern.test(r.selectorText)) {
+          const sel = r.selectorText.replace(pattern, (_: string, s: string) => `[${attr(s)}]`);
+          clones.push(wrap(`${sel} { ${r.style.cssText} }`));
+        }
+      } else if (r.cssRules) {
+        const head = r.media ? `@media ${r.media.mediaText}` : r.conditionText !== undefined ? `@supports ${r.conditionText}` : null;
+        visit(r.cssRules, head ? (css) => wrap(`${head} { ${css} }`) : wrap);
+      }
+    }
+  };
+  for (const s of [...document.styleSheets, ...document.adoptedStyleSheets]) {
+    try {
+      visit(s.cssRules, (css) => css);
+    } catch {
+      // Unreadable cross-origin sheet.
+    }
+  }
+  const propagate = new Set(["hover", "active", "focus-within"]);
+  for (const s of states) {
+    for (let e: Element | null = el; e; e = propagate.has(s) ? e.parentElement : null) e.setAttribute(attr(s), "");
+  }
+  const style = document.createElement("style");
+  style.setAttribute("data-atelier-force", states.join(" "));
+  style.textContent = clones.join("\n");
+  document.documentElement.append(style);
+  return { forced: states, rulesCloned: clones.length };
+}

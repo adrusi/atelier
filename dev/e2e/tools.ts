@@ -134,6 +134,14 @@ try {
     assert.match(content[1].text, /background/);
   });
 
+  await check("force_state shows hover and focus-visible styles, and clears them", async () => {
+    await tool("force_state", { tab, selector: "a.button", states: ["hover", "focus-visible"] });
+    const forced = await tool("computed_style", { tab, selector: "a.button", properties: ["color", "outline-color"] });
+    assert.deepEqual([forced.color, forced["outline-color"]], ["rgb(1, 2, 3)", "rgb(4, 5, 6)"]);
+    await tool("force_state", { tab, selector: "a.button", states: [] });
+    assert.notEqual((await tool("computed_style", { tab, selector: "a.button", properties: ["color"] })).color, "rgb(1, 2, 3)");
+  });
+
   await check("eval sees the DOM", async () => {
     assert.deepEqual(await tool("eval", { tab, expression: "document.title" }), { result: "tokens fixture" });
   });

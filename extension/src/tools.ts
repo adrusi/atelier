@@ -222,6 +222,17 @@ const handlers: Record<string, Handler> = {
     return call(tab.id!, page.contrast, param<number>(params, "minRatio", "number", 4.5), param<number>(params, "limit", "number", 40));
   },
 
+  async "page/force_state"(params) {
+    const tab = await agentTab(params);
+    const selector = param<string>(params, "selector", "string");
+    const states = params?.states ?? [];
+    if (!Array.isArray(states)) throw new RpcError(INVALID_PARAMS, "`states` must be an array");
+    const r = (await call(tab.id!, page.forceState, selector, states)) as any;
+    if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\``);
+    if (r.error) throw new RpcError(INVALID_PARAMS, r.error);
+    return r;
+  },
+
   async "styles/status"(params, ctx) {
     const bundle = ctx.bundle();
     const out: Record<string, unknown> = {
