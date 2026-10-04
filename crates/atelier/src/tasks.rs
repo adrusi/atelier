@@ -108,6 +108,7 @@ impl Store {
             state: TaskState::Queued,
             lease: None,
             tree: None,
+            handoff: None,
             created: now,
             updated: now,
             outcome: None,
@@ -243,6 +244,34 @@ impl Store {
         Ok(task)
     }
 
+    /// Puts a task back in the queue, keeping its tree, with a note for
+    /// whoever claims it next.
+    pub fn release(&self, id: &str, session: &str, handoff: &str, now: u64) -> Result<Task> {
+        let mut task = self.held(id, session, now)?;
+        task.state = TaskState::Queued;
+        task.lease = None;
+        task.handoff = Some(handoff.trim().to_string()).filter(|h| !h.is_empty());
+        task.updated = now;
+        self.save(&task)?;
+        Ok(task)
+    }
+
+    /// How a claimed task's tree differs from when it was claimed.
+    pub fn changes(&self, id: &str) -> Result<Vec<FileChange>> {
+        let task = self.get(id)?;
+        if task.tree.is_none() {
+            return Ok(Vec::new());
+        }
+        let base: BTreeMap<String, String> = serde_json::from_str(
+            &fs::read_to_string(self.task_dir(id).join("base.json")).map_err(err)?,
+        )
+        .map_err(err)?;
+        Ok(diff(
+            &base,
+            &hash_tree(&self.task_dir(id).join("tree")).map_err(err)?,
+        ))
+    }
+
     pub fn abandon(&self, id: &str, reason: &str, now: u64) -> Result<Task> {
         let mut task = self.get(id)?;
         if matches!(
@@ -362,7 +391,11 @@ impl Store {
             }
         }
 
-        // Concurrency: every changed file must be as it was when the task started.
+        // Concurrency: every changed file must be as it was when the task
+        // started. If one isn't, the agent is shown its current contents, and
+        // that version becomes the file's base: the next submit takes the
+        // tree's version as the reconciled one.
+        let mut rebased = base.clone();
         for c in &changes {
             let current = hash_file(&self.dir.join(&c.path)).map_err(err)?;
             if current.as_ref() != base.get(&c.path) {
@@ -371,17 +404,31 @@ impl Store {
                     .ok()
                     .filter(|m| m.len() <= MAX_CONFLICT_TEXT)
                     .and_then(|_| fs::read_to_string(&path).ok());
+                let message = match (&current, &text) {
+                    (None, _) => "this file was deleted from the owned directory since the task started (by the user, or another task's landing). If your version should still exist, submit again as it is; otherwise delete it from the task's tree".to_string(),
+                    (Some(_), Some(_)) => "this file changed in the owned directory since the task started (by the user, or another task's landing). Its current contents are included: merge them with your change in the task's tree, then submit again. The next submit takes the tree's version as the merged one".to_string(),
+                    (Some(_), None) => format!("this file changed in the owned directory since the task started (by the user, or another task's landing). It's too large to include; read it at {}, merge it with your change in the task's tree, then submit again. The next submit takes the tree's version as the merged one", path.display()),
+                };
                 problems.push(SubmitProblem {
                     kind: "conflict".into(),
                     path: Some(c.path.clone()),
-                    message: if current.is_some() {
-                        "this file changed in the owned directory since the task started; reconcile your change with its current contents (included) in the task's tree, then submit again".into()
-                    } else {
-                        "this file was deleted from the owned directory since the task started".into()
-                    },
+                    message,
                     current: text,
                 });
+                match current {
+                    Some(h) => rebased.insert(c.path.clone(), h),
+                    None => rebased.remove(&c.path),
+                };
             }
+        }
+        if rebased != base {
+            write_atomic(
+                &self.task_dir(id).join("base.json"),
+                serde_json::to_string_pretty(&rebased)
+                    .map_err(err)?
+                    .as_bytes(),
+            )
+            .map_err(err)?;
         }
         if !problems.is_empty() {
             return reject(problems);
@@ -987,6 +1034,14 @@ mod tests {
                 .contains("green")
         );
         assert_eq!(e.store.get(&t.id).unwrap().state, TaskState::Claimed);
+
+        // Having seen the current version, the agent merges, and lands.
+        put(
+            &tree(&t),
+            "services/site/t/a.user.css",
+            "@-moz-document domain(\"a.example\") { p { color: teal; } }\n",
+        );
+        assert!(matches!(submit(&e, &t.id), SubmitResult::Landed { .. }));
     }
 
     #[test]
@@ -1032,6 +1087,29 @@ mod tests {
             e.store.get(&t.id).unwrap().service.as_deref(),
             Some("newsite")
         );
+    }
+
+    #[test]
+    fn released_tasks_keep_their_tree_and_handoff() {
+        let e = env();
+        create(&e, Some("site"));
+        let t = e.store.claim(None, "s1", 1000).unwrap().unwrap();
+        put(
+            &tree(&t),
+            "services/site/t/a.user.css",
+            "work in progress\n",
+        );
+        let changes = e.store.changes(&t.id).unwrap();
+        assert_eq!(changes.len(), 1);
+        assert_eq!(changes[0].change, ChangeKind::Modified);
+        let r = e
+            .store
+            .release(&t.id, "s1", "halfway: header done", 2000)
+            .unwrap();
+        assert_eq!(r.state, TaskState::Queued);
+        let t2 = e.store.claim(None, "s2", 3000).unwrap().unwrap();
+        assert_eq!(t2.handoff.as_deref(), Some("halfway: header done"));
+        assert_eq!(e.store.changes(&t2.id).unwrap(), changes);
     }
 
     #[test]

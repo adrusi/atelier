@@ -273,6 +273,13 @@ pub mod task_method {
     pub const DECLINE: &str = "task/decline";
     /// `{ "id": …, "reason": … }` → [`Task`]: the user (or supervisor) gives up on it.
     pub const ABANDON: &str = "task/abandon";
+    /// `{ "id": …, "session": …, "handoff": … }` → [`Task`]: the session stops
+    /// working on it for now. It goes back to the queue with its tree and the
+    /// handoff note, for whoever claims it next.
+    pub const RELEASE: &str = "task/release";
+    /// `{ "id": … }` → `Vec<FileChange>`: how the task's tree differs from
+    /// when it was claimed.
+    pub const CHANGES: &str = "task/changes";
     /// Notification from the daemon: a [`Task`] changed.
     pub const CHANGED: &str = "task/changed";
     /// `{}` → `Vec<JournalEntry>`, newest first.
@@ -362,6 +369,10 @@ pub struct Task {
     pub lease: Option<Lease>,
     /// The task's working copy of the owned directory, once claimed.
     pub tree: Option<String>,
+    /// A note left by the last session to work on it, for whoever resumes it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub handoff: Option<String>,
     pub created: u64,
     pub updated: u64,
     pub outcome: Option<TaskOutcome>,

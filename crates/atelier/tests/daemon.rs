@@ -482,4 +482,5 @@ fn task_trees_are_served_as_sources() {
     );
 
     daemon.kill().unwrap();
+    daemon.wait().unwrap();
 }

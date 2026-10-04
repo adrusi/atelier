@@ -13,4 +13,8 @@ service: string | null, theme: string | null, brief: TaskBrief, state: TaskState
 /**
  * The task's working copy of the owned directory, once claimed.
  */
-tree: string | null, created: bigint, updated: bigint, outcome: TaskOutcome | null, };
+tree: string | null, 
+/**
+ * A note left by the last session to work on it, for whoever resumes it.
+ */
+handoff?: string, created: bigint, updated: bigint, outcome: TaskOutcome | null, };

@@ -912,6 +912,19 @@ fn task_call(state: &State, method_name: &str, params: Value) -> Result<Value, (
             announce(&task);
             Ok(json!(task))
         }
+        tm::RELEASE => {
+            let handoff = params
+                .get("handoff")
+                .and_then(Value::as_str)
+                .unwrap_or_default()
+                .to_string();
+            let task = store
+                .release(&str_param("id")?, &str_param("session")?, &handoff, now)
+                .map_err(failed)?;
+            announce(&task);
+            Ok(json!(task))
+        }
+        tm::CHANGES => Ok(json!(store.changes(&str_param("id")?).map_err(failed)?)),
         tm::JOURNAL => Ok(json!(store.journal().map_err(failed)?)),
         tm::UNDO => {
             let seq = params.get("seq").and_then(Value::as_u64);

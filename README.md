@@ -48,12 +48,38 @@ Firefox and the extension running, register it with your harness, e.g. for
 Claude Code:
 
 ```sh
-claude mcp add atelier -- atelier mcp
+claude mcp add --scope user atelier -- atelier mcp
 ```
 
-Then ask the agent to style a site, pointing it at your theme. For now the
-agent edits the owned directory directly; tasks, reviews and the rest of the
-workflow in SPEC.md §8–9 come later.
+Then start a session on the queue with the `work` prompt, which Claude Code
+offers as a command:
+
+```
+/mcp__atelier__work style lobste.rs
+```
+
+The agent puts your request in the queue (or picks up what's already there),
+claims it, and works in a copy of your styles: its own tabs show its work in
+progress, while yours keep your current styles. When it submits, the change
+lands in the owned directory, and your tabs pick it up. Every landing can be
+undone:
+
+```sh
+atelier journal          # landings and undos, newest first
+atelier undo             # undo the most recent landing
+atelier task list        # the queue
+```
+
+To commit each landing to git (or anything else), set a hook in
+`~/.config/atelier/config.toml`:
+
+```toml
+[hooks]
+on_land = 'git add -A . && git commit -qF -'   # runs in the owned directory; the summary is on stdin
+```
+
+Requests from the browser itself ("Style this", "Something's off") and
+launching a session automatically are still to come (SPEC.md §6.4, §9.1).
 
 ## Watching agents work
 

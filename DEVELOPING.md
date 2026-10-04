@@ -111,8 +111,9 @@ Instances live in `$XDG_RUNTIME_DIR/atelier-dev/<name>/` (override with `ATELIER
 owned directory, daemon, native host, extension and page shim. Build first
 (`cargo build`, `(cd extension && npm run build)`), then
 `node dev/e2e/phase1.ts` (styles reaching pages), `node dev/e2e/tools.ts`
-(the agent tools, driven through `atelier mcp` the way a harness would) and
-`node dev/e2e/sources.ts` (tabs bound to a task's tree). A failing run keeps the instance and its owned
+(the agent tools, driven through `atelier mcp` the way a harness would),
+`node dev/e2e/sources.ts` (tabs bound to a task's tree), and
+`node dev/e2e/tasks.ts` (a task from queue to landing through `atelier mcp`). A failing run keeps the instance and its owned
 directory (`$XDG_RUNTIME_DIR/atelier-dev/<name>{,-owned}`) for inspection.
 
 Unit and integration tests for the Rust side run with `cargo test`. Those for
