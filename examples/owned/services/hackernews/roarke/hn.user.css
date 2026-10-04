@@ -11,14 +11,15 @@
     --base: #1e1e2e; --mantle: #181825; --crust: #11111b;
     --surface0: #313244; --surface1: #45475a; --overlay0: #6c7086; --overlay2: #9399b2;
     --text: #cdd6f4; --lavender: #b4befe; --mauve: #cba6f7; --peach: #fab387;
-    --sans: "NotoSans NFP Cond", "Noto Sans", sans-serif;
-    --mono: "NotoSansM NFM ExtCond", "NotoSansM Nerd Font Mono", monospace;
+    --sans: "Noto Sans", sans-serif;
+    --mono: "Noto Sans Mono", monospace;
   }
 
   html, body { background: var(--base); }
   body, td, .title, .subtext, .comment, .commtext, .default, .admin,
   .pagetop, .comhead, .yclinks, input, textarea, select {
     font-family: var(--sans);
+    font-stretch: condensed;
   }
   pre, code, tt { font-family: var(--mono); }
 
@@ -54,13 +55,9 @@
   .sitebit, .sitebit a:link, .sitebit a:visited, .sitestr { color: var(--overlay0); }
   .subtext, .subline, .subtext a:link, .subtext a:visited, .score, .age a { color: var(--overlay0); }
   /* HN's 7pt is too small in a condensed face, and grey on dark is
-     borderline: a little larger and a little heavier. The Nerd Font build
-     of Noto is static instances, and its Medium is a family of its own
-     (weight 500 alone renders as Regular); a variable Noto would take the
-     weight instead. */
+     borderline: a little larger and a little heavier. */
   .subtext, .comhead {
     font-size: 8.5pt;
-    font-family: "NotoSans NFP Cond Med", var(--sans);
     font-weight: 500;
   }
   /* The site name after a title is also .comhead; it sits in the title line. */

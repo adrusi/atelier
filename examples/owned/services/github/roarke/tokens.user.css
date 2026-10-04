@@ -80,11 +80,11 @@
       --fgColor-black: #11111b;
 
       /* Links, and Primer's "accent" family. Primer uses accent for links,
-         informational states and focus alike; the theme splits those into
-         blue (links, info) and lavender (focus, current, primary). */
-      --fgColor-accent: #89b4fa;
-      --fgColor-link: #89b4fa;
-      --bgColor-accent-muted: #89b4fa1a;
+         informational states and focus alike; in the theme all of those are
+         the accent, lavender. */
+      --fgColor-accent: #b4befe;
+      --fgColor-link: #b4befe;
+      --bgColor-accent-muted: #b4befe1a;
       --bgColor-accent-emphasis: #b4befe;
       --borderColor-accent-muted: #b4befe66;
       --borderColor-accent-emphasis: #b4befe;
@@ -173,16 +173,16 @@
       --button-danger-fgColor-disabled: #f38ba880;
       --buttonCounter-danger-bgColor-rest: #f38ba826;
       --buttonCounter-danger-fgColor-hover: #1e1e2e;
-      --button-outline-fgColor-rest: #89b4fa;
-      --button-outline-fgColor-hover: #b4befe;
+      --button-outline-fgColor-rest: #b4befe;
+      --button-outline-fgColor-hover: #c6cdfe;
       --button-outline-fgColor-active: #1e1e2e;
-      --button-outline-fgColor-disabled: #89b4fa80;
+      --button-outline-fgColor-disabled: #b4befe80;
       --button-outline-bgColor-rest: #313244;
       --button-outline-bgColor-active: #b4befe;
-      --buttonCounter-outline-bgColor-rest: #89b4fa1a;
-      --buttonCounter-outline-bgColor-hover: #89b4fa1a;
-      --buttonCounter-outline-fgColor-rest: #89b4fa;
-      --buttonCounter-outline-fgColor-hover: #b4befe;
+      --buttonCounter-outline-bgColor-rest: #b4befe1a;
+      --buttonCounter-outline-bgColor-hover: #b4befe1a;
+      --buttonCounter-outline-fgColor-rest: #b4befe;
+      --buttonCounter-outline-fgColor-hover: #c6cdfe;
       --button-inactive-bgColor: #313244;
       --button-inactive-fgColor: #9399b2;
       --button-star-iconColor: #f9e2af;
@@ -198,12 +198,13 @@
       --diffBlob-deletionWord-bgColor: #f38ba859;
       --diffBlob-hunkNum-bgColor-rest: #313244;
 
-      /* Contribution graph: Mocha green, deepening */
+      /* Contribution graph: GitHub's green here is brand colour, not status,
+         so it's the accent, lavender mixed into mantle in quarters. */
       --contribution-default-bgColor-0: #181825;
-      --contribution-default-bgColor-1: #3b5040;
-      --contribution-default-bgColor-2: #5c8a5f;
-      --contribution-default-bgColor-3: #82b780;
-      --contribution-default-bgColor-4: #a6e3a1;
+      --contribution-default-bgColor-1: #3f425b;
+      --contribution-default-bgColor-2: #666b92;
+      --contribution-default-bgColor-3: #8d94c8;
+      --contribution-default-bgColor-4: #b4befe;
       --contribution-default-borderColor-0: #cdd6f40d;
 
       /* Syntax highlighting: Catppuccin's own mapping, roughly */
@@ -280,8 +281,8 @@
   /* Shape and type are theme-independent tokens on :root. Scoped to the
      same condition so the light theme is left alone. Primer's medium radius
      is used by buttons and boxes alike; it becomes the 4px of small controls
-     and boxes are put back to 8px in chrome.user.css. "full" (pills) is
-     kept for avatars, which are circles, and undone for labels there. */
+     and boxes are put back to 8px in chrome.user.css. "full" (pills and
+     circles) is GitHub's and is left alone. */
   @media (prefers-color-scheme: dark) {
     html:root:is([data-color-mode="auto"], [data-color-mode="dark"])[data-dark-theme="dark"] {
       --borderRadius-small: 4px;
@@ -289,10 +290,11 @@
       --borderRadius-default: 4px;
       --borderRadius-large: 8px;
       --overlay-borderRadius: 8px;
-      --fontStack-sansSerif: "NotoSans NFP Cond", "Noto Sans", sans-serif;
-      --fontStack-sansSerifDisplay: "NotoSans NFP Cond", "Noto Sans", sans-serif;
-      --fontStack-system: "NotoSans NFP Cond", "Noto Sans", sans-serif;
-      --fontStack-monospace: "NotoSansM NFM ExtCond", "NotoSansM Nerd Font Mono", monospace;
+      --fontStack-sansSerif: "Noto Sans", sans-serif;
+      font-stretch: condensed;
+      --fontStack-sansSerifDisplay: "Noto Sans", sans-serif;
+      --fontStack-system: "Noto Sans", sans-serif;
+      --fontStack-monospace: "Noto Sans Mono", monospace;
     }
   }
 }

@@ -74,7 +74,10 @@
        it needs to stand out more than the others. */
     --color-background-yellow: light-dark(var(--color-yellow-90), color-mix(in srgb, #f9e2af 28%, #1e1e2e));
     --color-background-green: light-dark(var(--color-green-90), color-mix(in srgb, #a6e3a1 12%, #1e1e2e));
-    --color-background-blue: light-dark(var(--color-blue-90), color-mix(in srgb, #89b4fa 12%, #1e1e2e));
+    /* MDN's blue (notes, "experimental" and "secure" callouts, the docs tab
+       in the menus) is its general-purpose colour rather than a status, so
+       it's the accent. */
+    --color-background-blue: light-dark(var(--color-blue-90), color-mix(in srgb, #b4befe 12%, #1e1e2e));
     --color-background-purple: light-dark(var(--color-purple-90), color-mix(in srgb, #cba6f7 12%, #1e1e2e));
 
     /* Text */
@@ -84,7 +87,7 @@
     --color-text-orange: light-dark(var(--color-orange-20), #fab387);
     --color-text-yellow: light-dark(var(--color-yellow-20), #f9e2af);
     --color-text-green: light-dark(var(--color-green-20), #a6e3a1);
-    --color-text-blue: light-dark(var(--color-blue-20), #89b4fa);
+    --color-text-blue: light-dark(var(--color-blue-20), #b4befe);
     --color-text-purple: light-dark(var(--color-purple-20), #cba6f7);
 
     /* Borders */
@@ -93,7 +96,7 @@
     --color-border-active: light-dark(var(--color-blue-50), #b4befe);
 
     /* Links */
-    --color-link-normal: light-dark(var(--color-blue-20), #89b4fa);
+    --color-link-normal: light-dark(var(--color-blue-20), #b4befe);
     --color-link-visited: light-dark(var(--color-purple-20), #cba6f7);
 
     /* "You are here" (sidebar and TOC current item). MDN tints it by area
@@ -105,21 +108,26 @@
     --color-scrollbar-thumb: light-dark(var(--color-black-alpha-25), #6c7086);
     --color-scrollbar-track: light-dark(#0000, #45475a);
 
-    /* Shape. MDN's pills (search boxes, sidebar filter, badges, switches) all
-       use --radius-full; the theme never uses pills. Unconditional: this
-       affects MDN's Light mode too. */
-    --radius-full: 4px;
-    --radius-normal: 4px;
+    /* Shape. MDN's pills (search boxes, sidebar filter, badges, switches)
+       use --radius-full and are part of its design, so they're left alone.
+       --radius-normal is MDN's own 0.25rem, the theme's 4px for controls. */
 
     /* Type. Sizes are left alone (THEME.md). */
-    --font-family-text: "NotoSans NFP Cond", "Noto Sans", sans-serif;
-    --font-family-code: "NotoSansM NFM ExtCond", "NotoSansM Nerd Font Mono", monospace;
+    --font-family-text: "Noto Sans", sans-serif;
+    font-stretch: condensed;
+    --font-family-code: "Noto Sans Mono", monospace;
   }
 
   html:root[data-current-area="learn"] {
     --color-area-background: light-dark(var(--color-background-orange), #313244);
     --color-area-highlight-border: light-dark(var(--color-orange-50), #b4befe);
     --color-area-link: light-dark(var(--color-orange-20), #b4befe);
+  }
+
+  /* The logo is drawn from the palette; the theme doesn't recolour logos,
+     so it keeps MDN's own blues. */
+  html .logo :is(.logo__cursor, .logo__letter) {
+    fill: light-dark(#0a5dbd, #a4cefe);
   }
 
   ::selection {

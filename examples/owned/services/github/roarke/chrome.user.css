@@ -17,10 +17,11 @@
 @-moz-document domain("github.com") {
   @media (prefers-color-scheme: dark) {
     html:root:is([data-color-mode="auto"], [data-color-mode="dark"])[data-dark-theme="dark"] {
-      --brand-fontStack-sansSerif: "NotoSans NFP Cond", "Noto Sans", sans-serif;
-      --brand-fontStack-sansSerifAlt: "NotoSans NFP Cond", "Noto Sans", sans-serif;
-      --brand-fontStack-system: "NotoSans NFP Cond", "Noto Sans", sans-serif;
-      --brand-fontStack-monospace: "NotoSansM NFM ExtCond", "NotoSansM Nerd Font Mono", monospace;
+      --brand-fontStack-sansSerif: "Noto Sans", sans-serif;
+      font-stretch: condensed;
+      --brand-fontStack-sansSerifAlt: "Noto Sans", sans-serif;
+      --brand-fontStack-system: "Noto Sans", sans-serif;
+      --brand-fontStack-monospace: "Noto Sans Mono", monospace;
     }
 
     html:root:is([data-color-mode="auto"], [data-color-mode="dark"])[data-dark-theme="dark"] [data-color-mode="dark"] {
@@ -34,7 +35,7 @@
       --brand-color-text-muted: #9399b2;
       --brand-color-text-onEmphasis: #1e1e2e;
       --brand-color-text-emphasized: #b4befe;
-      --brand-color-text-link-rest: #89b4fa;
+      --brand-color-text-link-rest: #b4befe;
       --brand-color-text-link-pressed: #b4befe;
       --brand-color-border-default: #45475a;
       --brand-color-border-muted: #313244;
@@ -61,19 +62,8 @@
       }
       .Box-header { border-top-left-radius: 8px; border-top-right-radius: 8px; }
 
-      /* Never pill-shaped: topic tags, labels, state badges, tokens and
-         counters are 4px. Primer's --borderRadius-full is shared with radio
-         buttons and indicator dots, so the pills are fixed per component
-         rather than through the token. Primer React classes are
-         prc-<Component>-<Element>-<hash>; the hash changes between
-         releases, so match on the prefix. */
-      :is(.topic-tag, .IssueLabel, .Label, .label, .Counter, .State,
-          .social-reaction-summary-item,
-          [class*="prc-TopicTag-TopicTag-"], [class*="prc-Label-Label-"],
-          [class*="prc-IssueLabel-IssueLabel-"], [class*="prc-Token-Token"],
-          [class*="prc-CounterLabel-CounterLabel-"], [class*="prc-StateLabel-StateLabel-"]) {
-        border-radius: 4px;
-      }
+      /* GitHub's pills (topic tags, labels, state badges, counters) and
+         circles (avatars) are part of its design and are left as they are. */
 
       /* Code blocks and inputs are recessed (crust). Primer draws inputs on
          --bgColor-default and blocks on --bgColor-muted, which are also the
@@ -89,6 +79,12 @@
           [class*="prc-components-TextInputBaseWrapper-"]):not([disabled], [data-disabled]) {
         background-color: #11111b;
       }
+
+      /* The profile's activity overview is drawn with literal SVG fills
+         (GitHub green, white points); it follows the contribution graph,
+         which tokens.user.css makes lavender. */
+      .js-highlight-blob { fill: #8d94c8; stroke: #b4befe; }
+      .activity-overview-point { fill: #1e1e2e; }
 
       ::selection {
         background: #353749;

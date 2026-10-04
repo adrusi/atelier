@@ -21,7 +21,10 @@
 
     /* Surfaces */
     --background-color-base: #1e1e2e;
-    --background-color-base-fixed: #1e1e2e;
+    /* --background-color-base-fixed and --color-base-fixed are left as
+       Wikipedia has them (white, near-black) in dark mode too: they're the
+       backdrop that keeps transparent diagrams in thumbnails readable, and
+       the theme doesn't recolour images. */
     --background-color-neutral-subtle: #181825;
     --background-color-neutral: #313244;
     --background-color-interactive-subtle: #181825;
@@ -45,7 +48,6 @@
     --color-base: #cdd6f4;
     --color-base--hover: #cdd6f4;
     --color-base--subtle: #9399b2;
-    --color-base-fixed: #cdd6f4;
     --color-emphasized: #cdd6f4;
     --color-subtle: #9399b2;
     --color-placeholder: #6c7086;
@@ -55,17 +57,18 @@
     --color-inverted-fixed: #1e1e2e;
     --color-neutral: #9399b2;
 
-    /* Links */
-    --color-link: #89b4fa;
-    --color-link--hover: #b4befe;
-    --color-link--active: #b4befe;
+    /* Links take the accent; visited are mauve. Red links (missing pages)
+       stay red: that colour means something. */
+    --color-link: #b4befe;
+    --color-link--hover: #c6cdfe;
+    --color-link--active: #c6cdfe;
     --color-link--focus: #b4befe;
     --color-link--visited: #cba6f7;
-    --color-link--visited--hover: #b4befe;
-    --color-link--visited--active: #b4befe;
+    --color-link--visited--hover: #d8bdf9;
+    --color-link--visited--active: #d8bdf9;
     --color-visited: #cba6f7;
-    --color-visited--hover: #b4befe;
-    --color-visited--active: #b4befe;
+    --color-visited--hover: #d8bdf9;
+    --color-visited--active: #d8bdf9;
     --color-link-red: #f38ba8;
     --color-link-red--hover: #f5c2e7;
     --color-link-red--active: #f5c2e7;
@@ -158,11 +161,18 @@
     --box-shadow-color-alpha-base: transparent;
   }
 
+  /* Codex radios and checkboxes also fill with the fixed backdrop colour;
+     there it's a control, not an image backdrop, so it's recessed. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.cdx-radio, .cdx-checkbox) {
+    --background-color-base-fixed: #11111b;
+  }
+
   html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) body {
-    font-family: "NotoSans NFP Cond", "Noto Sans", sans-serif;
+    font-family: "Noto Sans", sans-serif;
+    font-stretch: condensed;
   }
   html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(code, pre, kbd, samp, tt) {
-    font-family: "NotoSansM NFM ExtCond", "NotoSansM Nerd Font Mono", monospace;
+    font-family: "Noto Sans Mono", monospace;
   }
   html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) ::selection {
     background: #353749;

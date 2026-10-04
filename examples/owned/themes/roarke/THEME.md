@@ -67,14 +67,23 @@ Dark text (`#1e1e2e`) on these pastel colours is fine.
 
 ## Typography
 
-- UI and body text: `"NotoSans NFP Cond", "Noto Sans", sans-serif`. Condensed
-  is the point; it's what the whole desktop uses.
-- Monospace: `"NotoSansM NFM ExtCond", "NotoSansM Nerd Font Mono", monospace`.
+- UI and body text: `"Noto Sans", sans-serif` with `font-stretch: condensed`.
+  Condensed is the point; it's what the whole desktop uses. Use mainline Noto
+  in the browser, not the Nerd Font builds the desktop has installed (those are
+  for the private-use icons the bar needs, and come as separate static fonts).
+  **Known issue (2026-10-03):** Firefox uses installed variable fonts only
+  through their named instances, and Noto Sans has no condensed ones, so
+  `font-stretch: condensed` (and `font-variation-settings`) currently render
+  at normal width. Weights 100–900 in steps of 100 work. Styles still declare
+  `font-stretch: condensed`, so they pick it up once condensed faces are
+  available (examples/DOGFOODING.md has the options).
+- Monospace: `"Noto Sans Mono", monospace`, condensed as well (it's also
+  variable), matching the terminal.
 - Don't change sizes much. The browser runs at the toolkit's 1.25 scale
   already.
-- Noto is a variable font. Where text is borderline on contrast or size
-  (small metadata, text on coloured backgrounds), a slightly heavier weight
-  is the preferred fix, before changing colours.
+- Where text is borderline on contrast or size (small metadata, text on
+  coloured backgrounds), a slightly heavier weight (500 or 600) is the preferred fix, before
+  changing colours.
 - Long-form reading (articles, docs) may keep a serif if the site uses one,
   but in the Mocha text colour.
 

@@ -39,9 +39,14 @@
     border-radius: 8px;
   }
 
-  /* Diagrams with transparent backgrounds get a light backdrop from MDN
-     (--color-white, which base.user.css maps to the theme's text colour in
-     dark mode, so it's never pure white). Corners as containers. */
+  /* MDN gives content images a white backdrop (--color-white) so that
+     transparent diagrams drawn for white stay readable. base.user.css maps
+     --color-white to the theme's text colour for components; for images it
+     is put back to MDN's white, because the theme doesn't recolour diagrams.
+     Corners as containers. */
+  html .content-section img {
+    --color-white: #fff;
+  }
   html .content-section :is(img, iframe) {
     border-radius: 8px;
   }
@@ -78,6 +83,5 @@
   }
   html .baseline-indicator summary .pill {
     color: light-dark(#fff, #1e1e2e);
-    border-radius: 4px;
   }
 }

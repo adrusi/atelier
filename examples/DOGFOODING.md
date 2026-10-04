@@ -142,3 +142,33 @@ owner:
   more accent per screen;
 - whether to leave ads and per-area colours alone;
 - what to do with diagrams' white backdrops.
+
+## Revising to the owner's answers, and fonts (2026-10-03)
+
+A subagent revised all four styles to the owner's answers (links and most
+non-neutral colour lavender, radii a preference, images untouched) and left
+previews in each service's `previews/`. Along the way:
+
+- **`atelier-dev capture` without `--selector` was broken** (argument
+  filtering dropped the instance name). *Fixed.*
+- **The theme named the desktop's Nerd Font builds** of Noto. Those are for
+  the bar's private-use icons and come as one static family per weight, so
+  `font-weight: 500` fell back to Regular. The owner: use mainline Noto in
+  the browser. *Done.*
+- **But Firefox can't render mainline Noto condensed from the installed
+  fonts.** Measured in a dev instance: `font-stretch` 100%, 75% and 62.5%
+  render identically; so does `font-variation-settings: "wdth" 75`; weight
+  450 renders as 500 and 550 as 600. Firefox uses installed variable fonts
+  only through their named instances, and Noto Sans has no condensed ones.
+  *Open, for the owner.* Options:
+  1. install static condensed builds of mainline Noto (Google ships them),
+     which Firefox would match with `font-stretch`;
+  2. let a theme ship font files that atelier serves to pages, which would
+     also suit images and other theme assets (an atelier feature to design);
+  3. load Noto Sans from Google Fonts, which the lint allows but which costs
+     a request to Google on every styled page;
+  4. go back to the Nerd Font condensed families (they render condensed; the
+     icons are just unused);
+  5. accept normal width in the browser.
+  The previews were captured before the font change, so they show the Nerd
+  Font condensed face.

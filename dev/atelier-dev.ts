@@ -279,7 +279,7 @@ async function cmdCapture(args: string[]) {
   const full = args.includes("--full");
   const si = args.indexOf("--selector");
   const selector = si >= 0 ? args[si + 1] : undefined;
-  const [name, out] = args.filter((a, i) => a !== "--full" && i !== si && i !== si + 1);
+  const [name, out] = args.filter((a, i) => a !== "--full" && (si < 0 || (i !== si && i !== si + 1)));
   const state = running(name);
   const file = out ? path.resolve(out) : path.join(instancePaths(state.name).shots, `${timestamp()}.png`);
   await withBidiSession(state, async (bidi) => {
