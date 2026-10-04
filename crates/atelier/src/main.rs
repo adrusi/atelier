@@ -4,6 +4,7 @@ mod loader;
 mod mcp;
 mod native_host;
 mod paths;
+mod session;
 mod setup;
 mod tasks;
 mod usercss;
@@ -25,6 +26,8 @@ usage: atelier [--dir DIR] <command>
   task claim [ID] [--session NAME] | submit ID [--session NAME] SUMMARY
                         tasks (SPEC §8)
   undo [SEQ]            undo a landing (default: the most recent)
+  session start [--force]
+                        start an agent session with [session] command from config.toml
   journal               landings and undos, newest first
   browser METHOD [JSON] [--out FILE]
                         call a browser tool through the daemon (see extension/src/tools.ts)
@@ -42,6 +45,17 @@ fn main() -> ExitCode {
         eprintln!("{USAGE}");
         return ExitCode::FAILURE;
     };
+    // One-shot commands die quietly when their output is closed early
+    // (`atelier journal | head`), as command-line tools do. Long-running ones
+    // keep Rust's default of ignoring SIGPIPE, so a closed socket or pipe is
+    // an error they handle, not the end of the process.
+    if !matches!(command.as_str(), "daemon" | "native-host" | "mcp") && !command.ends_with(".json")
+    {
+        // SAFETY: restoring the default disposition of a signal, before any threads start.
+        unsafe {
+            libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        }
+    }
     match command.as_str() {
         // Firefox runs the manifest's path with the manifest's own path and the
         // extension ID as arguments, so a first argument ending in .json means
@@ -56,7 +70,7 @@ fn main() -> ExitCode {
         "mcp" => mcp::run(dir.as_deref()),
         "status" => cli::status(dir.as_deref()),
         "lint" => cli::lint(dir.as_deref()),
-        "task" | "undo" | "journal" => {
+        "task" | "undo" | "journal" | "session" => {
             args.insert(0, command.clone());
             cli::tasks(dir.as_deref(), &args)
         }

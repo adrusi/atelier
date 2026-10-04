@@ -6,7 +6,7 @@
 //! makes sure only one daemon runs per directory. It exits after being idle
 //! with no clients for a while (`ATELIER_DAEMON_IDLE_SECS`, default 600).
 
-use crate::{loader, paths, tasks, wire};
+use crate::{loader, paths, session, tasks, wire};
 use atelier_proto::{
     BlobChunk, BlobGetParams, BlobRef, BrowserCallParams, Bundle, BundleChanged, CompiledStyle,
     Diagnostic, InitializeParams, InitializeResult, PROTOCOL_VERSION, Role, Severity, SourceParams,
@@ -68,6 +68,8 @@ struct State {
     next_link: AtomicU64,
     /// Set when the watcher sees a change, cleared once it's been loaded.
     reload_pending: AtomicBool,
+    /// Whether to start an agent session when work arrives (SPEC §9.1).
+    launcher: Mutex<session::Launcher>,
     /// Tasks and the journal (SPEC §8). The lock serialises task operations,
     /// which read and write the owned directory and the state directory.
     tasks: Mutex<tasks::Store>,
@@ -393,6 +395,7 @@ async fn serve(dir: PathBuf) -> std::io::Result<()> {
         next_link: AtomicU64::new(1),
         reload_pending: AtomicBool::new(false),
         tasks: Mutex::new(tasks::Store::new(&dir, &paths::state_dir(&dir))?),
+        launcher: Mutex::new(session::Launcher::default()),
     });
     state.reload(None);
 
@@ -615,7 +618,7 @@ async fn handle(stream: UnixStream, state: Arc<State>) {
                             let _ = reply.send(rpc_result(&frame));
                         }
                     } else {
-                        handle_request(&state, frame, out.clone());
+                        handle_request(&state, frame, out.clone(), role);
                     }
                     continue;
                 }
@@ -708,7 +711,7 @@ fn initialize(state: &State, msg: &Value) -> Result<(Role, Value), Value> {
 }
 
 /// Handles a request or notification from a client, sending any reply to `out`.
-fn handle_request(state: &Arc<State>, msg: Value, out: mpsc::Sender<Value>) {
+fn handle_request(state: &Arc<State>, msg: Value, out: mpsc::Sender<Value>, role: Role) {
     if msg.get("method").and_then(Value::as_str) == Some(method::BROWSER_CALL) {
         let Some(id) = msg.get("id").cloned() else {
             return;
@@ -725,7 +728,7 @@ fn handle_request(state: &Arc<State>, msg: Value, out: mpsc::Sender<Value>) {
         });
         return;
     }
-    if let Some(reply) = dispatch(state, msg) {
+    if let Some(reply) = dispatch(state, msg, role) {
         let _ = out.try_send(reply);
     }
 }
@@ -791,7 +794,7 @@ fn rpc_result(frame: &Value) -> RpcResult {
 }
 
 /// Handles one synchronous request. Returns the reply, if any.
-fn dispatch(state: &State, msg: Value) -> Option<Value> {
+fn dispatch(state: &State, msg: Value, role: Role) -> Option<Value> {
     let id = msg.get("id").cloned()?; // notifications from clients need no reply
     let params = msg.get("params").cloned().unwrap_or(Value::Null);
     let reply = match msg.get("method").and_then(Value::as_str) {
@@ -803,8 +806,21 @@ fn dispatch(state: &State, msg: Value) -> Option<Value> {
         Some(method::STATUS) => source_param(params)
             .and_then(|source| status(state, source.as_deref()))
             .map(|s| json!(s)),
+        Some(method::SESSION_START) => {
+            let in_progress = state
+                .tasks
+                .lock()
+                .unwrap()
+                .list(Some(atelier_proto::TaskState::Claimed), now_ms())
+                .is_ok_and(|t| !t.is_empty());
+            let force = params
+                .get("force")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            Ok(start_session(state, None, in_progress, force))
+        }
         Some(m) if m.starts_with("task/") || m.starts_with("journal/") => {
-            task_call(state, m, params)
+            task_call(state, m, params, role)
         }
         Some(m) => Err((
             wire::code::METHOD_NOT_FOUND,
@@ -820,7 +836,12 @@ fn dispatch(state: &State, msg: Value) -> Option<Value> {
 
 /// Task and journal methods (SPEC §8). Each one that changes a task
 /// announces it with `task/changed`.
-fn task_call(state: &State, method_name: &str, params: Value) -> Result<Value, (i64, String)> {
+fn task_call(
+    state: &State,
+    method_name: &str,
+    params: Value,
+    role: Role,
+) -> Result<Value, (i64, String)> {
     use atelier_proto::{
         SubmitResult, TaskClaimParams, TaskCreateParams, TaskListParams, TaskSubmitParams,
         task_method as tm,
@@ -851,6 +872,15 @@ fn task_call(state: &State, method_name: &str, params: Value) -> Result<Value, (
             let theme = state.inner.lock().unwrap().default.bundle.theme.clone();
             let task = store.create(p, theme, now).map_err(failed)?;
             announce(&task);
+            // Work the user asked for may start a session (SPEC §9.1). Tasks
+            // an agent creates are for that agent's own session.
+            use atelier_proto::TaskKind::{Audit, Create, Port, Revise};
+            if role != Role::Mcp && matches!(task.kind, Create | Revise | Port | Audit) {
+                let in_progress = store
+                    .list(Some(atelier_proto::TaskState::Claimed), now)
+                    .is_ok_and(|t| !t.is_empty());
+                start_session(state, Some(&task.id), in_progress, false);
+            }
             Ok(json!(task))
         }
         tm::LIST => {
@@ -865,7 +895,10 @@ fn task_call(state: &State, method_name: &str, params: Value) -> Result<Value, (
             let task = store
                 .claim(p.id.as_deref(), &p.session, now)
                 .map_err(failed)?;
+            let mut launcher = state.launcher.lock().unwrap();
+            launcher.polled();
             if let Some(t) = &task {
+                launcher.claimed();
                 announce(t);
             }
             Ok(json!(task))
@@ -1058,4 +1091,37 @@ fn source_param(params: Value) -> Result<Option<String>, (i64, String)> {
     serde_json::from_value::<SourceParams>(params)
         .map(|p| p.source)
         .map_err(|e| (wire::code::INVALID_PARAMS, e.to_string()))
+}
+
+/// Starts an agent session with the user's command, unless one is already
+/// at work or on its way (or `force`). Automatic starts only happen under
+/// `start = "spawn"` or `"headless"`; `atelier session start` runs the
+/// command whatever the mode. Returns what happened, which is also logged.
+fn start_session(state: &State, task: Option<&str>, in_progress: bool, force: bool) -> Value {
+    let manual = task.is_none();
+    let config = match session::config() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("atelier daemon: {e}");
+            return json!({ "started": false, "reason": e });
+        }
+    };
+    if !manual && config.start == session::Start::Pull {
+        return json!({ "started": false, "reason": "sessions are started by hand (start = \"pull\")" });
+    }
+    let mut launcher = state.launcher.lock().unwrap();
+    if !force && let Some(reason) = launcher.busy(in_progress) {
+        eprintln!("atelier daemon: not starting a session: {reason}");
+        return json!({ "started": false, "reason": reason });
+    }
+    match launcher.launch(&config, &state.dir, task) {
+        Ok(line) => {
+            eprintln!("atelier daemon: started a session: {line}");
+            json!({ "started": true, "command": line })
+        }
+        Err(e) => {
+            eprintln!("atelier daemon: couldn't start a session: {e}");
+            json!({ "started": false, "reason": e })
+        }
+    }
 }

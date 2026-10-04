@@ -23,6 +23,7 @@ version = "0.0.0"
 dependencies = [
  "atelier-proto",
  "base64",
+ "libc",
  "notify",
  "regex",
  "regress",

@@ -19,6 +19,7 @@
         wayvnc
         dbus
         wtype
+        foot  # a terminal, for testing [session] commands
       ];
     in
     {

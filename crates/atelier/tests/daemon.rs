@@ -484,3 +484,89 @@ fn task_trees_are_served_as_sources() {
     daemon.kill().unwrap();
     daemon.wait().unwrap();
 }
+
+#[test]
+fn requests_start_a_session_unless_one_is_at_work() {
+    let env = Env::new();
+    let out = env.root.join("sessions.out");
+    write(
+        &env.root.join("config/atelier"),
+        "config.toml",
+        &format!(
+            "[session]\nstart = \"headless\"\ncommand = 'printf \"%s %s %s\\n\" \"$ATELIER_SESSION\" \"$ATELIER_TASK_ID\" {{dir}} >> {}'\n",
+            out.display()
+        ),
+    );
+    let mut daemon = env.daemon();
+    let mut s = env.connect();
+    initialize(&mut s, &env.dir);
+    let create = |s: &mut UnixStream, id: u64| {
+        call(
+            s,
+            id,
+            "task/create",
+            json!({ "kind": "create", "brief": { "description": "style it" } }),
+        )["result"]["id"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let lines = || {
+        std::fs::read_to_string(&out)
+            .unwrap_or_default()
+            .lines()
+            .map(str::to_string)
+            .collect::<Vec<_>>()
+    };
+    let wait_for = |n: usize| {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while lines().len() < n && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        lines()
+    };
+
+    // A request from the user (here, the CLI) starts one, told it's headless.
+    let first = create(&mut s, 1);
+    let started = wait_for(1);
+    assert_eq!(started.len(), 1);
+    assert_eq!(
+        started[0],
+        format!(
+            "headless {first} {}",
+            env.dir.canonicalize().unwrap().display()
+        )
+    );
+
+    // Another request while that session is on its way doesn't start a second.
+    create(&mut s, 2);
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(lines().len(), 1);
+
+    // Tasks agents create are for their own session.
+    let mut agent = env.connect();
+    call(
+        &mut agent,
+        0,
+        "initialize",
+        json!({ "protocolVersion": 1, "role": "mcp" }),
+    );
+    let forced = call(&mut s, 3, "session/start", json!({ "force": true }))["result"].clone();
+    assert_eq!(forced["started"], json!(true), "{forced}");
+    wait_for(2);
+    call(&mut agent, 1, "task/claim", json!({ "session": "a1" }));
+    // The claim says a session is at work, so neither starts one.
+    create(&mut agent, 2);
+    create(&mut s, 4);
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(lines().len(), 2);
+    let busy = call(&mut s, 5, "session/start", json!({}))["result"].clone();
+    assert_eq!(busy["started"], json!(false));
+    assert!(
+        busy["reason"].as_str().unwrap().contains("working"),
+        "{busy}"
+    );
+
+    daemon.kill().unwrap();
+    daemon.wait().unwrap();
+}

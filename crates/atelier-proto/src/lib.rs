@@ -32,6 +32,10 @@ pub mod method {
     /// method returns. The daemon forwards the inner request to the most
     /// recently connected extension and relays its response (SPEC §10).
     pub const BROWSER_CALL: &str = "browser/call";
+    /// Request: `{ "force"?: bool }` → `{ "started": bool, "command"?: …,
+    /// "reason"?: … }`. Runs the configured session command (SPEC §9.1),
+    /// unless a session is already working or starting (or `force`).
+    pub const SESSION_START: &str = "session/start";
 }
 
 /// atelier-specific JSON-RPC error codes.

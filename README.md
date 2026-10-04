@@ -78,8 +78,24 @@ To commit each landing to git (or anything else), set a hook in
 on_land = 'git add -A . && git commit -qF -'   # runs in the owned directory; the summary is on stdin
 ```
 
-Requests from the browser itself ("Style this", "Something's off") and
-launching a session automatically are still to come (SPEC.md §6.4, §9.1).
+To have atelier start a session when you ask for something, rather than
+starting one yourself, give it a command in `~/.config/atelier/config.toml`:
+
+```toml
+[session]
+start = "spawn"   # or "headless" for a command nobody watches; "pull" (default) never starts one
+command = 'foot -D {dir} claude /mcp__atelier__work'
+```
+
+`{dir}` is the owned directory and `{task}` the task that prompted the
+session, both already shell-quoted, so leave them outside quotes. Inside a
+quoted script, use `$ATELIER_DIR` and `$ATELIER_TASK_ID` instead. A session
+starts when a request arrives and no session is working or waiting. Try your
+command with `atelier session start`. Whether a headless command is allowed
+under your harness's plan is yours to check.
+
+Requests from the browser itself ("Style this", "Something's off") are still
+to come (SPEC.md §6.4).
 
 ## Watching agents work
 

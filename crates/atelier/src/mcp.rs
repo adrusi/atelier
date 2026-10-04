@@ -389,17 +389,11 @@ impl Server {
                     .and_then(Value::as_str)
                     .map(str::trim)
                     .filter(|r| !r.is_empty());
-                let request = match request {
-                    Some(r) => format!(
-                        " I've also just asked for this: \"{r}\". If it isn't in the queue already, add it with task_create, in my words."
-                    ),
-                    None => String::new(),
-                };
                 ok(
                     id,
                     json!({
                         "description": "Work through atelier's queue",
-                        "messages": [{ "role": "user", "content": { "type": "text", "text": tasks::WORK_PROMPT.replace("{REQUEST}", &request) } }],
+                        "messages": [{ "role": "user", "content": { "type": "text", "text": tasks::work_prompt(request) } }],
                     }),
                 )
             }

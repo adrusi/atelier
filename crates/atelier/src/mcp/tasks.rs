@@ -126,7 +126,7 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
 /// The `work` prompt (SPEC §9.2): how a session started on the queue
 /// proceeds. Harnesses show it as a command, e.g. `/mcp__atelier__work` in
 /// Claude Code.
-pub(super) const WORK_PROMPT: &str = "\
+const WORK_PROMPT: &str = "\
 I'd like your help with atelier's queue. atelier keeps userstyles that make the websites I use match my \
 desktop theme, and agents write them. Requests I make from the browser (or in this conversation) become \
 tasks; each is one piece of work on one site.
@@ -144,14 +144,45 @@ summary. It lands in my styles at once, and I can undo it.
 5. Then the next task, until the queue is empty. Tell me briefly what landed, what you assumed, and \
 anything you'd like me to decide.
 
-I started this session, so I may well be here. If something is really mine to decide, ask me. If I don't \
-answer, or it's a small call, make a reasonable choice and list it in `assumptions` when you submit. If a task \
-can't or shouldn't be done as asked, decline it and say why; that's a legitimate answer, and nobody else will \
-be asked to do it instead. If you need to stop partway, task_release keeps your work for whoever continues, \
-with your note.
+{PRESENCE} If a task can't or shouldn't be done as asked, decline it and say why; that's a legitimate answer, \
+and nobody else will be asked to do it instead. If you need to stop partway, task_release keeps your work for \
+whoever continues, with your note.
 
 If atelier's tools get in your way, are missing something, or say something confusing, please tell me \
 specifically. I'm developing atelier, and that's some of the most useful feedback I get.";
+
+/// What the work prompt says about whether the user is there to ask. A
+/// session the daemon started headless (ATELIER_SESSION, SPEC §9.1) has
+/// nobody watching it.
+fn presence() -> &'static str {
+    match std::env::var("ATELIER_SESSION").as_deref() {
+        Ok("headless") => {
+            "atelier started this session by itself, and nobody is watching it, so there's no one to answer \
+             questions here, and your final message only goes to a log. What I'll read is each landing's \
+             summary and `assumptions`, so put the calls you made there. When a task is too unclear to do \
+             well that way, it's fine to decline it and say what you'd need to know; I can queue it again with \
+             more context."
+        }
+        _ => {
+            "I started this session (or asked for it), so I may well be here. If something is really mine to \
+             decide, ask me. If I don't answer, or it's a small call, make a reasonable choice and list it in \
+             `assumptions` when you submit."
+        }
+    }
+}
+
+/// The work prompt, with the user's request (if any) worked in.
+pub(super) fn work_prompt(request: Option<&str>) -> String {
+    let request = match request {
+        Some(r) => format!(
+            " I've also just asked for this: \"{r}\". If it isn't in the queue already, add it with task_create, in my words."
+        ),
+        None => String::new(),
+    };
+    WORK_PROMPT
+        .replace("{REQUEST}", &request)
+        .replace("{PRESENCE}", presence())
+}
 
 impl Server {
     /// Handles a task tool. None if `name` isn't one.

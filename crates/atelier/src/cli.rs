@@ -475,6 +475,10 @@ pub fn tasks(dir: Option<&str>, args: &[String]) -> ExitCode {
             ),
             None => return fail("usage: atelier task abandon ID [REASON]"),
         },
+        (Some("session"), Some("start")) => client.call(
+            atelier_proto::method::SESSION_START,
+            json!({ "force": args.iter().any(|a| a == "--force") }),
+        ),
         (Some("undo"), seq) => client.call(
             tm::UNDO,
             json!({ "seq": seq.and_then(|s| s.parse::<u64>().ok()) }),
@@ -503,7 +507,7 @@ pub fn tasks(dir: Option<&str>, args: &[String]) -> ExitCode {
         }),
         _ => {
             return fail(
-                "usage: atelier task create|list|show|claim|submit|abandon …, atelier undo [SEQ], atelier journal",
+                "usage: atelier task create|list|show|claim|submit|abandon …, atelier undo [SEQ], atelier journal, atelier session start [--force]",
             );
         }
     };
