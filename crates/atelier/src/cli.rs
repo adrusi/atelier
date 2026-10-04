@@ -21,6 +21,19 @@ pub struct Client {
 }
 
 impl Client {
+    /// Connects to the daemon for `dir`, starting it if it isn't running.
+    pub fn connect_or_start(dir: &Path, role: Role) -> io::Result<Client> {
+        let stream = crate::native_host::connect_or_spawn(dir)?;
+        let mut client = Client { stream, next_id: 1 };
+        let params = InitializeParams {
+            protocol_version: PROTOCOL_VERSION,
+            role,
+            atelier_dir: Some(dir.display().to_string()),
+        };
+        client.call(method::INITIALIZE, json!(params))?;
+        Ok(client)
+    }
+
     /// Connects to the daemon for `dir` and initializes. `None` if no daemon is running.
     pub fn connect(dir: &Path, role: Role) -> io::Result<Option<(Client, InitializeResult)>> {
         let socket = paths::socket_path(dir);
@@ -364,4 +377,116 @@ pub fn browser(
         serde_json::to_string_pretty(&result).unwrap_or_default()
     );
     ExitCode::SUCCESS
+}
+
+/// `atelier task …`, `atelier undo`, `atelier journal` (SPEC §8, §13).
+pub fn tasks(dir: Option<&str>, args: &[String]) -> ExitCode {
+    use atelier_proto::task_method as tm;
+    let dir = match paths::resolve_dir(dir) {
+        Ok(d) => d,
+        Err(e) => return fail(e),
+    };
+    let mut client = match Client::connect_or_start(&dir, Role::Cli) {
+        Ok(c) => c,
+        Err(e) => return fail(e),
+    };
+    let arg = |i: usize| args.get(i).map(String::as_str);
+    let opt = |name: &str| {
+        args.iter()
+            .position(|a| a == name)
+            .and_then(|i| args.get(i + 1))
+            .cloned()
+    };
+    let result = match (arg(0), arg(1)) {
+        (Some("task"), Some("create")) => {
+            let Some(description) =
+                args.iter()
+                    .skip(2)
+                    .filter(|a| !a.starts_with("--"))
+                    .find(|a| {
+                        // Skip option values.
+                        !["--kind", "--service", "--origin", "--note"]
+                            .iter()
+                            .any(|o| opt(o).as_deref() == Some(a.as_str()))
+                    })
+            else {
+                return fail(
+                    "usage: atelier task create [--kind KIND] [--service S] [--origin URL] [--note TEXT] DESCRIPTION",
+                );
+            };
+            client.call(
+                tm::CREATE,
+                json!({
+                    "kind": opt("--kind").unwrap_or_else(|| "create".into()),
+                    "service": opt("--service"),
+                    "brief": { "description": description, "origin": opt("--origin"), "note": opt("--note") },
+                }),
+            )
+        }
+        (Some("task"), Some("list") | None) => client
+            .call(tm::LIST, json!({ "state": opt("--state") }))
+            .map(|v| {
+                for t in v.as_array().into_iter().flatten() {
+                    println!(
+                        "{}  {:<9} {:<7} {:<14} {}",
+                        t["id"].as_str().unwrap_or("?"),
+                        t["state"].as_str().unwrap_or("?"),
+                        t["kind"].as_str().unwrap_or("?"),
+                        t["service"].as_str().unwrap_or("-"),
+                        t["brief"]["description"].as_str().unwrap_or("")
+                    );
+                }
+                Value::Null
+            }),
+        (Some("task"), Some("show")) => match arg(2) {
+            Some(id) => client.call(tm::GET, json!({ "id": id })),
+            None => return fail("usage: atelier task show ID"),
+        },
+        (Some("task"), Some("abandon")) => match arg(2) {
+            Some(id) => client.call(
+                tm::ABANDON,
+                json!({ "id": id, "reason": arg(3).unwrap_or("abandoned by the user") }),
+            ),
+            None => return fail("usage: atelier task abandon ID [REASON]"),
+        },
+        (Some("undo"), seq) => client.call(
+            tm::UNDO,
+            json!({ "seq": seq.and_then(|s| s.parse::<u64>().ok()) }),
+        ),
+        (Some("journal"), _) => client.call(tm::JOURNAL, json!({})).map(|v| {
+            for e in v.as_array().into_iter().flatten() {
+                let flag = if e["undoneBy"].is_u64() {
+                    " (undone)"
+                } else {
+                    ""
+                };
+                println!(
+                    "{:>4}  {}{flag}",
+                    e["seq"],
+                    e["summary"].as_str().unwrap_or("")
+                );
+                for f in e["files"].as_array().into_iter().flatten() {
+                    println!(
+                        "        {:<8} {}",
+                        f["change"].as_str().unwrap_or(""),
+                        f["path"].as_str().unwrap_or("")
+                    );
+                }
+            }
+            Value::Null
+        }),
+        _ => {
+            return fail(
+                "usage: atelier task create|list|show|abandon …, atelier undo [SEQ], atelier journal",
+            );
+        }
+    };
+    match result {
+        Ok(Value::Null) => ExitCode::SUCCESS,
+        Ok(v) => {
+            println!("{}", serde_json::to_string_pretty(&v).unwrap_or_default());
+            ExitCode::SUCCESS
+        }
+        Err(e) => fail(e),
+    }
 }

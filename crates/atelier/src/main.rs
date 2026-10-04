@@ -5,6 +5,7 @@ mod mcp;
 mod native_host;
 mod paths;
 mod setup;
+mod tasks;
 mod usercss;
 mod wire;
 
@@ -19,6 +20,11 @@ usage: atelier [--dir DIR] <command>
   status                daemon, theme, styles and problems
   lint                  load the owned directory and report problems
   match URL             which styles apply to URL
+  task create [--kind KIND] [--service S] [--origin URL] [--note TEXT] DESCRIPTION
+  task list [--state STATE] | show ID | abandon ID [REASON]
+                        tasks (SPEC §8)
+  undo [SEQ]            undo a landing (default: the most recent)
+  journal               landings and undos, newest first
   browser METHOD [JSON] [--out FILE]
                         call a browser tool through the daemon (see extension/src/tools.ts)
   mcp                   MCP server (stdio) with browser tools for agents
@@ -49,6 +55,10 @@ fn main() -> ExitCode {
         "mcp" => mcp::run(dir.as_deref()),
         "status" => cli::status(dir.as_deref()),
         "lint" => cli::lint(dir.as_deref()),
+        "task" | "undo" | "journal" => {
+            args.insert(0, command.clone());
+            cli::tasks(dir.as_deref(), &args)
+        }
         "browser" => {
             let out = take_option(&mut args, "--out");
             match args.first() {

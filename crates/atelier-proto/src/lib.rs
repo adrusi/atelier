@@ -37,6 +37,8 @@ pub mod error_code {
     pub const BROWSER_NOT_CONNECTED: i64 = -32010;
     /// The extension didn't answer a browser call in time.
     pub const BROWSER_TIMEOUT: i64 = -32011;
+    /// A task operation was refused; the message says why.
+    pub const TASK_REFUSED: i64 = -32030;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -220,4 +222,224 @@ pub struct Diagnostic {
 pub enum Severity {
     Error,
     Warning,
+}
+
+// ---------------------------------------------------------------------------
+// Tasks (SPEC §8).
+
+pub mod task_method {
+    /// [`TaskCreateParams`] → [`Task`].
+    pub const CREATE: &str = "task/create";
+    /// [`TaskListParams`] → `Vec<Task>`.
+    pub const LIST: &str = "task/list";
+    /// `{ "id": … }` → [`Task`].
+    pub const GET: &str = "task/get";
+    /// [`TaskClaimParams`] → [`Task`] (with `tree` set), or `null` if none is queued.
+    pub const CLAIM: &str = "task/claim";
+    /// `{ "id": …, "session": … }` → [`Task`]: extends the lease.
+    pub const HEARTBEAT: &str = "task/heartbeat";
+    /// [`TaskSubmitParams`] → [`SubmitResult`].
+    pub const SUBMIT: &str = "task/submit";
+    /// `{ "id": …, "reason": … }` → [`Task`].
+    pub const DECLINE: &str = "task/decline";
+    /// `{ "id": …, "reason": … }` → [`Task`]: the user (or supervisor) gives up on it.
+    pub const ABANDON: &str = "task/abandon";
+    /// Notification from the daemon: a [`Task`] changed.
+    pub const CHANGED: &str = "task/changed";
+    /// `{}` → `Vec<JournalEntry>`, newest first.
+    pub const JOURNAL: &str = "journal/list";
+    /// `{ "seq": … }` (default: the latest entry not yet undone) → [`JournalEntry`] for the undo.
+    pub const UNDO: &str = "journal/undo";
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum TaskKind {
+    Create,
+    Revise,
+    Repair,
+    Port,
+    Audit,
+    Notes,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum TaskState {
+    Queued,
+    /// A session holds the lease and is working in the task's tree.
+    Claimed,
+    Landed,
+    Declined,
+    Abandoned,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TaskBrief {
+    /// What the user asked for, in their words.
+    pub description: String,
+    /// The page the request came from, if any.
+    #[serde(default)]
+    pub origin: Option<String>,
+    /// Anything else: the user's note on a revise, failing checks on a repair.
+    #[serde(default)]
+    pub note: Option<String>,
+    /// The Firefox container (cookieStoreId) the request came from.
+    #[serde(default)]
+    pub container: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Lease {
+    pub session: String,
+    /// Milliseconds since the epoch.
+    pub expires: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+#[ts(export)]
+pub enum TaskOutcome {
+    Landed {
+        journal: u64,
+        summary: String,
+        assumptions: Vec<String>,
+    },
+    Declined {
+        reason: String,
+    },
+    Abandoned {
+        reason: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Task {
+    pub id: String,
+    pub kind: TaskKind,
+    /// The service the task is about; for a create task, chosen when it lands.
+    pub service: Option<String>,
+    pub theme: Option<String>,
+    pub brief: TaskBrief,
+    pub state: TaskState,
+    pub lease: Option<Lease>,
+    /// The task's working copy of the owned directory, once claimed.
+    pub tree: Option<String>,
+    pub created: u64,
+    pub updated: u64,
+    pub outcome: Option<TaskOutcome>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TaskCreateParams {
+    pub kind: TaskKind,
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub service: Option<String>,
+    pub brief: TaskBrief,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TaskListParams {
+    /// Only tasks in this state; default all.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<TaskState>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TaskClaimParams {
+    /// A specific task; default the oldest queued one.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    /// Who's claiming, for the lease.
+    pub session: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TaskSubmitParams {
+    pub id: String,
+    pub session: String,
+    /// What changed and why, commit-message quality (SPEC §8.4).
+    pub summary: String,
+    #[serde(default)]
+    pub assumptions: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "result", rename_all = "lowercase")]
+#[ts(export)]
+pub enum SubmitResult {
+    Landed {
+        journal: u64,
+        changed: Vec<FileChange>,
+    },
+    /// Nothing was written. Fix the problems in the task's tree and submit again.
+    Rejected { problems: Vec<SubmitProblem> },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct FileChange {
+    pub path: String,
+    pub change: ChangeKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum ChangeKind {
+    Added,
+    Modified,
+    Deleted,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SubmitProblem {
+    /// `conflict`: the file changed in the owned directory since the task
+    /// started; `outside`: the change is outside what the task may touch;
+    /// `lint`: loading the task's tree reported an error; `empty`: nothing
+    /// changed.
+    pub kind: String,
+    pub path: Option<String>,
+    pub message: String,
+    /// For a conflict: the file as it is now in the owned directory (absent
+    /// if it was deleted), to reconcile with.
+    pub current: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct JournalEntry {
+    pub seq: u64,
+    /// The task that landed, or for an undo, the task whose landing it undid.
+    pub task: Option<String>,
+    pub summary: String,
+    pub time: u64,
+    pub files: Vec<FileChange>,
+    /// Set on a landing once it has been undone.
+    pub undone_by: Option<u64>,
+    /// Set on an undo entry: the landing it undid.
+    pub undo_of: Option<u64>,
 }

@@ -318,3 +318,63 @@ fn only_one_daemon_per_directory() {
     first.kill().unwrap();
     first.wait().unwrap();
 }
+
+#[test]
+fn tasks_land_through_the_daemon_with_hooks_and_undo() {
+    let env = Env::new();
+    // A hook that records what it was told.
+    let hook_out = env.root.join("hook.out");
+    write(
+        &env.root.join("config/atelier"),
+        "config.toml",
+        &format!(
+            "[hooks]\non_land = \"printf '%s %s %s ' \\\"$ATELIER_TASK_ID\\\" \\\"$ATELIER_SERVICE\\\" \\\"$ATELIER_JOURNAL_SEQ\\\" > {0}; cat >> {0}\"\n",
+            hook_out.display()
+        ),
+    );
+    let mut daemon = env.daemon();
+    let mut s = env.connect();
+    initialize(&mut s, &env.dir);
+
+    let task = call(&mut s, 1, "task/create", json!({ "kind": "revise", "service": "site", "brief": { "description": "make it blue" } }))["result"].clone();
+    let id = task["id"].as_str().unwrap().to_string();
+    assert_eq!(task["state"], json!("queued"));
+    let claimed = call(&mut s, 2, "task/claim", json!({ "session": "s1" }))["result"].clone();
+    assert_eq!(claimed["id"], json!(id));
+    let tree = PathBuf::from(claimed["tree"].as_str().unwrap());
+
+    write(&tree, "services/site/dusk/a.user.css", "@-moz-document domain(\"example.com\") { body { color: blue; } }\n");
+    let r = call(&mut s, 3, "task/submit", json!({ "id": id, "session": "s1", "summary": "Make the body blue" }))["result"].clone();
+    assert_eq!(r["result"], json!("landed"), "{r}");
+    assert!(std::fs::read_to_string(env.dir.join("services/site/dusk/a.user.css")).unwrap().contains("blue"));
+
+    // The landing reloads the bundle like any other file change.
+    let changed = loop {
+        let msg = recv(&mut s);
+        if msg["method"] == json!("bundle/changed") {
+            break msg["params"].clone();
+        }
+    };
+    assert!(fetch_bundle(&mut s, &changed)["styles"][0]["sections"][0]["css"].as_str().unwrap().contains("blue"));
+
+    // The hook ran with the task's details and the summary on stdin.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while !hook_out.exists() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!(std::fs::read_to_string(&hook_out).unwrap(), format!("{id} site 1 Make the body blue"));
+
+    let undo = call(&mut s, 4, "journal/undo", json!({}))["result"].clone();
+    assert_eq!(undo["undoOf"], json!(1));
+    assert!(std::fs::read_to_string(env.dir.join("services/site/dusk/a.user.css")).unwrap().contains("red"));
+    let journal = call(&mut s, 5, "journal/list", json!({}))["result"].clone();
+    assert_eq!(journal.as_array().unwrap().len(), 2);
+
+    // Refusals come back as errors with a reason.
+    let refused = call(&mut s, 6, "task/claim", json!({ "id": id, "session": "s1" }));
+    assert!(refused["error"]["message"].as_str().unwrap().contains("landed"));
+
+    daemon.kill().unwrap();
+    daemon.wait().unwrap();
+}

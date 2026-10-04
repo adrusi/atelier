@@ -105,7 +105,7 @@ fn relay(init: Value, mut stdin: impl Read) -> ExitCode {
     }
 }
 
-fn connect_or_spawn(dir: &Path) -> io::Result<UnixStream> {
+pub(crate) fn connect_or_spawn(dir: &Path) -> io::Result<UnixStream> {
     let socket = paths::socket_path(dir);
     paths::check_socket_path(&socket)?;
     if let Ok(s) = UnixStream::connect(&socket) {

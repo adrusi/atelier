@@ -6,7 +6,7 @@
 //! makes sure only one daemon runs per directory. It exits after being idle
 //! with no clients for a while (`ATELIER_DAEMON_IDLE_SECS`, default 600).
 
-use crate::{loader, paths, wire};
+use crate::{loader, paths, tasks, wire};
 use atelier_proto::{
     BlobChunk, BlobGetParams, BlobRef, BrowserCallParams, Bundle, CompiledStyle, Diagnostic,
     InitializeParams, InitializeResult, PROTOCOL_VERSION, Role, Severity, StatusResult, error_code,
@@ -68,6 +68,9 @@ struct State {
     next_link: AtomicU64,
     /// Set when the watcher sees a change, cleared once it's been loaded.
     reload_pending: AtomicBool,
+    /// Tasks and the journal (SPEC §8). The lock serialises task operations,
+    /// which read and write the owned directory and the state directory.
+    tasks: Mutex<tasks::Store>,
 }
 
 /// A request for the extension, and where to send its result.
@@ -289,6 +292,7 @@ async fn serve(dir: PathBuf) -> std::io::Result<()> {
         browsers: Mutex::new(Vec::new()),
         next_link: AtomicU64::new(1),
         reload_pending: AtomicBool::new(false),
+        tasks: Mutex::new(tasks::Store::new(&dir, &paths::state_dir(&dir))?),
     });
     state.reload();
 
@@ -609,6 +613,9 @@ fn dispatch(state: &State, msg: Value) -> Option<Value> {
         Some(method::BUNDLE_GET) => Ok(json!(state.inner.lock().unwrap().bundle_ref)),
         Some(method::BLOB_GET) => blob_get(state, params),
         Some(method::STATUS) => Ok(json!(status(state))),
+        Some(m) if m.starts_with("task/") || m.starts_with("journal/") => {
+            task_call(state, m, params)
+        }
         Some(m) => Err((
             wire::code::METHOD_NOT_FOUND,
             format!("unknown method `{m}`"),
@@ -619,6 +626,183 @@ fn dispatch(state: &State, msg: Value) -> Option<Value> {
         Ok(result) => wire::response(id, result),
         Err((code, message)) => wire::error_response(id, code, message),
     })
+}
+
+/// Task and journal methods (SPEC §8). Each one that changes a task
+/// announces it with `task/changed`.
+fn task_call(state: &State, method_name: &str, params: Value) -> Result<Value, (i64, String)> {
+    use atelier_proto::{
+        SubmitResult, TaskClaimParams, TaskCreateParams, TaskListParams, TaskSubmitParams,
+        task_method as tm,
+    };
+    let bad = |e: serde_json::Error| (wire::code::INVALID_PARAMS, e.to_string());
+    let failed = |e: String| (error_code::TASK_REFUSED, e);
+    let str_param = |name: &str| -> Result<String, (i64, String)> {
+        params
+            .get(name)
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or((wire::code::INVALID_PARAMS, format!("missing `{name}`")))
+    };
+    let now = now_ms();
+    let store = state.tasks.lock().unwrap();
+    let announce = |task: &atelier_proto::Task| {
+        let _ = state
+            .notify
+            .send(wire::notification(tm::CHANGED, json!(task)));
+    };
+    match method_name {
+        tm::CREATE => {
+            let p: TaskCreateParams = serde_json::from_value(params).map_err(bad)?;
+            let theme = state.inner.lock().unwrap().bundle.theme.clone();
+            let task = store.create(p, theme, now).map_err(failed)?;
+            announce(&task);
+            Ok(json!(task))
+        }
+        tm::LIST => {
+            let p: TaskListParams =
+                serde_json::from_value(if params.is_null() { json!({}) } else { params })
+                    .map_err(bad)?;
+            Ok(json!(store.list(p.state, now).map_err(failed)?))
+        }
+        tm::GET => Ok(json!(store.get(&str_param("id")?).map_err(failed)?)),
+        tm::CLAIM => {
+            let p: TaskClaimParams = serde_json::from_value(params).map_err(bad)?;
+            let task = store
+                .claim(p.id.as_deref(), &p.session, now)
+                .map_err(failed)?;
+            if let Some(t) = &task {
+                announce(t);
+            }
+            Ok(json!(task))
+        }
+        tm::HEARTBEAT => {
+            let task = store
+                .heartbeat(&str_param("id")?, &str_param("session")?, now)
+                .map_err(failed)?;
+            Ok(json!(task))
+        }
+        tm::SUBMIT => {
+            let p: TaskSubmitParams = serde_json::from_value(params).map_err(bad)?;
+            let vars = read_vars(&mut Vec::new());
+            let (task, result) = store
+                .submit(&p.id, &p.session, &p.summary, p.assumptions, &vars, now)
+                .map_err(failed)?;
+            if let SubmitResult::Landed { journal, changed } = &result {
+                announce(&task);
+                run_hook(state, "on_land", &task, *journal, &p.summary, changed);
+            }
+            Ok(json!(result))
+        }
+        tm::DECLINE => {
+            let task = store
+                .decline(
+                    &str_param("id")?,
+                    &str_param("session")?,
+                    &str_param("reason")?,
+                    now,
+                )
+                .map_err(failed)?;
+            announce(&task);
+            Ok(json!(task))
+        }
+        tm::ABANDON => {
+            let reason = params
+                .get("reason")
+                .and_then(Value::as_str)
+                .unwrap_or("abandoned")
+                .to_string();
+            let task = store
+                .abandon(&str_param("id")?, &reason, now)
+                .map_err(failed)?;
+            announce(&task);
+            Ok(json!(task))
+        }
+        tm::JOURNAL => Ok(json!(store.journal().map_err(failed)?)),
+        tm::UNDO => {
+            let seq = params.get("seq").and_then(Value::as_u64);
+            let entry = store.undo(seq, now).map_err(failed)?;
+            let task = entry.task.as_deref().and_then(|id| store.get(id).ok());
+            if let Some(task) = &task {
+                run_hook(
+                    state,
+                    "on_undo",
+                    task,
+                    entry.seq,
+                    &entry.summary,
+                    &entry.files,
+                );
+            }
+            Ok(json!(entry))
+        }
+        other => Err((
+            wire::code::METHOD_NOT_FOUND,
+            format!("unknown method `{other}`"),
+        )),
+    }
+}
+
+/// Runs a hook from config.toml's [hooks] table (SPEC §8.6), without waiting.
+/// Failures are logged; they never undo a landing.
+fn run_hook(
+    state: &State,
+    hook: &str,
+    task: &atelier_proto::Task,
+    seq: u64,
+    summary: &str,
+    changed: &[atelier_proto::FileChange],
+) {
+    let command = std::fs::read_to_string(paths::config_path())
+        .ok()
+        .and_then(|t| t.parse::<toml::Table>().ok())
+        .and_then(|t| t.get("hooks")?.get(hook)?.as_str().map(str::to_string));
+    let Some(command) = command else { return };
+    let list = paths::state_dir(&state.dir).join(format!("hook-{seq}.changed"));
+    let paths: Vec<u8> = changed
+        .iter()
+        .flat_map(|c| [c.path.as_bytes(), b"\0"].concat())
+        .collect();
+    if let Err(e) = std::fs::write(&list, paths) {
+        eprintln!("atelier daemon: {hook}: {e}");
+        return;
+    }
+    let kind = serde_json::to_value(task.kind)
+        .ok()
+        .and_then(|v| v.as_str().map(str::to_string))
+        .unwrap_or_default();
+    let child = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&command)
+        .current_dir(&state.dir)
+        .env("ATELIER_DIR", &state.dir)
+        .env("ATELIER_TASK_ID", &task.id)
+        .env("ATELIER_TASK_KIND", kind)
+        .env("ATELIER_SERVICE", task.service.clone().unwrap_or_default())
+        .env("ATELIER_JOURNAL_SEQ", seq.to_string())
+        .env("ATELIER_CHANGED_FILE", &list)
+        .stdin(std::process::Stdio::piped())
+        .spawn();
+    match child {
+        Ok(mut child) => {
+            use std::io::Write;
+            if let Some(mut stdin) = child.stdin.take() {
+                let _ = stdin.write_all(summary.as_bytes());
+            }
+            let hook = hook.to_string();
+            std::thread::spawn(move || match child.wait() {
+                Ok(s) if s.success() => {}
+                Ok(s) => eprintln!("atelier daemon: {hook} hook failed ({s})"),
+                Err(e) => eprintln!("atelier daemon: {hook} hook: {e}"),
+            });
+        }
+        Err(e) => eprintln!("atelier daemon: {hook} hook: {e}"),
+    }
+}
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
 }
 
 fn blob_get(state: &State, params: Value) -> Result<Value, (i64, String)> {
