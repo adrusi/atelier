@@ -1,0 +1,157 @@
+/* ==UserStyle==
+@name           docs.rs (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    Retunes docs.rs's own dark theme (its top bar, crate pages and search) to Catppuccin Mocha
+==/UserStyle== */
+
+/* docs.rs styles its own pages and the top bar it adds to rustdoc pages
+   from one set of custom properties, re-declared on
+   html[data-docs-rs-theme="dark"]. That attribute follows the rustdoc theme
+   setting (dark here, since rustdoc follows the system by default); Light and
+   Ayu are left alone. html:root[...] is 0,2,1 and beats docs.rs's 0,1,1. */
+
+@-moz-document domain("docs.rs") {
+  html:root[data-docs-rs-theme="dark"] {
+    /* Surfaces */
+    --color-background: #1e1e2e;
+    --color-background-code: #11111b;
+    --color-background-input: #11111b;
+    --color-menu-header-background: #313244;
+    --color-table-header-background: #313244;
+    --color-warn-background: color-mix(in srgb, #f9e2af 14%, #1e1e2e);
+
+    /* Text */
+    --color-standard: #cdd6f4;
+    --color-navbar-standard: #cdd6f4;
+    --color-brand: #cdd6f4;
+    --color-table-header: #cdd6f4;
+    --color-warn-msg: #cdd6f4;
+    --input-color: #cdd6f4;
+    --chart-title-color: #cdd6f4;
+
+    /* Borders */
+    --color-border: #45475a;
+    --color-border-light: #45475a;
+    --color-menu-border: #45475a;
+    --chart-grid: #45475a;
+
+    /* Accent: links, the Documentation button, focus */
+    --color-url: #b4befe;
+    --color-doc-link-background: #b4befe;
+    --color-doc-link-hover: #cdd6f4;
+    --color-search-focus: #b4befe;
+    --input-box-shadow-focus: 0 0 0 1px #b4befe;
+
+    /* Item kinds and status, as in rustdoc.user.css */
+    --color-struct: #94e2d5;
+    --color-type: #94e2d5;
+    --color-macro: #a6e3a1;
+    --color-error: #f38ba8;
+    --color-error-hover: #f38ba8;
+    --color-warn: #f9e2af;
+    --color-warn-hover: #f9e2af;
+
+    /* Syntax highlighting (crate READMEs), matching rustdoc.user.css */
+    --color-syntax-foreground: inherit;
+    --color-syntax-background: #11111b;
+    --color-syntax-keyword1: #cba6f7;
+    --color-syntax-keyword2: #cba6f7;
+    --color-syntax-lifetime: #f2cdcd;
+    --color-syntax-prelude-ty: #f9e2af;
+    --color-syntax-prelude-val: #fab387;
+    --color-syntax-number: #fab387;
+    --color-syntax-string: #a6e3a1;
+    --color-syntax-bool: #fab387;
+    --color-syntax-attribute: #f9e2af;
+    --color-syntax-self: #f38ba8;
+    --color-syntax-macro: #94e2d5;
+    --color-syntax-question-mark: #89dceb;
+    --color-syntax-comment: #9399b2;
+    --color-syntax-doc-comment: #a6adc8;
+    --color-line-number: #6c7086;
+    --color-line-number-highlighted: #313244;
+  }
+
+  /* Type. docs.rs names Fira Sans and Source Code Pro directly in its rules.
+     Its prose (crate descriptions, READMEs) keeps Source Serif, as rustdoc's
+     does in rustdoc.user.css. The attribute is on rustdoc pages too (for the
+     top bar), so rules that would also hit rustdoc's own content skip
+     body.rustdoc-page and leave it to rustdoc.user.css. */
+  html:root[data-docs-rs-theme="dark"] body {
+    font-stretch: condensed;
+  }
+  /* These use the `font` shorthand, which resets font-stretch. */
+  html:root[data-docs-rs-theme="dark"] :is(div.nav-container, div.nav-container div.package-details-menu p.description, #docsrs-alert, div .info, div .warning) {
+    font-family: "Noto Sans", sans-serif;
+    font-stretch: condensed;
+  }
+
+  /* The top bar and the crate page's header (name, description, tabs) are
+     headers: recessed, like rustdoc's sidebar. docs.rs draws the crate
+     header in its code-block colour. */
+  html:root[data-docs-rs-theme="dark"] :is(div.nav-container, div.docsrs-package-container) {
+    background-color: #181825;
+  }
+
+  /* The top bar's dropdowns (crate, platform, docs.rs, Rust) are menus:
+     raised. They hang from the bar, so only the bottom corners round. */
+  html:root[data-docs-rs-theme="dark"] div.nav-container .pure-menu-children {
+    background-color: #313244;
+    border-color: #45475a;
+    border-radius: 0 0 8px 8px;
+  }
+
+  /* The crate page's tabs (Crate, Source, Builds, Feature flags) keep
+     Pure.css's grey; secondary text in the theme. */
+  html:root[data-docs-rs-theme="dark"] div.docsrs-package-container .pure-menu-link {
+    color: #9399b2;
+  }
+  html:root[data-docs-rs-theme="dark"] div.docsrs-package-container .pure-menu-link.pure-menu-active {
+    color: #cdd6f4;
+  }
+  html:root[data-docs-rs-theme="dark"] body:not(.rustdoc-page),
+  html:root[data-docs-rs-theme="dark"] body:not(.rustdoc-page) :is(input, select, textarea, .pure-g [class*="pure-u"]:not(.package-details, .description), h1, h2, h3, h4, div.package-page-container div.package-details :is(h5, h6, table th), .about thead tr th) {
+    font-family: "Noto Sans", sans-serif;
+  }
+  html:root[data-docs-rs-theme="dark"] body:not(.rustdoc-page) :is(code, kbd, pre, samp) {
+    font-family: "Noto Sans Mono", monospace;
+  }
+
+  /* Release lists (search results, recent releases): each row is one link,
+     and docs.rs colours the crate name on a child. Firefox only lets
+     :visited change the link's own colour, so the name inherits it. */
+  html:root[data-docs-rs-theme="dark"] div.recent-releases-container a.release {
+    color: #b4befe;
+  }
+  html:root[data-docs-rs-theme="dark"] div.recent-releases-container a.release:visited {
+    color: #cba6f7;
+  }
+  html:root[data-docs-rs-theme="dark"] div.recent-releases-container a.release .name {
+    color: inherit;
+  }
+  html:root[data-docs-rs-theme="dark"] div.recent-releases-container a.release .date {
+    color: #9399b2;
+  }
+  /* docs.rs highlights the row in its code-block colour, which is recessed
+     here; a hovered row is raised in the theme. */
+  html:root[data-docs-rs-theme="dark"] div.recent-releases-container :is(.release, .build-in-progress):is(:hover, :focus) {
+    background-color: #313244;
+  }
+
+  /* Controls on docs.rs's own pages (home page search, Search and I'm
+     Feeling Lucky): the theme's 4px. */
+  html:root[data-docs-rs-theme="dark"] body:not(.rustdoc-page) :is(.pure-button, input.search-input, select) {
+    border-radius: 4px;
+  }
+
+  /* Code blocks in READMEs: the theme's container radius. */
+  html:root[data-docs-rs-theme="dark"] div.package-details pre {
+    border-radius: 8px;
+  }
+
+  html:root[data-docs-rs-theme="dark"] ::selection {
+    background-color: #353749;
+    color: #cdd6f4;
+  }
+}

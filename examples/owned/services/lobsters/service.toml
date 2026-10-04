@@ -1,0 +1,2 @@
+description = "lobste.rs"
+summary = "lobste.rs: story lists, tag and domain pages, comment threads, user pages and forms. Overrides Lobsters' own colour tokens, so it applies whichever appearance (light, dark, high contrast) the site is in."

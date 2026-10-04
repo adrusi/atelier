@@ -1,0 +1,9 @@
+description = "docs.rs"
+summary = "docs.rs: crate documentation built with current rustdoc (crate root, item and source pages, rustdoc search and settings) and docs.rs's own pages (home, crate pages, search results, the top bar). Retunes rustdoc's and docs.rs's Dark themes by overriding their colour tokens. Releases built with rustdoc from before about 2023 have no tokens and keep their own colours, apart from docs.rs's top bar."
+
+[[prerequisites]]
+description = "In rustdoc's Settings (the gear on any documentation page), leave Theme on \"system preference\" with \"Preferred dark theme\" on dark (the defaults; follows the desktop's dark preference), or pick dark. The style restyles only the Dark theme; Light and Ayu are left alone. docs.rs's own pages follow the same setting."
+# Matches when the site is in a mode this style restyles. docs.rs sets this
+# attribute from rustdoc's theme setting on every page, including old rustdoc
+# builds that have no data-theme of their own.
+check = "html[data-docs-rs-theme=\"dark\"]"

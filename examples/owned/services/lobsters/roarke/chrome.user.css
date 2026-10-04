@@ -1,0 +1,111 @@
+/* ==UserStyle==
+@name           Lobsters (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    Catppuccin Mocha, flat and condensed, for lobste.rs: type, header, shapes
+==/UserStyle== */
+
+/* Colours come from tokens.user.css; this file is the rest: fonts, the
+   header bar, the logo, corners, and a few states. */
+
+@-moz-document domain("lobste.rs") {
+  html:root {
+    --sans: "Noto Sans", sans-serif;
+    --mono: "Noto Sans Mono", monospace;
+  }
+
+  body, input, textarea, button, select {
+    font-family: var(--sans);
+    font-stretch: condensed;
+  }
+  pre, code, kbd, samp, tt {
+    font-family: var(--mono);
+    font-stretch: condensed;
+  }
+  ::selection { background: #353749; color: #cdd6f4; }
+
+  /* Header: a mantle bar, like the desktop's. */
+  #header {
+    background: #181825;
+    border: 1px solid #313244;
+    border-radius: 8px;
+    padding: 6px 10px;
+  }
+  #header a:hover { color: #cdd6f4; }
+  #header a[aria-current="page"] { color: #b4befe; }
+  /* Unread messages are the one thing here that needs attention. */
+  #header-top .inbox-unread { color: #fab387; }
+
+  /* The logo is a white L on a red square whose shade follows traffic
+     (set inline). Kept red, in Mocha red, with a dark L. */
+  #logo {
+    background-color: #f38ba8 !important;
+    border-radius: 4px;
+  }
+  #logo a { filter: brightness(0.12); }
+
+  /* Links in comments and story text are grey and underlined on Lobsters;
+     here they take the accent like every other link. */
+  div.comment_text a, div.story_text a,
+  .comment .details div.comment_text a { color: #b4befe; }
+  div.comment_text a:visited, div.story_text a:visited,
+  .comment .details div.comment_text a:visited { color: #cba6f7; }
+
+  /* Small controls 4px, containers 8px. Tags are tiny in a condensed
+     face: a little heavier. */
+  a.tag { border-radius: 4px; font-weight: 500; }
+  input, textarea, select, button, a.button,
+  input[type="submit"], #page-link-buttons a, #story_holder .ts-control {
+    border-radius: 4px;
+  }
+  textarea, input[type="text"], input[type="search"], input[type="password"],
+  input[type="email"], input[type="url"], input:not([type]) {
+    color: #cdd6f4;
+  }
+  input:focus, button:focus, select:focus, textarea:focus {
+    outline-width: 1px;
+    outline-offset: 0;
+  }
+  ::placeholder { color: #6c7086; }
+
+  /* The caches menu */
+  .caches[open] ul {
+    background: #313244;
+    border-color: #45475a;
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .caches li { border-bottom-color: #45475a; }
+  .caches a:hover { background: #45475a; text-decoration: none; }
+
+  /* The tag picker on the submit form */
+  #story_holder .ts-dropdown {
+    background: #313244;
+    border: 1px solid #45475a;
+    border-radius: 8px;
+    box-shadow: none;
+  }
+  #story_holder .ts-dropdown .ts-dropdown-content .active { color: #1e1e2e; }
+
+  /* A linked comment: "you are here" */
+  .comment:target, li:target, .showing-user-comment {
+    box-shadow: inset 2px 0 0 #b4befe;
+    border-radius: 4px;
+  }
+
+  /* Code */
+  pre {
+    background: #11111b;
+    border: 1px solid #313244;
+    border-radius: 8px;
+    padding: 8px 10px;
+  }
+  pre code { background: none; }
+
+  div.flash-error, div.flash-notice, div.flash-success, div.user-stats {
+    border-radius: 8px;
+    box-shadow: none;
+  }
+  div#gravatar { box-shadow: none; border-color: #313244; }
+  hr { border: 0; }
+}

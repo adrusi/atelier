@@ -541,6 +541,8 @@ atelier daemon | native-host | mcp  internal entry points
 
 ## 17. Open questions
 
+- **Trying site settings without touching the user's.** Agent tabs share the user's profile, so an agent can't check a prerequisite's failure case or a site's other theme without changing the user's own setting. A throwaway context for that (a Firefox container seeded with the relevant cookies, or a private window) would close the gap; the trade-offs (which cookies, logged-in state) need thought.
+
 - **Shadow DOM.** Custom properties inherit into shadow roots, so token overrides reach most web components. But colours and shapes hard-coded inside a component (MDN's syntax highlighting and code editor) can't be reached by page CSS. Proposal: a style section that targets a named custom element's shadow root (e.g. `@shadow mdn-code-example { … }`), which the shim adds as an adopted stylesheet inside each open shadow root, found with a MutationObserver and `customElements.whenDefined`. Closed shadow roots stay out of reach.
 - **Frames.** Styles only go into top-level documents. Registering with `allFrames`, with sections matched against each frame's own URL as Stylus does, lets a style opt in to a frame's origin. Frames that show example output (MDN's live samples) generally shouldn't be restyled, so this must stay opt-in per matcher.
 - **CSS the browser rejects.** Lint can't know everything Firefox's CSS parser drops (an invalid `light-dark(inherit, …)` silently empties a rule). The shim could compare each rule's parsed declarations with its source and report dropped ones back as diagnostics.

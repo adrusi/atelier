@@ -1,0 +1,8 @@
+description = "NixOS Search"
+summary = "search.nixos.org: package, option and flake search, with expanded results. Retunes the site's own dark theme to the theme by overriding its CSS custom properties, plus condensed type, flat controls and Mocha syntax highlighting."
+
+[[prerequisites]]
+description = "The theme toggle in NixOS Search's header (top right) must be on Auto (the default) or Dark. The style only changes the site's dark theme while the desktop prefers dark; Light is left alone."
+# Matches when the site is in a mode this style restyles. Auto leaves no
+# data-theme attribute; Light sets data-theme="light".
+check = "html:not([data-theme=\"light\"])"

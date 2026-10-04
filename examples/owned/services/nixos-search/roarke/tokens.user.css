@@ -1,0 +1,62 @@
+/* ==UserStyle==
+@name           NixOS Search tokens (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    Retunes search.nixos.org's dark theme (its CSS custom properties) to Catppuccin Mocha
+==/UserStyle== */
+
+/* The site's dark theme is ~35 custom properties, declared on
+     :root[data-theme="dark"]                 (the Dark toggle)
+     :root:not([data-theme="light"])          (Auto, in @media (prefers-color-scheme: dark))
+   both 0,2,0, and nearly all of its dark rules go through them. The Auto
+   toggle leaves no data-theme attribute; Light sets data-theme="light".
+
+   These overrides apply while the desktop prefers dark and the site isn't
+   set to Light: html:root:not(...) is 0,2,1, so it wins over both of the
+   site's selectors regardless of order. Light is left alone. */
+
+@-moz-document domain("search.nixos.org") {
+  @media (prefers-color-scheme: dark) {
+    html:root:not([data-theme="light"]) {
+      color-scheme: dark;
+
+      /* Surfaces and text */
+      --background-color: #1e1e2e;
+      --headerbar-background-color: #181825;
+      --text-color: #cdd6f4;
+      --text-color-light: #9399b2;
+      --text-color-warning: #f9e2af;
+      --line-color: #45475a;
+      --hover-background: #313244;
+      --terminal-background: #11111b;
+      --terminal-color: #cdd6f4;
+
+      /* Accent. --light-blue is the site's dark-mode link and selection
+         colour; it also fills the "Community" source label. */
+      --link-color: #b4befe;
+      --search-result-title-color: #b4befe;
+      --light-blue: #b4befe;
+      --dark-blue: #b4befe;
+      --selected-item-background: #b4befe;
+      --selected-item-color: #1e1e2e;
+
+      /* Source labels on the options page: Experimental, External. */
+      --orange-75: #fab387;
+      --pink-75: #cba6f7;
+      --info-label-background: #89b4fa;
+
+      /* Buttons: the active channel and theme toggle are lavender. The site
+         aliases --badge-background to the active-hover colour; badges stay
+         surface-coloured. */
+      --button-background: #313244;
+      --button-hover-background: #45475a;
+      --button-active-background: #b4befe;
+      --button-active-hover-background: #b4befe;
+      --badge-background: #45475a;
+
+      /* Header tabs (Packages, Options, ...) */
+      --color-active-tab: #313244;
+      --color-active-hover-tab: #45475a;
+    }
+  }
+}

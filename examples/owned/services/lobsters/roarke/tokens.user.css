@@ -1,0 +1,101 @@
+/* ==UserStyle==
+@name           Lobsters tokens (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    Retunes Lobsters' colour tokens to Catppuccin Mocha
+==/UserStyle== */
+
+/* Lobsters keeps its palettes in four small sheets that /system-system.css
+   (or whichever appearance a logged-in user picked) @imports with media
+   conditions: light/dark x normal/high contrast. Each sets the same ~60
+   tokens on :root, and application.css derives the rest from them
+   (--color-fg-contrast-* is --base-fg at decreasing opacity). Nearly every
+   colour on the site goes through a token, so overriding them on html:root
+   (0,1,1, beating the site's 0,1,0) restyles all four variants at once.
+
+   The derived greys are overridden directly rather than through the
+   opacities, so they land on Mocha colours instead of translucent white. */
+
+@-moz-document domain("lobste.rs") {
+  html:root {
+    color-scheme: dark;
+
+    --base-bg: 30 30 46;            /* base */
+    --base-fg: 205 214 244;         /* text */
+    --base-light: 205 214 244;
+    --base-shadow: 17 17 27;        /* crust */
+    --opacity-fg: 100%;
+
+    /* Text, from body text down to metadata */
+    --color-fg: #cdd6f4;
+    --color-fg-contrast-13: #cdd6f4;
+    --color-fg-contrast-10: #cdd6f4;  /* tags, buttons, inputs */
+    --color-fg-contrast-7-5: #9399b2; /* comment bylines, caches, pagination */
+    --color-fg-contrast-6: #9399b2;   /* header nav, hats */
+    --color-fg-contrast-5: #6c7086;   /* disabled, placeholders, inactive users */
+    --color-fg-contrast-4-5: #9399b2; /* story bylines, domains, vote counts, footer */
+    --color-fg-shape: #45475a;        /* hr, comment thread lines */
+
+    /* Links and the accent. Lobsters' accent is its red (upvoted arrows,
+       the current page in the header); here it's lavender. */
+    --color-fg-link: #b4befe;
+    --color-fg-link-visited: #cba6f7;
+    --color-fg-accent: #b4befe;
+    --color-bg-accent: #b4befe;
+    --color-fg-author: #b4befe;       /* "authored by": the submitter wrote it */
+    --color-bg-target: #313244;       /* linked comment */
+
+    /* Status */
+    --color-fg-negative: #f38ba8;
+    --color-fg-affirmative: #a6e3a1;  /* new users, saved stories */
+    --color-lobsters-fg-has-suggestions: #fab387;
+
+    /* Surfaces and controls */
+    --color-bg-50: transparent;
+    --color-box-bg: #11111b;
+    --color-box-bg-shaded: #181825;
+    --color-box-border: #45475a;
+    --color-box-border-focus: #b4befe;
+    --color-button-bg: #313244;
+    --color-button-bg-shaded: #45475a;
+
+    --color-table-header-bg: #181825;
+    --color-table-header-border: #45475a;
+    --color-table-row-bg-even: #1e1e2e;
+    --color-table-row-bg-odd: #181825;
+    --color-table-row-border: #313244;
+
+    /* Tags keep Lobsters' categories (yellow topics, blue media, grey meta,
+       red for ask/show/announce/interview) as Mocha tints, with body text. */
+    --color-tag-bg: color-mix(in oklab, #f9e2af 22%, #1e1e2e);
+    --color-tag-border: color-mix(in oklab, #f9e2af 55%, #1e1e2e);
+    --color-tag-media-bg: color-mix(in oklab, #b4befe 22%, #1e1e2e);
+    --color-tag-media-border: color-mix(in oklab, #b4befe 55%, #1e1e2e);
+    --color-tag-meta-bg: #313244;
+    --color-tag-meta-border: #6c7086;
+    --color-lobsters-tag-special-bg: color-mix(in oklab, #f38ba8 22%, #1e1e2e);
+    --color-lobsters-tag-special-border: color-mix(in oklab, #f38ba8 55%, #1e1e2e);
+
+    /* Hats (the badges people wear on comments) */
+    --color-hat-crown-fill: #313244;
+    --color-hat-crown-stroke: #45475a;
+    --color-hat-brim-stroke: #45475a;
+    --color-lobsters-hat-sysop-crown-fill: color-mix(in oklab, #f38ba8 20%, #1e1e2e);
+    --color-lobsters-hat-sysop-brim-stroke: color-mix(in oklab, #f38ba8 40%, #1e1e2e);
+
+    --color-flash-bg-error: color-mix(in oklab, #f38ba8 22%, #1e1e2e);
+    --color-flash-bg-success: color-mix(in oklab, #a6e3a1 20%, #1e1e2e);
+    --color-flash-bg-notice: color-mix(in oklab, #b4befe 20%, #1e1e2e);
+
+    /* Flat: no shadows or highlights */
+    --color-light-25: transparent;
+    --color-shadow-80: transparent;
+    --color-shadow-25: #45475a;       /* flash and user-stats box borders */
+    --color-shadow-10: #45475a;
+    --color-fg-gradient-lit: transparent;
+    --color-fg-gradient-shadowed: transparent;
+
+    --color-mobile-story-comments-bubble-fill: #45475a;
+    --color-mobile-story-comments-bubble-fill-zero: #313244;
+  }
+}

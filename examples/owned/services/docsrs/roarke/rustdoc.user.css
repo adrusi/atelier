@@ -1,0 +1,208 @@
+/* ==UserStyle==
+@name           docs.rs rustdoc (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    Retunes rustdoc's Dark theme on docs.rs to Catppuccin Mocha by overriding its colour tokens
+==/UserStyle== */
+
+/* Rustdoc's themes are sets of custom properties on :root[data-theme="..."]
+   (light, dark, ayu), and its script picks one from the "rustdoc-theme" and
+   "rustdoc-use-system-theme" settings; by default it follows the system's
+   colour scheme, which gives "dark" here. Only Dark is restyled: Light and
+   Ayu are left as they are. html:root[data-theme="dark"] is 0,2,1 and beats
+   rustdoc's 0,2,0 whatever the load order.
+
+   docs.rs's own top bar on these pages has a separate token set; that's in
+   docsrs.user.css. */
+
+@-moz-document domain("docs.rs") {
+  html:root[data-theme="dark"] {
+    /* Surfaces */
+    --main-background-color: #1e1e2e;
+    --main-color: #cdd6f4;
+    --sidebar-background-color: #181825;
+    --sidebar-background-color-hover: #313244;
+    --sidebar-border-color: #45475a;
+    --sidebar-current-link-background-color: #313244;
+    --code-block-background-color: #11111b;
+    --codeblock-link-background: #313244;
+    --table-alt-row-background-color: #181825;
+    --src-sidebar-background-selected: #313244;
+    --src-sidebar-background-hover: #313244;
+    --stab-background-color: #313244;
+    --stab-code-color: #cdd6f4;
+    --search-error-code-background-color: #313244;
+
+    /* Borders */
+    --border-color: #45475a;
+    --headings-border-bottom-color: #45475a;
+    --search-result-border-color: #45475a;
+    --scrape-example-help-border-color: #6c7086;
+    --scrape-example-help-hover-border-color: #b4befe;
+    --sidebar-resizer-hover: #6c7086;
+    --sidebar-resizer-active: #b4befe;
+
+    /* Secondary text and icons */
+    --right-side-color: #9399b2;
+    --code-attribute-color: #9399b2;
+    --toggles-color: #9399b2;
+    --copy-path-button-color: #9399b2;
+    --code-example-button-color: #9399b2;
+    --code-example-button-hover-color: #cdd6f4;
+    --search-results-alias-color: #cdd6f4;
+    --search-results-grey-color: #9399b2;
+    --search-tab-title-count-color: #9399b2;
+    --scrape-example-help-color: #9399b2;
+    --scrape-example-help-hover-color: #cdd6f4;
+    --scrape-example-toggle-line-background: #6c7086;
+    --scrape-example-toggle-line-hover-background: #9399b2;
+    --scrape-example-code-wrapper-background-start: #1e1e2e;
+    --scrape-example-code-wrapper-background-end: #1e1e2e00;
+
+    /* Links. Rustdoc colours links to items by kind (types, traits,
+       functions, macros), in signatures, item lists and the sidebar. That's
+       information rather than decoration, so each kind keeps a colour of its
+       own, mapped to the nearest Mocha one; everything else (prose links,
+       modules, the sidebar) is the accent. */
+    --link-color: #b4befe;
+    --sidebar-link-color: #b4befe;
+    --mod-link-color: #b4befe;
+    --keyword-link-color: #b4befe;
+    --attribute-link-color: #b4befe;
+    --assoc-item-link-color: #b4befe;
+    --type-link-color: #94e2d5;
+    --trait-link-color: #cba6f7;
+    --function-link-color: #a6e3a1;
+    --macro-link-color: #a6e3a1;
+
+    /* Controls */
+    --button-background-color: #313244;
+    --settings-input-color: #b4befe;
+    --settings-input-border-color: #6c7086;
+    --settings-button-color: #cdd6f4;
+    --settings-button-border-focus: #b4befe;
+    --search-input-focused-border-color: #b4befe;
+    --crate-search-hover-border: #b4befe;
+    --search-color: #cdd6f4;
+    --search-result-link-focus-background-color: #313244;
+    --search-tab-button-not-selected-border-top-color: #181825;
+    --search-tab-button-not-selected-background: #181825;
+    --search-tab-button-selected-border-top-color: #b4befe;
+    --search-tab-button-selected-background: #1e1e2e;
+    --kbd-color: #cdd6f4;
+    --kbd-background: #313244;
+    --kbd-box-shadow-color: #45475a;
+
+    /* "You are here": the item an anchor points at. */
+    --target-background-color: color-mix(in srgb, #b4befe 12%, #1e1e2e);
+    --target-border-color: #b4befe;
+
+    /* Status: compile_fail / should_panic examples and ignored ones. */
+    --codeblock-error-color: rgb(243 139 168 / 0.5);
+    --codeblock-error-hover-color: #f38ba8;
+    --codeblock-ignore-color: rgb(249 226 175 / 0.6);
+    --codeblock-ignore-hover-color: #f9e2af;
+    --warning-border-color: #f9e2af;
+
+    /* "Notable traits" badges */
+    --notable-badge-pink: #f5c2e7;
+    --notable-badge-red: #f38ba8;
+    --notable-badge-orange: #fab387;
+    --notable-badge-green: #a6e3a1;
+    --notable-badge-blue: #89b4fa;
+    --notable-badge-violet: #cba6f7;
+
+    /* Scrollbars */
+    --scrollbar-track-background-color: #45475a;
+    --scrollbar-thumb-background-color: #6c7086;
+    --scrollbar-color: #6c7086 #45475a;
+
+    /* Syntax highlighting, after Catppuccin's own mapping. */
+    --code-highlight-kw-color: #cba6f7;
+    --code-highlight-kw-2-color: #cba6f7;
+    --code-highlight-lifetime-color: #f2cdcd;
+    --code-highlight-prelude-color: #f9e2af;
+    --code-highlight-prelude-val-color: #fab387;
+    --code-highlight-number-color: #fab387;
+    --code-highlight-string-color: #a6e3a1;
+    --code-highlight-literal-color: #fab387;
+    --code-highlight-attribute-color: #f9e2af;
+    --code-highlight-self-color: #f38ba8;
+    --code-highlight-macro-color: #94e2d5;
+    --code-highlight-question-mark-color: #89dceb;
+    --code-highlight-comment-color: #9399b2;
+    --code-highlight-doc-comment-color: #a6adc8;
+    --src-line-numbers-span-color: #6c7086;
+    --src-line-number-highlighted-background-color: #313244;
+    --scrape-example-code-line-highlight: #313244;
+    --scrape-example-code-line-highlight-focus: #45475a;
+
+    /* Site imagery: rustdoc's icons (toolbar, toggle arrows, copy-path, the
+       crate filter's arrow) are black SVGs lightened with invert() filters,
+       which come out neutral grey or pure white. These chains turn black
+       into fg-dim (#9399b2), fg (#cdd6f4) and the accent (#b4befe), each to
+       within 2/255 per channel (measured with a canvas filter). */
+    --toggle-filter: invert(57%) sepia(30%) saturate(200%) hue-rotate(200deg);
+    --settings-menu-filter: invert(57%) sepia(30%) saturate(200%) hue-rotate(200deg);
+    --settings-menu-hover-filter: invert(82%) sepia(10%) saturate(500%) hue-rotate(195deg);
+    --copy-path-img-filter: invert(57%) sepia(30%) saturate(200%) hue-rotate(200deg);
+    --copy-path-img-hover-filter: invert(82%) sepia(10%) saturate(500%) hue-rotate(195deg);
+    --mobile-sidebar-menu-filter: invert(82%) sepia(10%) saturate(500%) hue-rotate(195deg);
+    --crate-search-div-filter: invert(57%) sepia(30%) saturate(200%) hue-rotate(200deg);
+    --crate-search-div-hover-filter: invert(68%) sepia(50%) saturate(300%) hue-rotate(195deg);
+    --rust-logo-filter: drop-shadow(1px 0 0 #cdd6f4) drop-shadow(0 1px 0 #cdd6f4) drop-shadow(-1px 0 0 #cdd6f4) drop-shadow(0 -1px 0 #cdd6f4);
+
+    /* Shape: the theme's 8px on containers, 4px on controls. */
+    --code-block-border-radius: 8px;
+    --toolbar-button-border-radius: 4px;
+    --button-border-radius: 4px;
+
+    /* Type. Docs prose keeps rustdoc's serif (THEME.md allows it for
+       long-form reading); code is Noto Sans Mono. Rustdoc's own "Use
+       sans-serif fonts" setting is honoured below. */
+    --font-family-code: "Noto Sans Mono", monospace;
+  }
+
+  /* Rustdoc sets body's type with the `font` shorthand, which resets
+     font-stretch, so condensed is set here rather than on the root. */
+  html:root[data-theme="dark"] body {
+    font-stretch: condensed;
+  }
+
+  html:root[data-theme="dark"].sans-serif-fonts {
+    --font-family: "Noto Sans", sans-serif;
+    --font-family-code: "Noto Sans Mono", monospace;
+  }
+
+  /* Rustdoc's UI text (headings, sidebar, toolbar, item names) names Fira
+     Sans in one rule rather than a token; this is that rule's selector list. */
+  html:root[data-theme="dark"] :is(#crate-search, h1, h2, h3, h4, h5, h6, .sidebar, rustdoc-topbar, .search-input, .search-results .result-name, .item-table dt > a, .out-of-band, .sub-heading, span.since, a.src, rustdoc-toolbar, summary.hideme, .scraped-example-list, .rustdoc-breadcrumbs, .search-switcher, ul.all-items, .deprecated-count) {
+    font-family: "Noto Sans", sans-serif;
+  }
+
+  /* Popovers (settings, help, notable-trait tooltips) are menus, so they're
+     raised. Rustdoc paints the popover, its arrow and the settings radios'
+     inner ring from --main-background-color, so redefining it here moves
+     all three together. */
+  html:root[data-theme="dark"] .popover {
+    --main-background-color: #313244;
+    border-radius: 8px;
+  }
+
+  /* Badges ("Available on crate feature ...", "Deprecated"): 4px. */
+  html:root[data-theme="dark"] .stab {
+    border-radius: 4px;
+  }
+
+  /* The search field shares --button-background-color with buttons; the
+     theme puts inputs on the deepest surface. */
+  html:root[data-theme="dark"] .search-input {
+    background-color: #11111b;
+    border-radius: 4px;
+  }
+
+  html:root[data-theme="dark"] ::selection {
+    background-color: #353749;
+    color: #cdd6f4;
+  }
+}

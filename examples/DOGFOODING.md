@@ -186,3 +186,66 @@ condensed widths). One trap on the way: fonts in a directory under `$HOME`
 that only fontconfig knew about were invisible to Firefox. Its content
 sandbox only lets pages read fonts from certain directories, which made
 an early test look like a failure.
+
+## First MCP-only agents: lobste.rs, docs.rs, search.nixos.org (2026-10-03)
+
+Three agents, each a headless Claude Code session with `atelier mcp` and
+only file tools (no shell), styled a site each from a brief written along
+the lines of AGENT-EXPERIENCE.md. All three produced styles the owner can
+judge from `previews/`, and all three overrode design tokens: even
+lobste.rs, which looked hand-written, turned out to have about 60 colour
+tokens. Roughly 6, 7 and 19 minutes of model time.
+
+**Fixed (rounds two and three of the tools):**
+
+- `css_tokens` didn't follow `@import`. Lobste.rs keeps every real colour
+  value in imported sheets, so the tool reported only the derived tokens.
+  An agent that trusted it would have restyled components instead.
+- `css_tokens` didn't say where tokens are used; and on docs.rs, whose
+  tokens are defined once per theme, its output was 108k characters. It's
+  now compact, with usage counts and a `scope` filter.
+- `matched_rules` missed properties set through shorthands (`font:`
+  resetting `font-stretch`), printed `var()` shorthands as empty longhands,
+  and said nothing when a value was inherited.
+- `eval` leaked `const` between calls (all three agents hit this).
+- `styles_status` could report a file as not yet loaded right after it
+  was written (all three again). It now waits for the daemon to settle.
+- `force_state` didn't pick up rules saved after it was called, and
+  couldn't trigger JavaScript hover handlers.
+- Screenshots caught images before they decoded, couldn't scale up small
+  elements, echoed the full image back when saving a preview, and
+  repeated the background-tab caveat on every call.
+- JavaScript apps needed `waitFor` on navigation, and search suggestions
+  needed a way to type (`type_text`).
+- `contrast_scan` flagged disabled controls, which WCAG exempts.
+
+**Open:**
+
+- **Agents can't safely try other site settings.** Checking a
+  prerequisite's failure case, or a site's Light theme, means changing a
+  site setting, and agent tabs share the user's profile, so that would
+  change the user's own setting. A throwaway context (a container with a
+  copy of the relevant cookies, or a private window) would let agents test
+  these. Recorded in SPEC §17.
+- **Old rustdoc builds** (before about 2023) each have their own hard-coded
+  dark stylesheet, so docs.rs crates whose last release is old stay
+  unstyled. That's a style task in its own right.
+
+**Theme questions the agents raised, for the owner:**
+
+- **Titles that are links** (Lobsters, HN): should they take the accent?
+  Lobsters went lavender, following the site; HN kept text colour. On link
+  lists that's a lot of lavender.
+- **Categorical colours** (Lobsters' tag categories, rustdoc's item kinds:
+  types teal, traits mauve, functions green): meaningful enough to keep,
+  or should they collapse toward lavender?
+- **Syntax highlighting** isn't covered by the theme. The agents used
+  Catppuccin's standard mapping, which brings in teal, yellow, rosewater,
+  and peach for numbers, even though the theme reserves peach for
+  attention.
+- **Serif in long-form text** is something the theme "may" keep. Prefer
+  it, or only tolerate it?
+- **Muted text for de-emphasised content:** `#6c7086` on base is 3.4:1.
+  Fine for "comment removed" and similar, or only for disabled UI?
+- **"No pure black or white anywhere":** does it cover tiny things like a
+  checkbox tick?

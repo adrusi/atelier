@@ -1,0 +1,129 @@
+/* ==UserStyle==
+@name           NixOS Search chrome (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    Type, controls and code blocks on search.nixos.org, on top of the token overrides
+==/UserStyle== */
+
+/* Scoped like tokens.user.css: the desktop prefers dark and the site isn't
+   set to Light. The site's own dark rules are
+   :root:not([data-theme="light"]) .btn.btn (0,4,0) and the like; the
+   html:root:not(...) prefix here adds 0,1,1 to each. */
+
+@-moz-document domain("search.nixos.org") {
+  @media (prefers-color-scheme: dark) {
+    /* Type */
+    html:root:not([data-theme="light"]) body,
+    html:root:not([data-theme="light"]) :is(input, button, select, textarea, h1, h2, h3, h4, h5, h6, legend) {
+      font-family: "Noto Sans", sans-serif;
+      font-stretch: condensed;
+    }
+    html:root:not([data-theme="light"]) :is(code, pre, kbd, samp) {
+      font-family: "Noto Sans Mono", monospace;
+      font-stretch: condensed;
+    }
+    html:root:not([data-theme="light"]) ::selection {
+      background: #353749;
+      color: #cdd6f4;
+    }
+
+    /* Header: flat, a hairline instead of Bootstrap's shadow. */
+    html:root:not([data-theme="light"]) .navbar > .navbar-inner {
+      box-shadow: none;
+      border-bottom: 1px solid #313244;
+    }
+
+    /* Active channel and theme toggle sit on lavender: dark text. */
+    html:root:not([data-theme="light"]) .btn.btn.active,
+    html:root:not([data-theme="light"]) .btn.btn.active:hover {
+      color: #1e1e2e;
+    }
+
+    /* Search field: an input, so crust, with a 1px border that turns
+       lavender on focus. */
+    html:root:not([data-theme="light"]) .search-input-top input {
+      background: #11111b;
+      border: 1px solid #45475a;
+      border-radius: 4px;
+    }
+    html:root:not([data-theme="light"]) .search-input-top input:focus {
+      border-color: #b4befe;
+    }
+    html:root:not([data-theme="light"]) .search-input-top .search-input-submit {
+      border: 1px solid #45475a;
+      border-radius: 4px;
+    }
+    html:root:not([data-theme="light"]) .typeahead-suggestions {
+      background: #313244;
+      border: 1px solid #45475a;
+      border-radius: 8px;
+      box-shadow: none;
+    }
+
+    /* The site removes every focus outline; put a lavender one back for
+       keyboard focus. */
+    html:root:not([data-theme="light"]) :focus-visible {
+      outline: 2px solid #b4befe !important;
+      outline-offset: -2px !important;
+    }
+    html:root:not([data-theme="light"]) .search-input-top input:focus-visible {
+      outline: none !important;
+    }
+
+    /* Sidebar: recessed panels. */
+    html:root:not([data-theme="light"]) .search-sidebar > fieldset {
+      background: #181825;
+      border-color: #313244;
+      border-radius: 8px;
+    }
+    html:root:not([data-theme="light"]) .search-sidebar > fieldset > legend {
+      background: #181825;
+      border-radius: 4px;
+      padding: 0 4px;
+    }
+
+    /* Count badges and source labels: no white, no text shadow. */
+    html:root:not([data-theme="light"]) .badge {
+      color: #cdd6f4;
+      text-shadow: none;
+    }
+    html:root:not([data-theme="light"]) .label {
+      color: #1e1e2e;
+      text-shadow: none;
+    }
+
+    /* Expanded package. The site's selectors here run to 0,10,3; #content
+       (the page's main column) outranks them without repeating the chain.
+       The current Usage tab gets a lavender top edge; the main program's
+       chip keeps its outline, in muted rather than text colour. */
+    html:root:not([data-theme="light"]) #content .usage-radios .radio-tabs-list label.active {
+      border-top: 2px solid #b4befe;
+    }
+    html:root:not([data-theme="light"]) #content .package-programs code.main-program {
+      border-color: #6c7086;
+    }
+
+    /* Code: chips are small controls, blocks are containers. */
+    html:root:not([data-theme="light"]) code {
+      border-radius: 4px;
+    }
+    html:root:not([data-theme="light"]) pre {
+      border-radius: 8px;
+    }
+
+    /* Syntax highlighting (elm-syntax-highlight's One Dark, injected as a
+       <style>) in Mocha's syntax colours. */
+    html:root:not([data-theme="light"]) .elmsh { color: #cdd6f4; background: #11111b; }
+    html:root:not([data-theme="light"]) .elmsh-hl { background: #313244; }
+    html:root:not([data-theme="light"]) .elmsh-add { background: #a6e3a133; }
+    html:root:not([data-theme="light"]) .elmsh-del { background: #f38ba833; }
+    html:root:not([data-theme="light"]) .elmsh-comm { color: #9399b2; }
+    html:root:not([data-theme="light"]) .elmsh1 { color: #fab387; }
+    html:root:not([data-theme="light"]) .elmsh2 { color: #a6e3a1; }
+    html:root:not([data-theme="light"]) .elmsh3 { color: #cba6f7; }
+    html:root:not([data-theme="light"]) .elmsh4 { color: #cba6f7; }
+    html:root:not([data-theme="light"]) .elmsh5 { color: #89b4fa; }
+    html:root:not([data-theme="light"]) .elmsh6 { color: #fab387; }
+    html:root:not([data-theme="light"]) .elmsh7 { color: #cdd6f4; }
+  }
+}
