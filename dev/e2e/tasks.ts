@@ -118,6 +118,9 @@ try {
     await tool("tab_close", { tab: users });
     const status = await json("styles_status", { tab });
     assert.equal(status.tab.styleFiles, tree);
+    // Without a tab, it reports the held task's tree, and says so.
+    const untabbed = await json("styles_status");
+    assert.match(untabbed.showing, /^task t\S+'s tree$/);
   });
 
   await check("previews are saved into the task's tree", async () => {

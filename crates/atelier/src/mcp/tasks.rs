@@ -187,6 +187,18 @@ impl Server {
         for id in self.held.keys().cloned().collect::<Vec<_>>() {
             if let Err(e) = self.daemon_call(tm::HEARTBEAT, json!({ "id": id, "session": session }))
             {
+                // Only let go if the task really isn't ours any more, not
+                // because the daemon was briefly out of reach.
+                let lost = match self.daemon_call(tm::GET, json!({ "id": id })) {
+                    Ok(t) => parse::<Task>(t).is_ok_and(|t| {
+                        t.state != TaskState::Queued
+                            && t.lease.as_ref().is_none_or(|l| l.session != session)
+                    }),
+                    Err(_) => false,
+                };
+                if !lost {
+                    continue;
+                }
                 self.held.remove(&id);
                 self.notices.push(format!(
                     "You no longer hold task {id}: {e}. Its lease ran out while you weren't using atelier's \
@@ -437,6 +449,7 @@ fn one_line(t: &Task) -> String {
 fn brief(t: &Task, changes: &[atelier_proto::FileChange]) -> String {
     let theme = t.theme.as_deref().unwrap_or("<theme>");
     let tree = t.tree.as_deref().unwrap_or("?");
+    let exists = |rel: &str| std::path::Path::new(tree).join(rel).exists();
     let mut out = format!("# Task {}: {}\n\n", t.id, kind_name(t.kind));
     let _ = writeln!(out, "The user asked: {}", t.brief.description);
     if let Some(origin) = &t.brief.origin {
@@ -464,22 +477,50 @@ fn brief(t: &Task, changes: &[atelier_proto::FileChange]) -> String {
         "\n## Where to work\n\nThe task's tree is {tree}: a copy of the owned directory for this task alone. \
          Edit files there with your file tools. Tabs you open with tab_open show the tree's styles and pick \
          up each save within a second; the user's own tabs don't see any of it until you submit. \
-         screenshot's saveAs writes into the tree too.\n\nWorth reading first, in the tree:\n\
-         - themes/{theme}/THEME.md: what the user wants things to look like, in their words.\n"
+         screenshot's saveAs writes into the tree too.\n\nWorth reading first, in the tree:\n"
     );
+    let theme_md = format!("themes/{theme}/THEME.md");
+    if exists(&theme_md) {
+        let _ = writeln!(
+            out,
+            "- {theme_md}: what the user wants things to look like, in their words."
+        );
+    } else {
+        let _ = writeln!(
+            out,
+            "- There's no {theme_md}, so the theme isn't written down. Ask the user what they want, or work \
+             from the existing styles and say what you inferred."
+        );
+    }
     match &t.service {
         Some(s) => {
-            let _ = writeln!(
-                out,
-                "- services/{s}/: its notes.md (decisions made before, and why), service.toml, and the \
-                 existing styles in {theme}/."
-            );
+            let present: Vec<String> = [
+                format!("services/{s}/notes.md"),
+                format!("services/{s}/service.toml"),
+                format!("services/{s}/{theme}/"),
+            ]
+            .into_iter()
+            .filter(|p| exists(p))
+            .collect();
+            if present.is_empty() {
+                let _ = writeln!(
+                    out,
+                    "- services/{s}/ has no files yet; one or two other services are the best guide to the \
+                     format."
+                );
+            } else {
+                let _ = writeln!(
+                    out,
+                    "- {} (the only files there so far).",
+                    present.join(", ")
+                );
+            }
         }
         None => {
             let _ = writeln!(
                 out,
-                "- One or two existing services under services/, for the format (service.toml, \
-                 {theme}/*.user.css, {theme}/previews/) and the level of care the user is used to."
+                "- One or two existing services under services/, for the format and the level of care the user \
+                 is used to."
             );
         }
     }
@@ -504,14 +545,30 @@ fn brief(t: &Task, changes: &[atelier_proto::FileChange]) -> String {
     }
     let _ = write!(
         out,
-        "\n## Finishing\n\n\
-         - Leave 2–3 previews of representative pages in services/<service>/{theme}/previews/ \
-         (screenshot with saveAs, as .jpg), so the user can see the style at a glance.\n\
-         - Record lasting decisions, and the reasons for them, in services/<service>/notes.md, for whoever \
-         works on this service next.\n\
-         - Then task_submit with a summary, and any assumptions.\n\n\
-         Your claim lasts about 10 minutes and renews whenever you use an atelier tool. If you'll be away \
-         from them for longer (a long stretch of editing), task_info renews it too."
+        "\n## The format\n\n\
+         - services/<service>/{theme}/*.user.css: UserCSS, i.e. a /* ==UserStyle== */ metadata comment \
+         (@name, @namespace, @version, @description), then CSS in @-moz-document sections whose matchers are \
+         url(), url-prefix(), domain() and regexp() (a JavaScript regular expression for the whole URL). Every \
+         file in the folder is loaded, in name order. It's plain CSS as Firefox reads it, so nesting works; there's \
+         no preprocessor. Remote url()s are refused, except Google Fonts, since a stylesheet can leak what's on \
+         the page through the URLs it loads.\n\
+         - services/<service>/service.toml: `description` (the site, in a few words), `summary` (what the \
+         styles cover, for the user), and `[[prerequisites]]` for site settings a style depends on: \
+         `description` (what the user should set, in their terms) and `check` (a CSS selector that matches \
+         something on the page only when the setting is on). The check runs on each page the style applies to, \
+         once it has loaded; if it matches nothing, the toolbar button shows a badge and the description.\n\
+         - services/<service>/notes.md: decisions and their reasons, for whoever works on this service next, \
+         independent of theme.\n\
+         - services/<service>/{theme}/previews/*.jpg: 2–3 screenshots of representative pages, at viewport \
+         size and scale 1 (screenshot with saveAs and a .jpg name), named for what they show \
+         (repo-home.jpg). They let the user judge the style without visiting the site.\n\
+         \n## Finishing\n\n\
+         Record lasting decisions in notes.md, leave previews, then task_submit with a summary, and any \
+         assumptions.\n\n\
+         Your claim lasts about 10 minutes and renews whenever you use an atelier tool; task_info renews it \
+         too, if you'll be away from them for a while. If it does run out and someone else claims the task, \
+         they carry on in this same tree, so further edits would mix with their work. Your next atelier tool \
+         call tells you if that has happened."
     );
     out
 }

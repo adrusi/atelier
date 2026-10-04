@@ -161,9 +161,19 @@ export function tokens(filter: string | null, limit: number, usage: boolean, sco
     if (i < 0) i = sheets.push(name) - 1;
     return i;
   };
+  // Name families with counts, so a huge design system can be narrowed with `filter`.
+  const families = new Map<string, number>();
+  for (const n of names) {
+    const f = n.split("-").slice(0, 3).join("-");
+    families.set(f, (families.get(f) ?? 0) + 1);
+  }
   return {
     total: names.length,
     shown: Math.min(limit, names.length),
+    families: [...families.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 30)
+      .map(([f, n]) => `${f}-* ${n}`),
     tokens: names.slice(0, limit).map((name) => {
       const ds = defs.get(name)!;
       const used = uses.get(name) ?? { count: 0, examples: [] };

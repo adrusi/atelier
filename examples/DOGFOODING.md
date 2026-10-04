@@ -249,3 +249,53 @@ tokens. Roughly 6, 7 and 19 minutes of model time.
   Fine for "comment removed" and similar, or only for disabled UI?
 - **"No pure black or white anywhere":** does it cover tiny things like a
   checkbox tick?
+
+## First run through tasks: codeberg.org, and a Lobsters revise (2026-10-04)
+
+One headless Claude Code session, started with the `work` prompt, with
+`atelier mcp` and only file tools, worked through a queue of two tasks in
+a dev instance with a copy of this owned directory: a `create` for
+codeberg.org, and a made-up `revise` for Lobsters ("the tag pills feel a
+bit loud next to the story titles"). Both landed, in about 15 minutes. The
+Codeberg style is in `services/codeberg/`. The Lobsters revise was only a
+test request, so it stays out of this directory. The agent found Forgejo's
+token layers on its own, hid front-page artwork that showed as dark
+rectangles, and left per-repository label colours alone. It recorded both
+calls in `notes.md` and in its report.
+
+The agent said the workflow was clear. It knew its tabs showed the task's
+tree (`tab_open` and `styles_status` said so), and it didn't need to think
+about the lease. In a follow-up interview, it raised:
+
+**Fixed:**
+
+- **Clicking in agent tabs acts as the user.** The agent dismissed
+  Codeberg's terms-of-use banner, which in a real profile would have
+  dismissed it for the user too, and nothing had said so. The server's
+  instructions and `eval` now say plainly that clicks and submits act as
+  the user, and what's fine (looking, opening menus, typing into a search
+  box) and what isn't (dismissing, starring, following, posting, settings).
+- `css_tokens` returned 95k characters on Codeberg even without usage.
+  Output is now capped (`maxChars`, default 30000), with `families` (token
+  counts by name prefix) to choose a filter from.
+- `styles_status` without a tab reported the owned directory, so the
+  agent's new service seemed missing. It now reports the held task's tree,
+  and `showing` says which source it's describing.
+- The brief told it to read a `notes.md` that didn't exist. It now lists
+  only the files that are there, and has a short reference for the format
+  (`service.toml`, what a prerequisite's `check` does, the matchers, what a
+  preview should be), which the agent had pieced together from examples.
+- What happens to edits if a lease lapses and someone else claims the task
+  is now explained in the brief.
+
+**Open:**
+
+- **A way to ask the user that's attached to the task** (the agent's top
+  request): a question with a screenshot, shown in the browser, answered
+  asynchronously. As things stand, every question becomes an assumption.
+  This is `task_block` and the inbox (SPEC §8.3, §9.4), phase 3.
+- **Whether the user is present.** The `work` prompt says the user may well
+  be there, and this run's system prompt said it was unattended; the agent
+  resolved that towards not asking. Sessions started by a spawn command
+  should say which they are.
+- **Enforced scopes** for side effects (SPEC §10.2), beyond describing them.

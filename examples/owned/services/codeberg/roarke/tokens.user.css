@@ -1,0 +1,335 @@
+/* ==UserStyle==
+@name           Codeberg tokens (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    Retunes Codeberg's (Forgejo's) dark theme tokens to Catppuccin Mocha
+==/UserStyle== */
+
+/* Codeberg runs Forgejo. Its colours are custom properties on :root,
+   declared by theme-<name>.css inside @layer forgejo-theme (the dark
+   values under @media (prefers-color-scheme: dark) for the "auto" themes).
+   Codeberg's own theme adds @layer codeberg-theme, which re-declares the
+   nav tokens on #navbar (its bright blue bar), plus one unlayered :root
+   block (0,1,0) setting the blue --color-primary scale. html:root is 0,1,1
+   and unlayered, so it beats all of them.
+
+   Scoped to the dark and auto themes (data-theme="codeberg-auto" is what
+   logged-out Codeberg uses) while the desktop prefers dark. The token
+   names are Forgejo's, so forgejo-dark/auto and gitea-dark/auto are
+   covered too; light themes are left alone.
+
+   Forgejo's --color-secondary family is mostly used for borders and
+   dividers, so it maps to the border colours rather than a surface. */
+
+@-moz-document domain("codeberg.org") {
+  @media (prefers-color-scheme: dark) {
+    html:root:is([data-theme$="-auto"], [data-theme$="-dark"]) {
+      color-scheme: dark;
+      accent-color: #b4befe;
+
+      /* Forgejo's grey ramp; a few rules use it directly */
+      --steel-900: #11111b;
+      --steel-850: #181825;
+      --steel-800: #1e1e2e;
+      --steel-750: #1e1e2e;
+      --steel-700: #313244;
+      --steel-650: #313244;
+      --steel-600: #45475a;
+      --steel-550: #45475a;
+      --steel-500: #585b70;
+      --steel-450: #6c7086;
+      --steel-400: #7f849c;
+      --steel-350: #9399b2;
+      --steel-300: #9399b2;
+      --steel-250: #a6adc8;
+      --steel-200: #bac2de;
+      --steel-150: #bac2de;
+      --steel-100: #cdd6f4;
+
+      /* Surfaces */
+      --color-body: #1e1e2e;
+      --color-box-header: #181825;
+      --color-box-body: #1e1e2e;
+      --color-box-body-highlight: #313244;
+      --color-header-wrapper: #181825;
+      --color-header-wrapper-transparent: #18182500;
+      --color-footer: #181825;
+      --color-nav-bg: #181825;
+      --color-nav-hover-bg: #313244;
+      --color-secondary-nav-bg: #1e1e2e;
+      --color-hover: #313244;
+      --color-active: #313244;
+      --color-menu: #313244;
+      --color-card: #181825;
+      --fancy-card-bg: #181825;
+      --fancy-card-border: #45475a;
+      --color-secondary-bg: #313244;
+      --color-button: #313244;
+      --color-project-board-bg: #181825;
+      --color-editor-line-highlight: #313244;
+      --color-expand-button: #313244;
+      --color-timeline: #45475a;
+      --color-reaction-bg: #313244;
+      --color-reaction-active-bg: #b4befe33;
+      --color-reaction-hover-bg: #b4befe4d;
+      --color-overlay-backdrop: #11111bc0;
+      --color-shadow: #0000;
+      --color-light: #11111b40;
+      --color-light-border: #cdd6f41f;
+      --color-markup-table-row: #cdd6f406;
+      --color-tooltip-bg: #45475a;
+      --color-tooltip-text: #cdd6f4;
+      --color-selection-bg: #353749;
+      --color-selection-fg: #cdd6f4;
+
+      /* Code and inputs are recessed (crust) */
+      --color-code-bg: #11111b;
+      --color-markup-code-block: #11111b;
+      --color-markup-code-inline: #11111b;
+      --color-input-background: #11111b;
+      --color-input-toggle-background: #313244;
+      --color-input-text: #cdd6f4;
+      --color-input-border: #45475a;
+      --color-input-border-hover: #6c7086;
+      --color-caret: #cdd6f4;
+      --color-placeholder-text: #6c7086;
+
+      /* Text. Forgejo's "dark" text is its strongest (white in the dark
+         theme); nothing is pure white here. */
+      --color-text: #cdd6f4;
+      --color-text-dark: #cdd6f4;
+      --color-text-focus: #cdd6f4;
+      --color-text-light: #bac2de;
+      --color-text-light-1: #bac2de;
+      --color-text-light-2: #a6adc8;
+      --color-text-light-3: #9399b2;
+      --color-label-text: #cdd6f4;
+      --color-label-bg: #313244;
+      --color-label-hover-bg: #45475a;
+      --color-label-active-bg: #585b70;
+      --color-label-bg-alt: #45475a;
+      --color-white: #cdd6f4;
+      --color-pure-black: #11111b;
+      --color-black: #11111b;
+      --color-black-light: #181825;
+      --color-black-dark-1: #11111b;
+      --color-black-dark-2: #11111b;
+
+      /* Borders */
+      --color-secondary: #45475a;
+      --color-secondary-dark-1: #585b70;
+      --color-secondary-dark-2: #6c7086;
+      --color-secondary-dark-3: #7f849c;
+      --color-secondary-dark-4: #9399b2;
+      --color-secondary-dark-5: #9399b2;
+      --color-secondary-dark-6: #a6adc8;
+      --color-secondary-dark-7: #a6adc8;
+      --color-secondary-dark-8: #bac2de;
+      --color-secondary-dark-9: #bac2de;
+      --color-secondary-dark-10: #cdd6f4;
+      --color-secondary-dark-11: #cdd6f4;
+      --color-secondary-dark-12: #cdd6f4;
+      --color-secondary-dark-13: #cdd6f4;
+      --color-secondary-light-1: #45475a;
+      --color-secondary-light-2: #313244;
+      --color-secondary-light-3: #181825;
+      --color-secondary-light-4: #1e1e2e;
+      --color-secondary-hover: #585b70;
+      --color-secondary-active: #45475a;
+      --color-secondary-alpha-10: #45475a19;
+      --color-secondary-alpha-20: #45475a33;
+      --color-secondary-alpha-30: #45475a4b;
+      --color-secondary-alpha-40: #45475a66;
+      --color-secondary-alpha-50: #45475a80;
+      --color-secondary-alpha-60: #45475a99;
+      --color-secondary-alpha-70: #45475ab3;
+      --color-secondary-alpha-80: #45475acc;
+      --color-secondary-alpha-90: #45475ae1;
+
+      /* Primary: Codeberg's blue becomes the accent, lavender. In the dark
+         theme the "dark-N" steps are lighter and the "light-N" ones darker;
+         primary-light-3 is a label background, so it stays light enough
+         for dark text. */
+      --color-primary: #b4befe;
+      --color-primary-contrast: #1e1e2e;
+      --color-primary-dark-1: #c3cbfe;
+      --color-primary-dark-2: #c3cbfe;
+      --color-primary-dark-3: #d2d8fe;
+      --color-primary-dark-4: #d2d8fe;
+      --color-primary-dark-5: #e1e5ff;
+      --color-primary-dark-6: #e1e5ff;
+      --color-primary-dark-7: #e1e5ff;
+      --color-primary-light-1: #a6b0f0;
+      --color-primary-light-2: #98a1e0;
+      --color-primary-light-3: #8a92cf;
+      --color-primary-light-4: #6f75a8;
+      --color-primary-light-5: #575b84;
+      --color-primary-light-6: #474a6c;
+      --color-primary-light-7: #3a3c57;
+      --color-primary-hover: #c6cdfe;
+      --color-primary-active: #c6cdfe;
+      --color-primary-alpha-10: #b4befe1a;
+      --color-primary-alpha-20: #b4befe33;
+      --color-primary-alpha-30: #b4befe4d;
+      --color-primary-alpha-40: #b4befe66;
+      --color-primary-alpha-50: #b4befe80;
+      --color-primary-alpha-60: #b4befe99;
+      --color-primary-alpha-70: #b4befeb3;
+      --color-primary-alpha-80: #b4befecc;
+      --color-primary-alpha-90: #b4befee6;
+      --color-accent: #b4befe;
+      --color-small-accent: #b4befe;
+      --color-highlight-fg: #b4befe;
+      --color-highlight-bg: #b4befe33;
+
+      /* Named colours: labels, status, the language bar */
+      --color-red: #f38ba8;
+      --color-orange: #fab387;
+      --color-yellow: #f9e2af;
+      --color-olive: #a6e3a1;
+      --color-green: #a6e3a1;
+      --color-teal: #94e2d5;
+      --color-blue: #89b4fa;
+      --color-violet: #cba6f7;
+      --color-purple: #cba6f7;
+      --color-pink: #f5c2e7;
+      --color-brown: #f2cdcd;
+      --color-grey: #6c7086;
+      --color-gold: #f9e2af;
+      --color-red-light: #f38ba8;
+      --color-orange-light: #fab387;
+      --color-yellow-light: #f9e2af;
+      --color-olive-light: #a6e3a1;
+      --color-green-light: #a6e3a1;
+      --color-teal-light: #94e2d5;
+      --color-blue-light: #89b4fa;
+      --color-violet-light: #cba6f7;
+      --color-purple-light: #cba6f7;
+      --color-pink-light: #f5c2e7;
+      --color-brown-light: #f2cdcd;
+      --color-grey-light: #9399b2;
+      --color-red-dark-1: #f17497;
+      --color-orange-dark-1: #f8a06b;
+      --color-yellow-dark-1: #f7d794;
+      --color-olive-dark-1: #91db8b;
+      --color-green-dark-1: #91db8b;
+      --color-teal-dark-1: #7edbcb;
+      --color-blue-dark-1: #72a4f9;
+      --color-violet-dark-1: #bd8ef5;
+      --color-purple-dark-1: #bd8ef5;
+      --color-pink-dark-1: #f1ade0;
+      --color-brown-dark-1: #edb9b9;
+      --color-red-dark-2: #f17497;
+      --color-orange-dark-2: #f8a06b;
+      --color-yellow-dark-2: #f7d794;
+      --color-olive-dark-2: #91db8b;
+      --color-green-dark-2: #91db8b;
+      --color-teal-dark-2: #7edbcb;
+      --color-blue-dark-2: #72a4f9;
+      --color-violet-dark-2: #bd8ef5;
+      --color-purple-dark-2: #bd8ef5;
+      --color-pink-dark-2: #f1ade0;
+      --color-brown-dark-2: #edb9b9;
+
+      --color-red-badge: #f38ba8;
+      --color-red-badge-bg: #f38ba822;
+      --color-red-badge-hover-bg: #f38ba844;
+      --color-green-badge: #a6e3a1;
+      --color-green-badge-bg: #a6e3a122;
+      --color-green-badge-hover-bg: #a6e3a144;
+      --color-yellow-badge: #f9e2af;
+      --color-yellow-badge-bg: #f9e2af22;
+      --color-yellow-badge-hover-bg: #f9e2af44;
+      --color-orange-badge: #fab387;
+      --color-orange-badge-bg: #fab38722;
+      --color-orange-badge-hover-bg: #fab38744;
+      --color-thin-green: #a6e3a1;
+      --color-thin-red: #f38ba8;
+      --color-thin-purple: #cba6f7;
+      --color-thin-orange: #fab387;
+      --color-thin-red-highlight: #f38ba8;
+      --color-danger-bg: #f38ba826;
+      --color-indicator-offline: #6c7086;
+      --color-indicator-offline-20: #6c70861a;
+      --color-indicator-idle: #a6e3a1;
+      --color-indicator-idle-20: #a6e3a11a;
+      --color-indicator-active: #b4befe;
+      --color-indicator-active-20: #b4befe33;
+
+      /* Messages. Forgejo's info is its blue; informational things are the
+         accent in the theme. */
+      --color-error-border: #f38ba866;
+      --color-error-bg: #f38ba81f;
+      --color-error-bg-active: #f38ba840;
+      --color-error-bg-hover: #f38ba840;
+      --color-error-text: #f38ba8;
+      --color-success-border: #a6e3a166;
+      --color-success-bg: #a6e3a11f;
+      --color-success-text: #a6e3a1;
+      --color-warning-border: #f9e2af66;
+      --color-warning-bg: #f9e2af1f;
+      --color-warning-text: #f9e2af;
+      --color-info-border: #b4befe66;
+      --color-info-bg: #b4befe1a;
+      --color-info-text: #cdd6f4;
+
+      /* Diffs. Kept faint: syntax colours sit on top, and the word
+         highlight stacks on the row's. */
+      --color-diff-removed-word-bg: #f38ba82e;
+      --color-diff-added-word-bg: #a6e3a12e;
+      --color-diff-removed-row-bg: #f38ba812;
+      --color-diff-moved-row-bg: #f9e2af12;
+      --color-diff-added-row-bg: #a6e3a112;
+      --color-diff-removed-row-border: #f38ba866;
+      --color-diff-moved-row-border: #f9e2af66;
+      --color-diff-added-row-border: #a6e3a166;
+      --color-diff-inactive: #313244;
+
+      /* Actions logs */
+      --color-console-fg: #cdd6f4;
+      --color-console-fg-subtle: #9399b2;
+      --color-console-bg: #11111b;
+      --color-console-border: #313244;
+      --color-console-hover-bg: #cdd6f40f;
+      --color-console-active-bg: #45475a;
+      --color-console-menu-bg: #313244;
+      --color-console-menu-border: #45475a;
+      --color-ansi-black: #45475a;
+      --color-ansi-red: #f38ba8;
+      --color-ansi-green: #a6e3a1;
+      --color-ansi-yellow: #f9e2af;
+      --color-ansi-blue: #89b4fa;
+      --color-ansi-magenta: #f5c2e7;
+      --color-ansi-cyan: #94e2d5;
+      --color-ansi-white: #bac2de;
+      --color-ansi-bright-black: #585b70;
+      --color-ansi-bright-red: #f38ba8;
+      --color-ansi-bright-green: #a6e3a1;
+      --color-ansi-bright-yellow: #f9e2af;
+      --color-ansi-bright-blue: #89b4fa;
+      --color-ansi-bright-magenta: #f5c2e7;
+      --color-ansi-bright-cyan: #94e2d5;
+      --color-ansi-bright-white: #a6adc8;
+
+      /* Shape and type. Forgejo's 4px is already the theme's control
+         radius; "medium" is its container radius. "large" (25px) and
+         "full" are its pills and circles, and stay. */
+      --border-radius-medium: 8px;
+      --fonts-override: "Noto Sans", sans-serif;
+      --fonts-proportional: "Noto Sans", sans-serif;
+      --fonts-monospace: "Noto Sans Mono", monospace, var(--fonts-emoji);
+      font-stretch: condensed;
+    }
+
+    /* Codeberg's theme re-declares these on the navbar, for its blue bar
+       with white, shadowed text. */
+    html:root:is([data-theme$="-auto"], [data-theme$="-dark"]) #navbar {
+      --color-nav-bg: #181825;
+      --color-nav-hover-bg: #313244;
+      --color-nav-active: #313244;
+      --color-primary: #b4befe;
+      --color-text: #cdd6f4;
+      --color-contrast-boost: transparent;
+    }
+  }
+}

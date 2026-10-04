@@ -33,6 +33,12 @@ You see pages in agent tabs opened with tab_open: background tabs in the user's 
 the user is. While you hold a task, its tabs show the task's tree, and pick up each save within a second, so \
 the loop is: edit, then screenshot or inspect. The page tools refuse the user's own tabs, so you can't \
 disturb what they're doing.\n\n\
+Agent tabs are still the user's real browser, though, logged in as them: anything you click or submit acts \
+as the user, and cookies and site settings are shared with their own tabs. Looking is always fine, and so is \
+opening a menu or typing into a search box to see a state. But leave alone anything that changes their \
+account or how the site appears to them (dismissing notices, starring, following, posting, changing \
+settings), unless the task needs it. If it does, say so first when you can, or else in your summary. \
+force_state shows hover and focus styles without touching anything.\n\n\
 What has worked well when styling a site (reasons included, so you can tell when one doesn't fit, and \
 depart from it; say why in your summary if you do):\n\
 - Start with css_tokens. Most sites built in the last few years have design tokens (CSS custom \
@@ -142,7 +148,9 @@ const TOOLS: &[Tool] = &[
             are listed as unreadable. Output is compact (one line per definition, stylesheets numbered in \
             `sheets`); design systems with several themes define each token many times, so narrow it with \
             `scope` (a substring of the defining selector, e.g. [data-theme=\"dark\"]) and/or `filter` (a \
-            substring of the token name). verbose gives structured definitions.",
+            substring of the token name); `families` counts tokens by name prefix, to choose a filter. Output is \
+            capped at maxChars (default 30000), showing fewer tokens, with a note, when it would be larger. \
+            verbose gives structured definitions.",
         schema: || {
             json!({ "type": "object", "properties": {
                 "tab": tab_prop(),
@@ -150,7 +158,8 @@ const TOOLS: &[Tool] = &[
                 "limit": { "type": "integer", "description": "Maximum properties to list. Default 200." },
                 "usage": { "type": "boolean", "description": "Include where each token is used. Default true." },
                 "scope": { "type": "string", "description": "Only definitions whose selector contains this, e.g. [data-theme=\"dark\"]." },
-                "verbose": { "type": "boolean", "description": "Structured definitions instead of one line each. Default false." }
+                "verbose": { "type": "boolean", "description": "Structured definitions instead of one line each. Default false." },
+                "maxChars": { "type": "integer", "description": "Output budget in characters. Default 30000." }
             }, "required": ["tab"] })
         },
     },
@@ -242,7 +251,9 @@ const TOOLS: &[Tool] = &[
             in a fresh block scope, so const and let don't carry over between calls. Network requests are subject \
             to the page's Content-Security-Policy and may be refused. Useful for anything the other tools don't \
             cover, such as scrolling (window.scrollTo({top: 800, behavior: 'instant'})) or opening a menu by \
-            clicking.",
+            clicking. The tab is the user's real browser, logged in as them, so a click or submit acts as the user: \
+            opening a menu is fine, but dismissing a notice, starring, following or posting changes their account \
+            or their view of the site.",
         schema: || {
             json!({ "type": "object", "properties": {
                 "tab": tab_prop(),
@@ -275,11 +286,13 @@ const TOOLS: &[Tool] = &[
         description: "The active theme, how many styles are loaded (in total and per service; other agents may \
             be adding styles for other services at the same time), and every diagnostic from loading them, with \
             file and line. It waits until file changes you just made have been loaded, so it's safe to call right \
-            after saving. With `tab`, also which styles apply to that tab's page, whether the page has atelier's \
-            style shim, and any prerequisite (site setting) the page shows isn't met. Check diagnostics after \
-            editing: a style with errors keeps its last good version applied, so a mistake can look as if nothing \
-            happened.",
-        schema: || json!({ "type": "object", "properties": { "tab": tab_prop() } }),
+            after saving. It reports one set of styles, and `showing` says which: with `tab`, the ones that tab \
+            gets; otherwise the tree of the task you hold (or `task`), or with no task, the owned directory, which \
+            is what the user's tabs have. With `tab`, also which styles apply to that tab's page, whether the page \
+            has atelier's style shim, and any prerequisite (site setting) the page shows isn't met. Check \
+            diagnostics after editing: a style with errors keeps its last good version applied, so a mistake can \
+            look as if nothing happened.",
+        schema: || json!({ "type": "object", "properties": { "tab": tab_prop(), "task": { "type": "string", "description": "A task whose tree to report on, without a tab." } } }),
     },
 ];
 
@@ -422,6 +435,14 @@ impl Server {
     }
 
     fn browser_tool(&mut self, tool: &Tool, mut args: Value) -> Value {
+        // Without a tab, report the task being worked on rather than the owned directory.
+        if tool.name == "styles_status"
+            && args.get("tab").is_none()
+            && args.get("task").is_none()
+            && self.held.len() == 1
+        {
+            args["task"] = json!(self.held.keys().next().unwrap());
+        }
         // Tabs open on the task this session is working on, unless told otherwise.
         if tool.name == "tab_open" {
             match args.get("task") {

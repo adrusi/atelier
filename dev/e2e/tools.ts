@@ -112,6 +112,14 @@ try {
     assert.deepEqual([scope.tokens, scope.matchesRoot, scope.nested], [2, false, ["header"]]);
   });
 
+  await check("css_tokens stays within its output budget, and says how to narrow it", async () => {
+    const r = await tool("css_tokens", { tab, maxChars: 400 });
+    assert.ok(JSON.stringify(r).length <= 400 || r.shown === 1, "within budget");
+    assert.ok(r.shown < r.total);
+    assert.match(r.note, /Output capped/);
+    assert.ok(r.families.some((f: string) => f.startsWith("--color-* ")), JSON.stringify(r.families));
+  });
+
   await check("css_tokens is compact by default, and scope narrows to a selector", async () => {
     const r = await tool("css_tokens", { tab, filter: "--color-bg" });
     assert.deepEqual(r.tokens[0].defs.map((d: string) => d.replace(/ \(sheet \d+\)$/, "")), [":root = #ffffff", '[data-theme="inverted"] = #222222']);

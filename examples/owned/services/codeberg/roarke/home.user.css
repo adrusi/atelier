@@ -1,0 +1,78 @@
+/* ==UserStyle==
+@name           Codeberg front page (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    The logged-out landing page at codeberg.org/, in Catppuccin Mocha
+==/UserStyle== */
+
+/* The landing page (homepage.css) is a marketing page with literal colours
+   rather than Forgejo's tokens: a near-black #030c12 page, a teal box, teal
+   stats and big yellow buttons. Logged in, / is the dashboard, which
+   tokens.user.css covers. */
+
+@-moz-document regexp("https://codeberg\\.org/(\\?.*)?") {
+  @media (prefers-color-scheme: dark) {
+    html:root:is([data-theme$="-auto"], [data-theme$="-dark"]) {
+      div.full.height,
+      main header,
+      main section#home-section-about .home-section-about-box-container,
+      main section#home-section-support {
+        background-color: #1e1e2e;
+        color: #cdd6f4;
+      }
+      /* The artwork is drawn on its own near-black, which shows as
+         rectangles on any theme surface. The site drops it on narrow
+         screens; here it's dropped at every width. */
+      main header,
+      main section#home-section-about .home-section-about-box-container {
+        background-image: none !important;
+      }
+      main header .header-row { padding-bottom: 10em; }
+
+      /* A blurred halo behind the logo, to lift it off the artwork */
+      main header .header-logo svg { display: none; }
+      main header .header-title > div > p a:is(:hover, :focus) { color: #b4befe; }
+      main header .header-social-links a { color: #9399b2; }
+      main header .header-social-links a:is(:hover, :focus) { color: #b4befe; }
+
+      /* The teal box becomes a flat mantle container */
+      main section#home-section-about {
+        color: #cdd6f4;
+        p a { color: #b4befe; }
+      }
+      main section#home-section-about .home-section-about-box-container .home-section-about-box {
+        background: #181825;
+        border: 1px solid #45475a;
+        border-radius: 8px;
+        div h3 { text-shadow: none; }
+      }
+
+      /* Stats under the box: labels secondary, figures in text colour */
+      main section#home-section-about .home-section-about-container div {
+        color: #9399b2;
+        h4 { text-shadow: none; }
+        p { color: #cdd6f4; }
+      }
+
+      main section#home-section-support hr { color: #45475a; }
+
+      /* Yellow buttons (Register, Become a member, ...) are the primary
+         actions: the accent, flat. */
+      main a.button,
+      main section#home-section-about .home-section-about-box-container .home-section-about-box div.home-section-about-register-button-container a {
+        background-color: #b4befe;
+        color: #1e1e2e;
+        text-shadow: none;
+        box-shadow: none;
+        border-radius: 4px;
+        svg { filter: none; }
+        &:is(:hover, :focus) {
+          background-color: #c6cdfe;
+          text-shadow: none;
+          box-shadow: none;
+          svg { filter: none; }
+        }
+      }
+    }
+  }
+}

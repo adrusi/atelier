@@ -1,0 +1,7 @@
+description = "Codeberg"
+summary = "codeberg.org (Forgejo): repository pages, file and code views, issues and pull requests, explore, and the logged-out front page. Retunes Forgejo's dark theme by overriding its colour tokens."
+
+[[prerequisites]]
+description = "Codeberg's theme must be a dark or auto one (Settings → Appearance → Theme: 'Codeberg Auto', the default and what logged-out Codeberg uses, or any '… Dark'/'… Auto'). Light themes are left alone."
+# Matches when the site is in a theme this style restyles.
+check = "html:is([data-theme$=\"-auto\"], [data-theme$=\"-dark\"])"

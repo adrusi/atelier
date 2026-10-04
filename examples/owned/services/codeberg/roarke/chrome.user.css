@@ -1,0 +1,83 @@
+/* ==UserStyle==
+@name           Codeberg chrome (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    Codeberg's syntax highlighting and the components tokens don't reach, in Catppuccin Mocha
+==/UserStyle== */
+
+/* Scoped like tokens.user.css. Forgejo's syntax colours and its theme
+   rules sit in @layer forgejo-theme / codeberg-theme, which unlayered rules
+   beat whatever their specificity; Fomantic UI's component rules in
+   index.css are unlayered, so those need the scope's extra specificity
+   (nested rules here are 0,1,1 plus their own). */
+
+@-moz-document domain("codeberg.org") {
+  @media (prefers-color-scheme: dark) {
+    html:root:is([data-theme$="-auto"], [data-theme$="-dark"]) {
+
+      /* Syntax highlighting (Chroma), Catppuccin Mocha's mapping */
+      .chroma {
+        .c, .c1, .ch, .cm, .cs, .go, .gp { color: #9399b2; }
+        .cp { color: #f5c2e7; }
+        .cpf { color: #a6e3a1; }
+        .k, .kd, .kn, .kp, .kr, .ow, .sa { color: #cba6f7; }
+        .kc, .no, .m, .mb, .mf, .mh, .mi, .mo, .il, .nd { color: #fab387; }
+        .kt, .nc, .ne, .na { color: #f9e2af; }
+        .n, .nn, .nx, .nv { color: #cdd6f4; }
+        .nb, .bp { color: #f38ba8; }
+        .nf, .fm, .gh { color: #89b4fa; }
+        .ni, .ss { color: #f2cdcd; }
+        .nl { color: #74c7ec; }
+        .nt { color: #cba6f7; }
+        .vc, .vg, .vi { color: #eba0ac; }
+        .o { color: #89dceb; }
+        .p { color: #9399b2; }
+        .s, .s1, .s2, .sb, .sd, .sh, .sx, .dl, .gu { color: #a6e3a1; }
+        .se, .sc, .si, .sr { color: #f5c2e7; }
+        .gd { color: #f38ba8; background-color: #f38ba826; }
+        .gi { color: #a6e3a1; background-color: #a6e3a126; }
+        .ge { color: #cdd6f4; font-style: italic; }
+        .gs { color: #cdd6f4; font-weight: 600; }
+        .gr, .gt { color: #f38ba8; }
+        .w { color: #6c7086; }
+        /* Dim punctuation is lost on a changed word's highlight */
+        :is(.added-code, .removed-code) .p { color: #bac2de; }
+      }
+
+      /* Fomantic's secondary button (the announcement's Dismiss) has a
+         literal near-black background. */
+      .ui.secondary.button, .ui.secondary.buttons .button {
+        background-color: var(--color-button);
+        color: var(--color-text);
+        &:hover, &:focus { background-color: #45475a; }
+      }
+
+      /* Fomantic's coloured labels and buttons (the "Merged"/"Open" state
+         badges and the like) put white text on the colour tokens, which are
+         pastel now: dark text instead. Basic (outlined) ones keep coloured
+         text on the page. Repository issue labels set their own colours
+         inline and aren't affected. */
+      :is(.ui.label, .ui.labels .label, .ui.button):is(.red, .orange, .yellow, .olive, .green, .teal, .blue, .violet, .purple, .pink, .brown, .primary):not(.basic) {
+        color: #1e1e2e;
+      }
+
+      /* "You are here" in tab bars (repo tabs, Explore's sections) is the
+         accent, the way the WM marks the focused window; Forgejo draws it
+         in the text colour. */
+      .ui.secondary.pointing.menu .active.item,
+      .ui.secondary.pointing.menu .active.item:hover {
+        border-bottom-color: #b4befe;
+      }
+
+      /* The navbar's text shadow and icon glow (Codeberg's, for white on
+         blue) are dropped: flat. */
+      #navbar { text-shadow: none; }
+      #navbar svg { filter: none; }
+
+      ::selection {
+        background: #353749;
+        color: #cdd6f4;
+      }
+    }
+  }
+}

@@ -10,9 +10,10 @@ import { RpcError } from "./rpc";
 import { userScripts } from "./userscripts";
 
 export type ToolContext = {
-  /** The bundle a tab gets: its task's tree's if it's bound to one, else the
-   * owned directory's (also with no tab). */
-  bundle: (tabId?: number) => Bundle | undefined;
+  /** A source's bundle: a task's tree's, or the owned directory's (undefined). */
+  bundle: (source?: string) => Bundle | undefined;
+  /** Fetches a task's tree's bundle, if it isn't already loaded. */
+  loadSource: (source: string) => Promise<void>;
   /** The task a tab is bound to (SPEC §6.2), if any. */
   sourceOf: (tabId: number) => string | null;
   /** Binds a tab to a task's tree, or back to the owned directory. Throws
@@ -24,7 +25,7 @@ export type ToolContext = {
   unmet: (tabId: number) => { style: string; description: string }[];
   /** Resolves once the daemon has loaded every file change it has seen, and
    * the extension has that bundle. */
-  settle: (tabId?: number) => Promise<void>;
+  settle: (source?: string) => Promise<void>;
   /** The owned directory, as the daemon reports it. */
   atelierDir: () => string | undefined;
 };
@@ -289,7 +290,8 @@ const handlers: Record<string, Handler> = {
 
   async "page/tokens"(params) {
     const tab = await agentTab(params);
-    return call(
+    const maxChars = param<number>(params, "maxChars", "number", 30_000);
+    const r = (await call(
       tab.id!,
       page.tokens,
       param<string | null>(params, "filter", "string", null),
@@ -297,7 +299,16 @@ const handlers: Record<string, Handler> = {
       param<boolean>(params, "usage", "boolean", true),
       param<string | null>(params, "scope", "string", null),
       param<boolean>(params, "verbose", "boolean", false),
-    );
+    )) as { total: number; shown: number; tokens: unknown[]; note?: string };
+    // Big design systems define thousands of tokens; past the budget, show
+    // fewer and say how to narrow it, rather than flooding the agent.
+    const size = () => JSON.stringify(r).length;
+    if (size() > maxChars) {
+      while (r.tokens.length > 1 && size() > maxChars) r.tokens.length = Math.floor(r.tokens.length * 0.8);
+      r.shown = r.tokens.length;
+      r.note = `Output capped at about ${maxChars} characters: showing the first ${r.shown} of ${r.total} tokens alphabetically. \`families\` counts tokens by name prefix; narrow with filter (e.g. one of those prefixes) or scope, set usage: false, or raise maxChars.`;
+    }
+    return r;
   },
 
   async "page/matched_rules"(params) {
@@ -333,20 +344,29 @@ const handlers: Record<string, Handler> = {
   },
 
   async "styles/status"(params, ctx) {
-    const tabId = params?.tab === undefined ? undefined : (await agentTab(params)).id!;
-    await ctx.settle(tabId);
-    const bundle = ctx.bundle(tabId);
+    const tab = params?.tab === undefined ? undefined : await agentTab(params);
+    // A tab's own source; else the task asked about; else the owned directory.
+    const source = tab ? (ctx.sourceOf(tab.id!) ?? undefined) : (param<string | null>(params, "task", "string", null) ?? undefined);
+    if (source !== undefined && !tab) {
+      try {
+        await ctx.loadSource(source);
+      } catch (e) {
+        throw sourceError(source, e);
+      }
+    }
+    await ctx.settle(source);
+    const bundle = ctx.bundle(source);
     const byService: Record<string, number> = {};
     for (const s of bundle?.styles ?? []) byService[s.service ?? "(theme-wide)"] = (byService[s.service ?? "(theme-wide)"] ?? 0) + 1;
     const out: Record<string, unknown> = {
+      showing: source === undefined ? "the owned directory: the styles the user's tabs have" : `task ${source}'s tree`,
       atelierDir: ctx.atelierDir() ?? null,
       theme: bundle?.theme ?? null,
       styles: bundle?.styles.length ?? 0,
       byService,
       diagnostics: bundle?.diagnostics ?? [],
     };
-    if (params?.tab !== undefined) {
-      const tab = await agentTab(params);
+    if (tab) {
       out.tab = {
         ...describeTab(tab, ctx),
         applying: (bundle?.styles ?? []).filter((s) => tab.url && cssFor(s, tab.url) !== null).map((s) => s.id),

@@ -70,17 +70,17 @@ async function connect() {
   // Browser tools, on behalf of agents (atelier mcp) and the CLI.
   r.onRequest = (method, params) =>
     tools.handle(method, params, {
-      bundle: (tabId) => {
-        const source = tabId === undefined ? undefined : bindings.get(tabId);
-        return source === undefined ? state.bundle : sources.get(source)?.bundle;
+      bundle: (source) => (source === undefined ? state.bundle : sources.get(source)?.bundle),
+      loadSource: async (source) => {
+        if (!rpc) throw new Error("atelier's daemon isn't connected");
+        await loadSource(rpc, source);
       },
       sourceOf: (tabId) => bindings.get(tabId) ?? null,
       bind: bindTab,
       hasShim: (tabId) => [...shimPorts].some((p) => p.sender?.tab?.id === tabId),
       unmet: (tabId) => unmetByTab.get(tabId) ?? [],
       atelierDir: () => state.atelierDir,
-      settle: async (tabId) => {
-        const source = tabId === undefined ? undefined : bindings.get(tabId);
+      settle: async (source) => {
         const have = () => (source === undefined ? state.bundleHash : sources.get(source)?.hash);
         const deadline = Date.now() + 3000;
         while (rpc === r && Date.now() < deadline) {
