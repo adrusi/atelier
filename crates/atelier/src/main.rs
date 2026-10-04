@@ -22,6 +22,7 @@ usage: atelier [--dir DIR] <command>
   match URL             which styles apply to URL
   task create [--kind KIND] [--service S] [--origin URL] [--note TEXT] DESCRIPTION
   task list [--state STATE] | show ID | abandon ID [REASON]
+  task claim [ID] [--session NAME] | submit ID [--session NAME] SUMMARY
                         tasks (SPEC §8)
   undo [SEQ]            undo a landing (default: the most recent)
   journal               landings and undos, newest first

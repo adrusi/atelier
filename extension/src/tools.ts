@@ -10,14 +10,21 @@ import { RpcError } from "./rpc";
 import { userScripts } from "./userscripts";
 
 export type ToolContext = {
-  bundle: () => Bundle | undefined;
+  /** The bundle a tab gets: its task's tree's if it's bound to one, else the
+   * owned directory's (also with no tab). */
+  bundle: (tabId?: number) => Bundle | undefined;
+  /** The task a tab is bound to (SPEC §6.2), if any. */
+  sourceOf: (tabId: number) => string | null;
+  /** Binds a tab to a task's tree, or back to the owned directory. Throws
+   * if the daemon doesn't serve that task's tree. */
+  bind: (tabId: number, task: string | null) => Promise<void>;
   /** Whether the page in this tab is running the style shim. */
   hasShim: (tabId: number) => boolean;
   /** Prerequisites the page in this tab reported as unmet. */
   unmet: (tabId: number) => { style: string; description: string }[];
   /** Resolves once the daemon has loaded every file change it has seen, and
    * the extension has that bundle. */
-  settle: () => Promise<void>;
+  settle: (tabId?: number) => Promise<void>;
   /** The owned directory, as the daemon reports it. */
   atelierDir: () => string | undefined;
 };
@@ -26,6 +33,11 @@ const INVALID_PARAMS = -32602;
 const NOT_AN_AGENT_TAB = -32020;
 const PAGE_ERROR = -32021;
 const NEEDS_PERMISSION = -32022;
+/** atelier_proto::error_code::NO_SUCH_SOURCE */
+const NO_SUCH_SOURCE = -32031;
+
+const sourceError = (task: string | null, e: unknown) =>
+  new RpcError(NO_SUCH_SOURCE, `can't show task ${task}'s tree: ${e instanceof Error ? e.message : e}`);
 
 // Agent tabs, kept in session storage so they survive the background restarting.
 const agentTabs = new Set<number>();
@@ -101,8 +113,9 @@ async function run(tabId: number, code: string): Promise<unknown> {
 const call = (tabId: number, fn: (...args: any[]) => unknown, ...args: unknown[]) =>
   run(tabId, `(${fn})(...${JSON.stringify(args)})`);
 
-function describeTab(tab: browser.tabs.Tab) {
-  return { tab: tab.id, url: tab.url, title: tab.title, status: tab.status, visible: Boolean(tab.active) };
+function describeTab(tab: browser.tabs.Tab, ctx: ToolContext) {
+  const task = ctx.sourceOf(tab.id!);
+  return { tab: tab.id, url: tab.url, title: tab.title, status: tab.status, visible: Boolean(tab.active), ...(task ? { task } : {}) };
 }
 
 const HIDDEN_NOTE =
@@ -140,35 +153,58 @@ const toldHidden = new Set<number>();
 type Handler = (params: any, ctx: ToolContext) => Promise<unknown>;
 
 const handlers: Record<string, Handler> = {
-  async "tab/open"(params) {
+  async "tab/open"(params, ctx) {
     await loaded;
     const url = param<string>(params, "url", "string");
-    const tab = await browser.tabs.create({ url, active: false });
+    const task = param<string | null>(params, "task", "string", null);
+    // Bound before anything loads, so the first load already shows the task's tree.
+    const tab = await browser.tabs.create({ url: "about:blank", active: false });
     agentTabs.add(tab.id!);
     await saveTabs();
+    if (task !== null) {
+      try {
+        await ctx.bind(tab.id!, task);
+      } catch (e) {
+        await browser.tabs.remove(tab.id!);
+        throw sourceError(task, e);
+      }
+    }
+    await browser.tabs.update(tab.id!, { url });
     await settled(tab.id!);
-    return { ...describeTab(await browser.tabs.get(tab.id!)), ...(await waitFor(tab.id!, params)) };
+    return { ...describeTab(await browser.tabs.get(tab.id!), ctx), ...(await waitFor(tab.id!, params)) };
   },
 
-  async "tab/navigate"(params) {
+  async "tab/bind"(params, ctx) {
+    const tab = await agentTab(params);
+    const task = param<string | null>(params, "task", "string", null);
+    try {
+      await ctx.bind(tab.id!, task);
+    } catch (e) {
+      throw sourceError(task, e);
+    }
+    await new Promise((r) => setTimeout(r, 300)); // let the page swap styles
+    return describeTab(await browser.tabs.get(tab.id!), ctx);
+  },
+
+  async "tab/navigate"(params, ctx) {
     const tab = await agentTab(params);
     const url = param<string>(params, "url", "string");
     await browser.tabs.update(tab.id!, { url });
     await settled(tab.id!);
-    return { ...describeTab(await browser.tabs.get(tab.id!)), ...(await waitFor(tab.id!, params)) };
+    return { ...describeTab(await browser.tabs.get(tab.id!), ctx), ...(await waitFor(tab.id!, params)) };
   },
 
-  async "tab/reload"(params) {
+  async "tab/reload"(params, ctx) {
     const tab = await agentTab(params);
     await browser.tabs.reload(tab.id!);
     await settled(tab.id!);
-    return describeTab(await browser.tabs.get(tab.id!));
+    return describeTab(await browser.tabs.get(tab.id!), ctx);
   },
 
-  async "tab/list"() {
+  async "tab/list"(_params, ctx) {
     await loaded;
     const tabs = await Promise.all([...agentTabs].map((id) => browser.tabs.get(id).catch(() => null)));
-    return { tabs: tabs.filter((t): t is browser.tabs.Tab => Boolean(t)).map(describeTab) };
+    return { tabs: tabs.filter((t): t is browser.tabs.Tab => Boolean(t)).map((t) => describeTab(t, ctx)) };
   },
 
   async "tab/close"(params) {
@@ -297,8 +333,9 @@ const handlers: Record<string, Handler> = {
   },
 
   async "styles/status"(params, ctx) {
-    await ctx.settle();
-    const bundle = ctx.bundle();
+    const tabId = params?.tab === undefined ? undefined : (await agentTab(params)).id!;
+    await ctx.settle(tabId);
+    const bundle = ctx.bundle(tabId);
     const byService: Record<string, number> = {};
     for (const s of bundle?.styles ?? []) byService[s.service ?? "(theme-wide)"] = (byService[s.service ?? "(theme-wide)"] ?? 0) + 1;
     const out: Record<string, unknown> = {
@@ -311,7 +348,7 @@ const handlers: Record<string, Handler> = {
     if (params?.tab !== undefined) {
       const tab = await agentTab(params);
       out.tab = {
-        ...describeTab(tab),
+        ...describeTab(tab, ctx),
         applying: (bundle?.styles ?? []).filter((s) => tab.url && cssFor(s, tab.url) !== null).map((s) => s.id),
         shim: ctx.hasShim(tab.id!),
         unmetPrerequisites: ctx.unmet(tab.id!),

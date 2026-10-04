@@ -8,9 +8,9 @@
 
 use crate::{loader, paths, tasks, wire};
 use atelier_proto::{
-    BlobChunk, BlobGetParams, BlobRef, BrowserCallParams, Bundle, CompiledStyle, Diagnostic,
-    InitializeParams, InitializeResult, PROTOCOL_VERSION, Role, Severity, StatusResult, error_code,
-    method,
+    BlobChunk, BlobGetParams, BlobRef, BrowserCallParams, Bundle, BundleChanged, CompiledStyle,
+    Diagnostic, InitializeParams, InitializeResult, PROTOCOL_VERSION, Role, Severity, SourceParams,
+    StatusResult, error_code, method,
 };
 use base64::Engine;
 use serde_json::{Value, json};
@@ -28,8 +28,8 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 /// Raw bytes per `blob/get` chunk. Base64 grows it by a third, which keeps a
 /// chunk's message comfortably under native messaging's 1 MB limit.
 const CHUNK: u64 = 512 * 1024;
-/// How many bundle versions to keep, so a client mid-download of an older one
-/// can finish.
+/// How many superseded bundle versions to keep, so a client mid-download of
+/// one can finish.
 const KEEP_BLOBS: usize = 4;
 
 pub fn run(dir: Option<&str>) -> ExitCode {
@@ -83,43 +83,146 @@ struct BrowserRequest {
 type RpcResult = Result<Value, (i64, String)>;
 
 struct Inner {
-    bundle: Bundle,
-    /// The last version of each style that loaded, so a save that breaks a
-    /// style doesn't unstyle open pages while it's being fixed.
-    last_good: BTreeMap<String, CompiledStyle>,
-    bundle_ref: BlobRef,
+    /// The owned directory's bundle: what the user's tabs get.
+    default: Loaded,
+    /// Task trees that agent tabs are bound to (SPEC §6.2), by task id. A
+    /// tree is loaded and watched from the first `bundle/get` for it until
+    /// its task finishes.
+    sources: BTreeMap<String, Loaded>,
     blobs: VecDeque<(String, Arc<Vec<u8>>)>,
     clients: BTreeMap<String, u32>,
     idle_since: Option<Instant>,
 }
 
+/// One source's loaded bundle.
+struct Loaded {
+    dir: PathBuf,
+    bundle: Bundle,
+    /// The last version of each style that loaded, so a save that breaks a
+    /// style doesn't unstyle open pages while it's being fixed.
+    last_good: BTreeMap<String, CompiledStyle>,
+    bundle_ref: BlobRef,
+}
+
+impl Loaded {
+    fn new(dir: PathBuf) -> Loaded {
+        Loaded {
+            dir,
+            bundle: Bundle::default(),
+            last_good: BTreeMap::new(),
+            bundle_ref: BlobRef {
+                hash: String::new(),
+                size: 0,
+            },
+        }
+    }
+}
+
+impl Inner {
+    fn loaded(&self, source: Option<&str>) -> Option<&Loaded> {
+        match source {
+            None => Some(&self.default),
+            Some(id) => self.sources.get(id),
+        }
+    }
+}
+
 impl State {
-    /// Reloads the bundle. Returns its new ref if it changed.
-    fn reload(&self) -> Option<BlobRef> {
+    /// Reloads a source's bundle: the owned directory's, or a task tree's
+    /// that's already being watched. Returns its new ref if it changed.
+    fn reload(&self, source: Option<&str>) -> Option<BlobRef> {
+        let dir = self.inner.lock().unwrap().loaded(source)?.dir.clone();
         let mut var_diags = Vec::new();
         let vars = read_vars(&mut var_diags);
-        let mut bundle = loader::load(&self.dir, &vars);
+        let mut bundle = loader::load(&dir, &vars);
         bundle.diagnostics.extend(var_diags);
 
-        let mut inner = self.inner.lock().unwrap();
-        keep_last_good(&mut bundle, &mut inner.last_good);
+        let mut guard = self.inner.lock().unwrap();
+        let inner = &mut *guard;
+        let loaded = match source {
+            None => &mut inner.default,
+            Some(id) => inner.sources.get_mut(id)?,
+        };
+        keep_last_good(&mut bundle, &mut loaded.last_good);
         let bytes = serde_json::to_vec(&bundle).expect("bundles serialize");
         let hash = hex(&Sha256::digest(&bytes));
-        if inner.bundle_ref.hash == hash {
+        if loaded.bundle_ref.hash == hash {
             return None;
         }
-        log_changes(&inner.bundle, &bundle, &hash);
+        log_changes(source, &loaded.bundle, &bundle, &hash);
         let blob_ref = BlobRef {
             hash: hash.clone(),
             size: bytes.len() as u64,
         };
+        loaded.bundle = bundle;
+        loaded.bundle_ref = blob_ref.clone();
         inner.blobs.push_back((hash, Arc::new(bytes)));
-        while inner.blobs.len() > KEEP_BLOBS {
-            inner.blobs.pop_front();
-        }
-        inner.bundle = bundle;
-        inner.bundle_ref = blob_ref.clone();
+        // Keep every source's current bundle, and a few older ones so a
+        // client mid-download of one can finish.
+        let current: BTreeSet<String> = std::iter::once(&inner.default)
+            .chain(inner.sources.values())
+            .map(|l| l.bundle_ref.hash.clone())
+            .collect();
+        let mut old = inner
+            .blobs
+            .iter()
+            .filter(|(h, _)| !current.contains(h))
+            .count();
+        inner.blobs.retain(|(h, _)| {
+            if old > KEEP_BLOBS && !current.contains(h) {
+                old -= 1;
+                return false;
+            }
+            true
+        });
         Some(blob_ref)
+    }
+
+    /// Starts serving a task's tree as a source, if it isn't already, and
+    /// returns its bundle's ref.
+    fn open_source(&self, id: &str) -> Result<BlobRef, (i64, String)> {
+        if let Some(l) = self.inner.lock().unwrap().sources.get(id) {
+            return Ok(l.bundle_ref.clone());
+        }
+        let task = self
+            .tasks
+            .lock()
+            .unwrap()
+            .get(id)
+            .map_err(|e| (error_code::NO_SUCH_SOURCE, e))?;
+        let tree = match (&task.state, &task.tree) {
+            (atelier_proto::TaskState::Claimed | atelier_proto::TaskState::Queued, Some(t)) => {
+                PathBuf::from(t)
+            }
+            (atelier_proto::TaskState::Queued, None) => {
+                return Err((
+                    error_code::NO_SUCH_SOURCE,
+                    format!("task {id} hasn't been claimed yet, so it has no tree to show"),
+                ));
+            }
+            (state, _) => {
+                return Err((
+                    error_code::NO_SUCH_SOURCE,
+                    format!("task {id} has finished ({state:?}), so its tree is no longer served"),
+                ));
+            }
+        };
+        self.inner
+            .lock()
+            .unwrap()
+            .sources
+            .entry(id.to_string())
+            .or_insert_with(|| Loaded::new(tree));
+        self.reload(Some(id));
+        let inner = self.inner.lock().unwrap();
+        Ok(inner.sources[id].bundle_ref.clone())
+    }
+
+    /// Stops serving a finished task's tree.
+    fn close_source(&self, id: &str) {
+        if self.inner.lock().unwrap().sources.remove(id).is_some() {
+            eprintln!("atelier daemon: stopped serving task {id}'s tree");
+        }
     }
 }
 
@@ -161,7 +264,7 @@ fn keep_last_good(bundle: &mut Bundle, last_good: &mut BTreeMap<String, Compiled
 
 /// Logs which styles changed and every diagnostic, so problems are visible in
 /// daemon.log without asking.
-fn log_changes(old: &Bundle, new: &Bundle, hash: &str) {
+fn log_changes(source: Option<&str>, old: &Bundle, new: &Bundle, hash: &str) {
     let before: BTreeMap<&str, &CompiledStyle> =
         old.styles.iter().map(|s| (s.id.as_str(), s)).collect();
     let after: BTreeMap<&str, &CompiledStyle> =
@@ -181,8 +284,9 @@ fn log_changes(old: &Bundle, new: &Bundle, hash: &str) {
         .filter(|(id, s)| before.get(*id).is_some_and(|old| old != *s))
         .map(|(id, _)| *id)
         .collect();
+    let source = source.map_or(String::new(), |id| format!(" for task {id}"));
     eprintln!(
-        "atelier daemon: bundle {} ({} styles)",
+        "atelier daemon: bundle {}{source} ({} styles)",
         &hash[..12],
         new.styles.len()
     );
@@ -278,13 +382,9 @@ async fn serve(dir: PathBuf) -> std::io::Result<()> {
     let state = Arc::new(State {
         dir: dir.clone(),
         inner: Mutex::new(Inner {
-            bundle: Bundle::default(),
-            bundle_ref: BlobRef {
-                hash: String::new(),
-                size: 0,
-            },
+            default: Loaded::new(dir.clone()),
+            sources: BTreeMap::new(),
             blobs: VecDeque::new(),
-            last_good: BTreeMap::new(),
             clients: BTreeMap::new(),
             idle_since: Some(Instant::now()),
         }),
@@ -294,7 +394,7 @@ async fn serve(dir: PathBuf) -> std::io::Result<()> {
         reload_pending: AtomicBool::new(false),
         tasks: Mutex::new(tasks::Store::new(&dir, &paths::state_dir(&dir))?),
     });
-    state.reload();
+    state.reload(None);
 
     // Kept alive for as long as we serve.
     let _watcher = watch(state.clone())?;
@@ -306,42 +406,127 @@ async fn serve(dir: PathBuf) -> std::io::Result<()> {
     }
 }
 
-/// Watches the owned directory and vars.json, reloading (debounced) on change.
+/// What a file change means for the bundles.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum Dirty {
+    /// The owned directory.
+    Default,
+    /// A watched task tree.
+    Source(String),
+    /// vars.json: every source.
+    All,
+}
+
+/// Watches the owned directory, task trees and vars.json, reloading
+/// (debounced) whatever a change affects.
 fn watch(state: Arc<State>) -> std::io::Result<notify::RecommendedWatcher> {
     use notify::{RecursiveMode, Watcher};
-    let (tx, mut rx) = mpsc::channel::<()>(64);
+    let (tx, mut rx) = mpsc::channel::<Dirty>(256);
     let seen = state.clone();
+    let config = paths::config_dir();
+    fs::create_dir_all(&config)?;
+    // Event paths are canonical, so these must be too.
+    let config = config.canonicalize()?;
+    let tasks_dir = paths::state_dir(&state.dir).join("tasks").canonicalize()?;
+    let (config_w, tasks_w) = (config.clone(), tasks_dir.clone());
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
-        if res.is_ok_and(|e| !e.kind.is_access()) {
+        let Ok(event) = res else { return };
+        if event.kind.is_access() {
+            return;
+        }
+        for dirty in classify(&seen, &event.paths, &config_w, &tasks_w) {
             seen.reload_pending.store(true, Ordering::SeqCst);
-            let _ = tx.try_send(());
+            let _ = tx.try_send(dirty);
         }
     })
     .map_err(std::io::Error::other)?;
     watcher
         .watch(&state.dir, RecursiveMode::Recursive)
         .map_err(std::io::Error::other)?;
-    let config = paths::config_dir();
-    fs::create_dir_all(&config)?;
     watcher
         .watch(&config, RecursiveMode::NonRecursive)
         .map_err(std::io::Error::other)?;
+    // Created by the task store.
+    watcher
+        .watch(&tasks_dir, RecursiveMode::Recursive)
+        .map_err(std::io::Error::other)?;
 
     tokio::spawn(async move {
-        while rx.recv().await.is_some() {
+        while let Some(first) = rx.recv().await {
             // Let a burst of writes (an editor saving, a landing) settle.
             tokio::time::sleep(Duration::from_millis(150)).await;
-            while rx.try_recv().is_ok() {}
+            let mut dirty = BTreeSet::from([first]);
+            while let Ok(d) = rx.try_recv() {
+                dirty.insert(d);
+            }
             // Cleared before loading, so a change during the load sets it again.
             state.reload_pending.store(false, Ordering::SeqCst);
-            if let Some(blob_ref) = state.reload() {
-                let _ = state
-                    .notify
-                    .send(wire::notification(method::BUNDLE_CHANGED, json!(blob_ref)));
+            let mut sources: BTreeSet<Option<String>> = BTreeSet::new();
+            for d in dirty {
+                match d {
+                    Dirty::Default => {
+                        sources.insert(None);
+                    }
+                    Dirty::Source(id) => {
+                        sources.insert(Some(id));
+                    }
+                    Dirty::All => {
+                        sources.insert(None);
+                        let ids: Vec<String> = state
+                            .inner
+                            .lock()
+                            .unwrap()
+                            .sources
+                            .keys()
+                            .cloned()
+                            .collect();
+                        sources.extend(ids.into_iter().map(Some));
+                    }
+                }
+            }
+            for source in sources {
+                if let Some(blob) = state.reload(source.as_deref()) {
+                    let changed = BundleChanged {
+                        source,
+                        hash: blob.hash,
+                        size: blob.size,
+                    };
+                    let _ = state
+                        .notify
+                        .send(wire::notification(method::BUNDLE_CHANGED, json!(changed)));
+                }
             }
         }
     });
     Ok(watcher)
+}
+
+/// Which bundles a change to these paths affects. Changes in task
+/// directories only count inside the tree of a task being served.
+fn classify(state: &State, changed: &[PathBuf], config: &Path, tasks: &Path) -> Vec<Dirty> {
+    let mut dirty = Vec::new();
+    for path in changed {
+        let d = if path.starts_with(config) {
+            Dirty::All
+        } else if let Ok(rest) = path.strip_prefix(tasks) {
+            let mut parts = rest.components();
+            let (Some(id), Some(tree)) = (parts.next(), parts.next()) else {
+                continue;
+            };
+            let id = id.as_os_str().to_string_lossy().into_owned();
+            if tree.as_os_str() != "tree" || !state.inner.lock().unwrap().sources.contains_key(&id)
+            {
+                continue;
+            }
+            Dirty::Source(id)
+        } else {
+            Dirty::Default
+        };
+        if !dirty.contains(&d) {
+            dirty.push(d);
+        }
+    }
+    dirty
 }
 
 async fn exit_when_idle(state: Arc<State>, socket: PathBuf) {
@@ -610,9 +795,14 @@ fn dispatch(state: &State, msg: Value) -> Option<Value> {
     let id = msg.get("id").cloned()?; // notifications from clients need no reply
     let params = msg.get("params").cloned().unwrap_or(Value::Null);
     let reply = match msg.get("method").and_then(Value::as_str) {
-        Some(method::BUNDLE_GET) => Ok(json!(state.inner.lock().unwrap().bundle_ref)),
+        Some(method::BUNDLE_GET) => source_param(params).and_then(|source| match source {
+            None => Ok(json!(state.inner.lock().unwrap().default.bundle_ref)),
+            Some(id) => state.open_source(&id).map(|r| json!(r)),
+        }),
         Some(method::BLOB_GET) => blob_get(state, params),
-        Some(method::STATUS) => Ok(json!(status(state))),
+        Some(method::STATUS) => source_param(params)
+            .and_then(|source| status(state, source.as_deref()))
+            .map(|s| json!(s)),
         Some(m) if m.starts_with("task/") || m.starts_with("journal/") => {
             task_call(state, m, params)
         }
@@ -647,6 +837,10 @@ fn task_call(state: &State, method_name: &str, params: Value) -> Result<Value, (
     let now = now_ms();
     let store = state.tasks.lock().unwrap();
     let announce = |task: &atelier_proto::Task| {
+        use atelier_proto::TaskState::{Abandoned, Declined, Landed};
+        if matches!(task.state, Landed | Declined | Abandoned) {
+            state.close_source(&task.id);
+        }
         let _ = state
             .notify
             .send(wire::notification(tm::CHANGED, json!(task)));
@@ -654,7 +848,7 @@ fn task_call(state: &State, method_name: &str, params: Value) -> Result<Value, (
     match method_name {
         tm::CREATE => {
             let p: TaskCreateParams = serde_json::from_value(params).map_err(bad)?;
-            let theme = state.inner.lock().unwrap().bundle.theme.clone();
+            let theme = state.inner.lock().unwrap().default.bundle.theme.clone();
             let task = store.create(p, theme, now).map_err(failed)?;
             announce(&task);
             Ok(json!(task))
@@ -823,15 +1017,32 @@ fn blob_get(state: &State, params: Value) -> Result<Value, (i64, String)> {
     }))
 }
 
-fn status(state: &State) -> StatusResult {
-    let inner = state.inner.lock().unwrap();
-    StatusResult {
-        atelier_dir: state.dir.display().to_string(),
-        theme: inner.bundle.theme.clone(),
-        styles: inner.bundle.styles.len() as u32,
-        clients: inner.clients.clone(),
-        diagnostics: inner.bundle.diagnostics.clone(),
-        reload_pending: state.reload_pending.load(Ordering::SeqCst),
-        bundle_hash: inner.bundle_ref.hash.clone(),
+fn status(state: &State, source: Option<&str>) -> Result<StatusResult, (i64, String)> {
+    if let Some(id) = source {
+        state.open_source(id)?;
     }
+    let inner = state.inner.lock().unwrap();
+    let loaded = inner.loaded(source).ok_or((
+        error_code::NO_SUCH_SOURCE,
+        format!("task {} is no longer served", source.unwrap_or_default()),
+    ))?;
+    Ok(StatusResult {
+        atelier_dir: state.dir.display().to_string(),
+        theme: loaded.bundle.theme.clone(),
+        styles: loaded.bundle.styles.len() as u32,
+        clients: inner.clients.clone(),
+        diagnostics: loaded.bundle.diagnostics.clone(),
+        reload_pending: state.reload_pending.load(Ordering::SeqCst),
+        bundle_hash: loaded.bundle_ref.hash.clone(),
+    })
+}
+
+/// The `source` of a [`SourceParams`], which may be omitted altogether.
+fn source_param(params: Value) -> Result<Option<String>, (i64, String)> {
+    if params.is_null() {
+        return Ok(None);
+    }
+    serde_json::from_value::<SourceParams>(params)
+        .map(|p| p.source)
+        .map_err(|e| (wire::code::INVALID_PARAMS, e.to_string()))
 }

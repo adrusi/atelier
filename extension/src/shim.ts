@@ -9,11 +9,30 @@
 // style asks for it (SPEC §6.5; spike R5), and connects to the background for
 // live updates: new bundles, and history-API navigations that change which
 // sections apply.
+//
+// A tab can be bound to a task's tree instead of the owned directory (SPEC
+// §6.2), so an agent sees its work in progress and the user's tabs don't. The
+// background marks a bound tab's sessionStorage, which is readable here
+// synchronously, and the shim then skips the styles its registrations add and
+// waits for the bound source's from the background. The marker is per origin
+// and pages can clear it, so whenever the shim connects the background also
+// sends the styles for the tab's actual source, and those always win.
 
 import { cssFor, locksDarkReader } from "./matching";
 import type { CompiledStyle } from "./proto/CompiledStyle";
 
-type Message = { type: "bundle"; styles: CompiledStyle[] } | { type: "url" };
+type Message = { type: "bundle"; styles: CompiledStyle[] } | { type: "url" } | { type: "bind"; source: string | null };
+
+const MARKER = "atelier:source";
+
+function readMarker(): string | null {
+  try {
+    return sessionStorage.getItem(MARKER);
+  } catch {
+    return null; // storage blocked; the background's styles still arrive
+  }
+}
+
 type Unmet = { style: string; description: string };
 
 class Shim {
@@ -24,12 +43,36 @@ class Shim {
   private observing = false;
   private port: browser.runtime.Port | null = null;
   private reported = "[]";
+  /** The task this tab is bound to, as far as the page knows. */
+  private source = readMarker();
+  /** Set once the background has sent styles: from then on, they're the truth. */
+  private fromBackground = false;
 
   add(style: CompiledStyle) {
+    if (this.source !== null || this.fromBackground) {
+      this.connect();
+      return;
+    }
     if (!this.styles.has(style.id)) this.order.push(style.id);
     this.styles.set(style.id, style);
     this.render();
     this.connect();
+  }
+
+  /** For a shim injected without a style: just get styles from the background. */
+  attach() {
+    this.connect();
+  }
+
+  private bind(source: string | null) {
+    if (source === this.source) return;
+    this.source = source;
+    try {
+      if (source === null) sessionStorage.removeItem(MARKER);
+      else sessionStorage.setItem(MARKER, source);
+    } catch {
+      // Without the marker, the next load here briefly shows the default styles.
+    }
   }
 
   private replaceAll(styles: CompiledStyle[]) {
@@ -143,7 +186,10 @@ class Shim {
     }
     this.port.onMessage.addListener((msg: unknown) => {
       const m = msg as Message;
-      if (m.type === "bundle") this.replaceAll(m.styles);
+      if (m.type === "bundle") {
+        this.fromBackground = true;
+        this.replaceAll(m.styles);
+      } else if (m.type === "bind") this.bind(m.source);
       else if (m.type === "url") this.render();
     });
     this.port.onDisconnect.addListener(() => (this.port = null));

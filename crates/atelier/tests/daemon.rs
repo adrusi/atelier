@@ -336,17 +336,37 @@ fn tasks_land_through_the_daemon_with_hooks_and_undo() {
     let mut s = env.connect();
     initialize(&mut s, &env.dir);
 
-    let task = call(&mut s, 1, "task/create", json!({ "kind": "revise", "service": "site", "brief": { "description": "make it blue" } }))["result"].clone();
+    let task = call(
+        &mut s,
+        1,
+        "task/create",
+        json!({ "kind": "revise", "service": "site", "brief": { "description": "make it blue" } }),
+    )["result"]
+        .clone();
     let id = task["id"].as_str().unwrap().to_string();
     assert_eq!(task["state"], json!("queued"));
     let claimed = call(&mut s, 2, "task/claim", json!({ "session": "s1" }))["result"].clone();
     assert_eq!(claimed["id"], json!(id));
     let tree = PathBuf::from(claimed["tree"].as_str().unwrap());
 
-    write(&tree, "services/site/dusk/a.user.css", "@-moz-document domain(\"example.com\") { body { color: blue; } }\n");
-    let r = call(&mut s, 3, "task/submit", json!({ "id": id, "session": "s1", "summary": "Make the body blue" }))["result"].clone();
+    write(
+        &tree,
+        "services/site/dusk/a.user.css",
+        "@-moz-document domain(\"example.com\") { body { color: blue; } }\n",
+    );
+    let r = call(
+        &mut s,
+        3,
+        "task/submit",
+        json!({ "id": id, "session": "s1", "summary": "Make the body blue" }),
+    )["result"]
+        .clone();
     assert_eq!(r["result"], json!("landed"), "{r}");
-    assert!(std::fs::read_to_string(env.dir.join("services/site/dusk/a.user.css")).unwrap().contains("blue"));
+    assert!(
+        std::fs::read_to_string(env.dir.join("services/site/dusk/a.user.css"))
+            .unwrap()
+            .contains("blue")
+    );
 
     // The landing reloads the bundle like any other file change.
     let changed = loop {
@@ -355,7 +375,12 @@ fn tasks_land_through_the_daemon_with_hooks_and_undo() {
             break msg["params"].clone();
         }
     };
-    assert!(fetch_bundle(&mut s, &changed)["styles"][0]["sections"][0]["css"].as_str().unwrap().contains("blue"));
+    assert!(
+        fetch_bundle(&mut s, &changed)["styles"][0]["sections"][0]["css"]
+            .as_str()
+            .unwrap()
+            .contains("blue")
+    );
 
     // The hook ran with the task's details and the summary on stdin.
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -363,18 +388,98 @@ fn tasks_land_through_the_daemon_with_hooks_and_undo() {
         std::thread::sleep(Duration::from_millis(50));
     }
     std::thread::sleep(Duration::from_millis(100));
-    assert_eq!(std::fs::read_to_string(&hook_out).unwrap(), format!("{id} site 1 Make the body blue"));
+    assert_eq!(
+        std::fs::read_to_string(&hook_out).unwrap(),
+        format!("{id} site 1 Make the body blue")
+    );
 
     let undo = call(&mut s, 4, "journal/undo", json!({}))["result"].clone();
     assert_eq!(undo["undoOf"], json!(1));
-    assert!(std::fs::read_to_string(env.dir.join("services/site/dusk/a.user.css")).unwrap().contains("red"));
+    assert!(
+        std::fs::read_to_string(env.dir.join("services/site/dusk/a.user.css"))
+            .unwrap()
+            .contains("red")
+    );
     let journal = call(&mut s, 5, "journal/list", json!({}))["result"].clone();
     assert_eq!(journal.as_array().unwrap().len(), 2);
 
     // Refusals come back as errors with a reason.
-    let refused = call(&mut s, 6, "task/claim", json!({ "id": id, "session": "s1" }));
-    assert!(refused["error"]["message"].as_str().unwrap().contains("landed"));
+    let refused = call(
+        &mut s,
+        6,
+        "task/claim",
+        json!({ "id": id, "session": "s1" }),
+    );
+    assert!(
+        refused["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("landed")
+    );
 
     daemon.kill().unwrap();
     daemon.wait().unwrap();
+}
+
+#[test]
+fn task_trees_are_served_as_sources() {
+    let env = Env::new();
+    let mut daemon = env.daemon();
+    let mut s = env.connect();
+    initialize(&mut s, &env.dir);
+
+    let id = call(
+        &mut s,
+        1,
+        "task/create",
+        json!({ "kind": "revise", "service": "site", "brief": { "description": "make it blue" } }),
+    )["result"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let unclaimed = call(&mut s, 2, "bundle/get", json!({ "source": id }));
+    assert_eq!(unclaimed["error"]["code"], json!(-32031), "{unclaimed}");
+
+    let claimed = call(&mut s, 3, "task/claim", json!({ "session": "s1" }))["result"].clone();
+    let tree = PathBuf::from(claimed["tree"].as_str().unwrap());
+    let css = |s: &mut UnixStream, blob: &Value| {
+        fetch_bundle(s, blob)["styles"][0]["sections"][0]["css"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    let first = call(&mut s, 4, "bundle/get", json!({ "source": id }))["result"].clone();
+    assert!(css(&mut s, &first).contains("red"));
+
+    // A save in the tree changes the source's bundle, not the owned directory's.
+    write(
+        &tree,
+        "services/site/dusk/a.user.css",
+        "@-moz-document domain(\"example.com\") { body { color: blue; } }\n",
+    );
+    let changed = loop {
+        let msg = recv(&mut s);
+        if msg["method"] == json!("bundle/changed") {
+            break msg["params"].clone();
+        }
+    };
+    assert_eq!(changed["source"], json!(id));
+    assert!(css(&mut s, &changed).contains("blue"));
+    let default = call(&mut s, 5, "bundle/get", json!({}))["result"].clone();
+    assert!(css(&mut s, &default).contains("red"));
+    let status = call(&mut s, 6, "status", json!({ "source": id }))["result"].clone();
+    assert_eq!(status["bundleHash"], changed["hash"]);
+
+    // Once the task finishes, its tree is no longer a source.
+    call(&mut s, 7, "task/abandon", json!({ "id": id }));
+    let finished = call(&mut s, 8, "bundle/get", json!({ "source": id }));
+    assert!(
+        finished["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("finished"),
+        "{finished}"
+    );
+
+    daemon.kill().unwrap();
 }

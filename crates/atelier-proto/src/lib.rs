@@ -17,13 +17,16 @@ pub const PROTOCOL_VERSION: u32 = 1;
 pub mod method {
     /// Request, first message on any connection: [`InitializeParams`] → [`InitializeResult`].
     pub const INITIALIZE: &str = "initialize";
-    /// Request: no params → [`BlobRef`] for the current [`Bundle`] (as JSON).
+    /// Request: [`SourceParams`] (optional) → [`BlobRef`] for that source's
+    /// current [`Bundle`] (as JSON). Asking for a task's source starts the
+    /// daemon watching its tree.
     pub const BUNDLE_GET: &str = "bundle/get";
-    /// Notification from the daemon: [`BlobRef`] for a new [`Bundle`].
+    /// Notification from the daemon: [`BundleChanged`], a source's new bundle.
     pub const BUNDLE_CHANGED: &str = "bundle/changed";
     /// Request: [`BlobGetParams`] → [`BlobChunk`].
     pub const BLOB_GET: &str = "blob/get";
-    /// Request: no params → [`StatusResult`].
+    /// Request: [`SourceParams`] (optional) → [`StatusResult`], with that
+    /// source's bundle hash and diagnostics.
     pub const STATUS: &str = "status";
     /// Request from any client: [`BrowserCallParams`] → whatever the browser
     /// method returns. The daemon forwards the inner request to the most
@@ -39,6 +42,9 @@ pub mod error_code {
     pub const BROWSER_TIMEOUT: i64 = -32011;
     /// A task operation was refused; the message says why.
     pub const TASK_REFUSED: i64 = -32030;
+    /// A source that doesn't exist (now): no such task, or one that hasn't
+    /// been claimed yet, or one that has finished.
+    pub const NO_SUCH_SOURCE: i64 = -32031;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -95,6 +101,29 @@ pub struct InitializeResult {
 #[ts(export)]
 pub struct BlobRef {
     /// SHA-256 of the content, hex-encoded.
+    pub hash: String,
+    pub size: u64,
+}
+
+/// Which source (SPEC §6.2) a request is about.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SourceParams {
+    /// A task's id, for its tree; absent for the owned directory.
+    #[serde(default)]
+    #[ts(optional)]
+    pub source: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BundleChanged {
+    /// The task whose tree changed; absent for the owned directory.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub source: Option<String>,
     pub hash: String,
     pub size: u64,
 }

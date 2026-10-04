@@ -442,6 +442,32 @@ pub fn tasks(dir: Option<&str>, args: &[String]) -> ExitCode {
             Some(id) => client.call(tm::GET, json!({ "id": id })),
             None => return fail("usage: atelier task show ID"),
         },
+        // Working a task by hand: claim it, edit its tree, submit.
+        (Some("task"), Some("claim")) => client.call(
+            tm::CLAIM,
+            json!({
+                "id": arg(2).filter(|a| !a.starts_with("--")),
+                "session": opt("--session").unwrap_or_else(|| "cli".into()),
+            }),
+        ),
+        (Some("task"), Some("submit")) => match (
+            arg(2),
+            args.get(3..).and_then(|rest| {
+                rest.iter().find(|a| {
+                    !a.starts_with("--") && opt("--session").as_deref() != Some(a.as_str())
+                })
+            }),
+        ) {
+            (Some(id), Some(summary)) => client.call(
+                tm::SUBMIT,
+                json!({
+                    "id": id,
+                    "session": opt("--session").unwrap_or_else(|| "cli".into()),
+                    "summary": summary,
+                }),
+            ),
+            _ => return fail("usage: atelier task submit ID [--session NAME] SUMMARY"),
+        },
         (Some("task"), Some("abandon")) => match arg(2) {
             Some(id) => client.call(
                 tm::ABANDON,
@@ -477,7 +503,7 @@ pub fn tasks(dir: Option<&str>, args: &[String]) -> ExitCode {
         }),
         _ => {
             return fail(
-                "usage: atelier task create|list|show|abandon …, atelier undo [SEQ], atelier journal",
+                "usage: atelier task create|list|show|claim|submit|abandon …, atelier undo [SEQ], atelier journal",
             );
         }
     };

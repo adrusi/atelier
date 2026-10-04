@@ -3,11 +3,15 @@
 // bundle of compiled styles, and registers one user script per style that
 // runs the page shim (shim.ts). When the bundle changes it updates the
 // registrations and pushes the new bundle to pages that are already open.
+// Agent tabs can be bound to a task's tree instead (SPEC §6.2); those get
+// that tree's bundle, fetched and kept up to date the same way.
 
 import type { BlobChunk } from "./proto/BlobChunk";
 import type { BlobRef } from "./proto/BlobRef";
 import type { Bundle } from "./proto/Bundle";
+import type { BundleChanged } from "./proto/BundleChanged";
 import type { InitializeResult } from "./proto/InitializeResult";
+import type { Task } from "./proto/Task";
 import { cssFor } from "./matching";
 import { Rpc } from "./rpc";
 import * as tools from "./tools";
@@ -54,20 +58,34 @@ async function connect() {
     scheduleReconnect();
   };
   r.onNotification = (method, params) => {
-    if (method === "bundle/changed") void loadBundle(r, params as BlobRef);
+    if (method === "bundle/changed") {
+      const { source, ...ref } = params as BundleChanged;
+      if (source === undefined) void loadBundle(r, ref);
+      else if (sources.has(source)) void loadSource(r, source, ref);
+    } else if (method === "task/changed") {
+      const task = params as Task;
+      if (task.state === "landed" || task.state === "declined" || task.state === "abandoned") void closeSource(task.id);
+    }
   };
   // Browser tools, on behalf of agents (atelier mcp) and the CLI.
   r.onRequest = (method, params) =>
     tools.handle(method, params, {
-      bundle: () => state.bundle,
+      bundle: (tabId) => {
+        const source = tabId === undefined ? undefined : bindings.get(tabId);
+        return source === undefined ? state.bundle : sources.get(source)?.bundle;
+      },
+      sourceOf: (tabId) => bindings.get(tabId) ?? null,
+      bind: bindTab,
       hasShim: (tabId) => [...shimPorts].some((p) => p.sender?.tab?.id === tabId),
       unmet: (tabId) => unmetByTab.get(tabId) ?? [],
       atelierDir: () => state.atelierDir,
-      settle: async () => {
+      settle: async (tabId) => {
+        const source = tabId === undefined ? undefined : bindings.get(tabId);
+        const have = () => (source === undefined ? state.bundleHash : sources.get(source)?.hash);
         const deadline = Date.now() + 3000;
         while (rpc === r && Date.now() < deadline) {
-          const s = await r.call<{ reloadPending: boolean; bundleHash: string }>("status");
-          if (!s.reloadPending && s.bundleHash === state.bundleHash) return;
+          const s = await r.call<{ reloadPending: boolean; bundleHash: string }>("status", source === undefined ? {} : { source });
+          if (!s.reloadPending && s.bundleHash === have()) return;
           await new Promise((res) => setTimeout(res, 100));
         }
       },
@@ -84,6 +102,10 @@ async function connect() {
     state.error = undefined;
     retryDelay = 1000;
     await loadBundle(r, await r.call<BlobRef>("bundle/get"));
+    await bindingsLoaded;
+    for (const source of new Set(bindings.values())) {
+      await loadSource(r, source).catch(() => closeSource(source));
+    }
   } catch (e) {
     state.error = e instanceof Error ? e.message : String(e);
     console.warn("atelier:", state.error);
@@ -102,8 +124,7 @@ function scheduleReconnect() {
   retryDelay = Math.min(retryDelay * 2, 60_000);
 }
 
-async function loadBundle(r: Rpc, ref: BlobRef) {
-  if (ref.hash === state.bundleHash) return;
+async function fetchBundle(r: Rpc, ref: BlobRef): Promise<Bundle> {
   const parts: Uint8Array[] = [];
   let offset = 0;
   for (;;) {
@@ -122,16 +143,105 @@ async function loadBundle(r: Rpc, ref: BlobRef) {
   const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", blob));
   const hash = Array.from(digest, (b) => b.toString(16).padStart(2, "0")).join("");
   if (hash !== ref.hash) throw new Error(`bundle hash mismatch: expected ${ref.hash}, got ${hash}`);
+  return JSON.parse(new TextDecoder().decode(blob)) as Bundle;
+}
 
-  const bundle = JSON.parse(new TextDecoder().decode(blob)) as Bundle;
-  state.bundle = bundle;
-  state.bundleHash = hash;
-  console.info(`atelier: bundle ${hash.slice(0, 12)}: ${bundle.styles.length} styles, ${bundle.diagnostics.length} diagnostics`);
+function logBundle(label: string, hash: string, bundle: Bundle) {
+  console.info(`atelier: ${label} ${hash.slice(0, 12)}: ${bundle.styles.length} styles, ${bundle.diagnostics.length} diagnostics`);
   for (const d of bundle.diagnostics) {
     const place = d.path ? `${d.path}${d.line ? `:${d.line}` : ""}: ` : "";
     console.info(`atelier:   ${d.severity} ${place}${d.message}`);
   }
+}
+
+async function loadBundle(r: Rpc, ref: BlobRef) {
+  if (ref.hash === state.bundleHash) return;
+  const bundle = await fetchBundle(r, ref);
+  state.bundle = bundle;
+  state.bundleHash = ref.hash;
+  logBundle("bundle", ref.hash, bundle);
   await applyBundle(bundle);
+}
+
+// ---------------------------------------------------------------------------
+// Sources: agent tabs bound to a task's tree (SPEC §6.2)
+
+/** Bundles of the task trees that tabs are bound to, by task id. */
+const sources = new Map<string, { bundle: Bundle; hash: string }>();
+/** Agent tabs bound to a task, kept in session storage so they survive the
+ * background restarting. Every other tab gets the owned directory's styles. */
+const bindings = new Map<number, string>();
+const bindingsLoaded = browser.storage.session.get("bindings").then((v) => {
+  for (const [tab, source] of (v.bindings as [number, string][] | undefined) ?? []) bindings.set(tab, source);
+});
+const saveBindings = () => browser.storage.session.set({ bindings: [...bindings] });
+
+/** Fetches a task tree's bundle (the daemon starts watching it), and gives
+ * it to the tabs bound to it. Throws if the daemon doesn't serve it. */
+async function loadSource(r: Rpc, source: string, ref?: BlobRef) {
+  ref ??= await r.call<BlobRef>("bundle/get", { source });
+  if (sources.get(source)?.hash === ref.hash) return;
+  const bundle = await fetchBundle(r, ref);
+  sources.set(source, { bundle, hash: ref.hash });
+  logBundle(`task ${source}`, ref.hash, bundle);
+  for (const port of shimPorts) {
+    const tabId = port.sender?.tab?.id;
+    if (tabId !== undefined && bindings.get(tabId) === source) sendStyles(port);
+  }
+  void tools.reapplyForcedStates();
+}
+
+/** Binds a tab to a task's tree, or back to the owned directory (null). */
+async function bindTab(tabId: number, source: string | null) {
+  await bindingsLoaded;
+  if (source !== null) {
+    if (!rpc) throw new Error("atelier's daemon isn't connected");
+    await loadSource(rpc, source);
+    bindings.set(tabId, source);
+  } else if (!bindings.delete(tabId)) {
+    return;
+  }
+  await saveBindings();
+  const ports = [...shimPorts].filter((p) => p.sender?.tab?.id === tabId);
+  for (const port of ports) sendStyles(port);
+  if (source !== null && ports.length === 0) await ensureShim(tabId);
+}
+
+/** Puts every tab bound to a finished task back on the owned directory. */
+async function closeSource(source: string) {
+  await bindingsLoaded;
+  sources.delete(source);
+  for (const [tabId, s] of [...bindings]) if (s === source) await bindTab(tabId, null);
+}
+
+/** Bound tabs need a shim even on pages the owned directory has no style for
+ * (the task may be styling a new site), so they get one on every load. */
+async function ensureShim(tabId: number) {
+  const us = userScripts();
+  if (!us) return;
+  try {
+    await us.execute({
+      target: { tabId },
+      injectImmediately: true,
+      js: [{ code: ATELIER_SHIM }, { code: "__atelier.attach();" }],
+    });
+  } catch (e) {
+    console.debug(`atelier: couldn't inject into bound tab ${tabId}:`, e);
+  }
+}
+
+/** Sends a shim its tab's source and styles. */
+function sendStyles(port: browser.runtime.Port) {
+  const tabId = port.sender?.tab?.id;
+  const source = tabId === undefined ? undefined : bindings.get(tabId);
+  port.postMessage({ type: "bind", source: source ?? null });
+  if (source === undefined) {
+    if (state.bundle) port.postMessage({ type: "bundle", styles: state.bundle.styles });
+    return;
+  }
+  const loaded = sources.get(source);
+  if (loaded) port.postMessage({ type: "bundle", styles: loaded.bundle.styles });
+  else if (rpc) void loadSource(rpc, source).catch(() => closeSource(source));
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +280,10 @@ async function applyBundle(bundle: Bundle) {
   if (added.length) await us.register(added);
   console.info(`atelier: user scripts: ${added.length} added, ${updates.length} updated, ${removed.length} removed`);
 
-  for (const port of shimPorts) port.postMessage({ type: "bundle", styles: bundle.styles });
+  for (const port of shimPorts) {
+    const tabId = port.sender?.tab?.id;
+    if (tabId === undefined || !bindings.has(tabId)) port.postMessage({ type: "bundle", styles: bundle.styles });
+  }
   await injectIntoOpenTabs(bundle);
   void tools.reapplyForcedStates();
 }
@@ -183,7 +296,7 @@ async function injectIntoOpenTabs(bundle: Bundle) {
   if (!us) return;
   const withShim = new Set([...shimPorts].map((p) => p.sender?.tab?.id));
   for (const tab of await browser.tabs.query({})) {
-    if (tab.id === undefined || withShim.has(tab.id) || !tab.url || !/^(https?|file):/.test(tab.url)) continue;
+    if (tab.id === undefined || withShim.has(tab.id) || bindings.has(tab.id) || !tab.url || !/^(https?|file):/.test(tab.url)) continue;
     const url = tab.url;
     const styles = bundle.styles.filter((s) => cssFor(s, url) !== null);
     if (styles.length === 0) continue;
@@ -223,8 +336,9 @@ function onShimConnect(port: browser.runtime.Port) {
     shimPorts.delete(port);
     if (tabId !== undefined && port.sender?.frameId === 0) setUnmet(tabId, []);
   });
-  // The page may have been registered from an older bundle.
-  if (state.bundle) port.postMessage({ type: "bundle", styles: state.bundle.styles });
+  // The page may have been registered from an older bundle, or its tab bound
+  // to a task (bindings may not have loaded yet if this woke the background).
+  void bindingsLoaded.then(() => sendStyles(port));
 }
 
 function listenToShims() {
@@ -244,6 +358,17 @@ function notifyUrlChange(details: { tabId: number; frameId: number }) {
 
 browser.webNavigation.onHistoryStateUpdated.addListener(notifyUrlChange);
 browser.webNavigation.onReferenceFragmentUpdated.addListener(notifyUrlChange);
+browser.webNavigation.onCommitted.addListener((details) => {
+  if (details.frameId !== 0) return;
+  void bindingsLoaded.then(() => {
+    if (bindings.has(details.tabId)) void ensureShim(details.tabId);
+  });
+});
+browser.tabs.onRemoved.addListener((tabId) => {
+  void bindingsLoaded.then(() => {
+    if (bindings.delete(tabId)) void saveBindings();
+  });
+});
 
 browser.permissions.onAdded.addListener((p) => {
   if (!(p.permissions as string[] | undefined)?.includes("userScripts")) return;
