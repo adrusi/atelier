@@ -10,13 +10,14 @@
     color-scheme: dark;
     --base: #1e1e2e; --mantle: #181825; --crust: #11111b;
     --surface0: #313244; --surface1: #45475a; --overlay0: #6c7086; --overlay2: #9399b2;
-    --text: #cdd6f4; --lavender: #b4befe; --blue: #89b4fa; --mauve: #cba6f7; --peach: #fab387;
+    --text: #cdd6f4; --lavender: #b4befe; --mauve: #cba6f7; --peach: #fab387;
     --sans: "NotoSans NFP Cond", "Noto Sans", sans-serif;
     --mono: "NotoSansM NFM ExtCond", "NotoSansM Nerd Font Mono", monospace;
   }
 
   html, body { background: var(--base); }
-  body, td, .title, .subtext, .comment, .commtext, .default, .admin, input, textarea, select {
+  body, td, .title, .subtext, .comment, .commtext, .default, .admin,
+  .pagetop, .comhead, .yclinks, input, textarea, select {
     font-family: var(--sans);
   }
   pre, code, tt { font-family: var(--mono); }
@@ -39,8 +40,10 @@
   .hnname a:link, .hnname a:visited { color: var(--lavender); }
   .topsel a:link, .topsel a:visited { color: var(--lavender); }
 
-  /* Links HN doesn't colour itself (e.g. in item text) fall back to these. */
-  a:link { color: var(--blue); }
+  /* Links HN doesn't colour itself (e.g. in item text) fall back to these.
+     Links take the accent; story titles and meta lines keep HN's own
+     scheme of text and greys. */
+  a:link { color: var(--lavender); }
   a:visited { color: var(--mauve); }
   .toptext { color: var(--text); }
 
@@ -50,8 +53,18 @@
   .titleline > a:visited { color: var(--overlay2); }
   .sitebit, .sitebit a:link, .sitebit a:visited, .sitestr { color: var(--overlay0); }
   .subtext, .subline, .subtext a:link, .subtext a:visited, .score, .age a { color: var(--overlay0); }
-  /* HN's 7pt is too small in a condensed face. */
-  .subtext, .comhead { font-size: 8.5pt; }
+  /* HN's 7pt is too small in a condensed face, and grey on dark is
+     borderline: a little larger and a little heavier. The Nerd Font build
+     of Noto is static instances, and its Medium is a family of its own
+     (weight 500 alone renders as Regular); a variable Noto would take the
+     weight instead. */
+  .subtext, .comhead {
+    font-size: 8.5pt;
+    font-family: "NotoSans NFP Cond Med", var(--sans);
+    font-weight: 500;
+  }
+  /* The site name after a title is also .comhead; it sits in the title line. */
+  .titleline .sitebit { font-size: 9pt; font-family: var(--sans); font-weight: normal; }
   .subtext a:hover, .titleline > a:hover, .pagetop a:hover { text-decoration: underline; }
 
   /* Vote arrows are a grey GIF; draw them instead. */
@@ -66,7 +79,7 @@
 
   /* Comments */
   .commtext, .commtext.c00 { color: var(--text); }
-  .commtext a:link { color: var(--blue); }
+  .commtext a:link { color: var(--lavender); }
   .commtext a:visited { color: var(--mauve); }
   .comhead, .comhead a:link, .comhead a:visited { color: var(--overlay2); }
   .hnuser { color: var(--overlay2); }

@@ -91,7 +91,7 @@ Instances live in `$XDG_RUNTIME_DIR/atelier-dev/<name>/` (override with `ATELIER
 - **sway**, as the compositor:
   - default `WLR_BACKENDS=headless`: renders for real, but nothing appears on the desktop;
   - rendering is in software (`WLR_RENDERER=pixman`, overridable with `ATELIER_DEV_WLR_RENDERER`): GPU access inside the jail is unreliable, and software output is more reproducible across machines anyway;
-  - `--visible`: `WLR_BACKENDS=wayland`, with the host's Wayland socket (and only that socket) bound into the jail, so the whole instance shows up as a single window (**not yet tested**);
+  - `--visible`: `WLR_BACKENDS=wayland`, with the host's Wayland socket (and only that socket) bound into the jail, so the whole instance shows up as a single window;
   - sway rather than cage, so that tests can reproduce different window arrangements (one tab per window, focus, active tab per window).
 - **Firefox** from the dev shell, with a fresh profile (first-run UI suppressed) and `--remote-debugging-port` for WebDriver BiDi on a port chosen per instance. It's launched as a child of sway via `swaymsg exec`, and so is the fixture server.
 - **The dev build of the extension**, installed as a temporary add-on over BiDi (`webExtension.install`), so no signing is needed. Dev builds use their own IDs, `atelier-dev@…` for the extension and `atelier_dev` for the native host, as a second safeguard against clashing with a real install.

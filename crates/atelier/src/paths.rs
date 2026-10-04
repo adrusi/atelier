@@ -17,16 +17,35 @@ fn home() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("/"))
 }
 
-/// The owned directory: `explicit`, else `$ATELIER_DIR`, else `$XDG_DATA_HOME/atelier`.
-/// Not canonicalized, and not required to exist.
+/// The owned directory: `explicit`, else `$ATELIER_DIR`, else `atelier_dir` in
+/// config.toml, else `$XDG_DATA_HOME/atelier`. Not canonicalized, and not
+/// required to exist. (The config file matters because browsers don't pass
+/// the user's shell environment to native hosts.)
 pub fn atelier_dir(explicit: Option<&str>) -> PathBuf {
     if let Some(d) = explicit {
         return PathBuf::from(d);
     }
     match std::env::var_os("ATELIER_DIR") {
         Some(d) if !d.is_empty() => PathBuf::from(d),
-        _ => xdg("XDG_DATA_HOME", ".local/share").join("atelier"),
+        _ => {
+            configured_dir().unwrap_or_else(|| xdg("XDG_DATA_HOME", ".local/share").join("atelier"))
+        }
     }
+}
+
+/// `$XDG_CONFIG_HOME/atelier/config.toml`: settings for this machine (SPEC §9.1).
+pub fn config_path() -> PathBuf {
+    config_dir().join("config.toml")
+}
+
+fn configured_dir() -> Option<PathBuf> {
+    let text = std::fs::read_to_string(config_path()).ok()?;
+    let table: toml::Table = toml::from_str(&text).ok()?;
+    let dir = table.get("atelier_dir")?.as_str()?;
+    Some(match dir.strip_prefix("~/") {
+        Some(rest) => home().join(rest),
+        None => PathBuf::from(dir),
+    })
 }
 
 /// [`atelier_dir`], canonicalized. Errors if it doesn't exist.

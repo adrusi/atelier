@@ -3,6 +3,7 @@ mod daemon;
 mod loader;
 mod native_host;
 mod paths;
+mod setup;
 mod usercss;
 mod wire;
 
@@ -12,13 +13,16 @@ const USAGE: &str = "\
 usage: atelier [--dir DIR] <command>
 
   init [--theme NAME]   create an owned directory (default theme name: main)
+  setup [--dir DIR]     register the native-messaging host with Firefox-family
+                        browsers; with --dir, also make DIR the default owned directory
   status                daemon, theme, styles and problems
   lint                  load the owned directory and report problems
   match URL             which styles apply to URL
   daemon                serve the owned directory (normally started for you)
   native-host           bridge for the browser extension (started by the browser)
 
-The owned directory is --dir, else $ATELIER_DIR, else $XDG_DATA_HOME/atelier.";
+The owned directory is --dir, else $ATELIER_DIR, else atelier_dir in
+$XDG_CONFIG_HOME/atelier/config.toml, else $XDG_DATA_HOME/atelier.";
 
 fn main() -> ExitCode {
     let mut args: Vec<String> = std::env::args().skip(1).collect();
@@ -28,8 +32,15 @@ fn main() -> ExitCode {
         return ExitCode::FAILURE;
     };
     match command.as_str() {
-        // Firefox passes the host's manifest path and the extension ID.
+        // Firefox runs the manifest's path with the manifest's own path and the
+        // extension ID as arguments, so a first argument ending in .json means
+        // we were started as the native host.
+        manifest if manifest.ends_with(".json") => {
+            args.insert(0, command.clone());
+            native_host::run(&args)
+        }
         "native-host" => native_host::run(&args),
+        "setup" => setup::run(dir.as_deref()),
         "daemon" => daemon::run(dir.as_deref()),
         "status" => cli::status(dir.as_deref()),
         "lint" => cli::lint(dir.as_deref()),
