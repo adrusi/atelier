@@ -251,6 +251,13 @@ try {
     ]);
   });
 
+  await check("screenshot's extraCss shows a variant just for the capture", async () => {
+    const content = await tool("screenshot", { tab, extraCss: "html { background: rgb(255, 0, 0) !important; }", scale: 0.25 });
+    assert.equal(content[0].type, "image");
+    const { result } = await tool("eval", { tab, expression: "document.querySelector('style[data-atelier-extra]') === null" });
+    assert.equal(result, true, "the extra style is removed afterwards");
+  });
+
   await check("tab_navigate and tab_close", async () => {
     const r = await tool("tab_navigate", { tab, url: `http://127.0.0.1:${state.fixturesPort}/basic/` });
     assert.equal(r.title, "basic fixture");

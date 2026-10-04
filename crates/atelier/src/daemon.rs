@@ -979,6 +979,11 @@ fn task_call(
             Ok(json!(task))
         }
         tm::CHANGES => Ok(json!(store.changes(&str_param("id")?).map_err(failed)?)),
+        tm::NOTE => Ok(json!(
+            store
+                .note(&str_param("id")?, &str_param("handoff")?, now)
+                .map_err(failed)?
+        )),
         tm::JOURNAL => Ok(json!(store.journal().map_err(failed)?)),
         tm::UNDO => {
             let seq = params.get("seq").and_then(Value::as_u64);

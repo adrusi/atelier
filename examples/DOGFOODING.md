@@ -299,3 +299,62 @@ about the lease. In a follow-up interview, it raised:
   resolved that towards not asking. Sessions started by a spawn command
   should say which they are.
 - **Enforced scopes** for side effects (SPEC §10.2), beyond describing them.
+
+## First questions through task_ask: crates.io (2026-10-04)
+
+A headless session (`ATELIER_SESSION=headless`) on a `create` task for
+crates.io, with the roarke theme in its default `forming` stage. It built the
+whole style (about 26 minutes), then put one question to the user: crates.io
+draws its cards darker than the page, while THEME.md's table puts cards on
+surface0. It marked the question theme-level, attached screenshots of both
+versions (made by restyling elements with `eval`), and said what it would
+choose. About six smaller calls it made itself, listed in its final message.
+The task parked. A developer answered as a stand-in (the owner's own answer is
+still to come), and a fresh session claimed the task, saw the answer,
+recorded it in `notes.md`, landed in about a minute, and suggested a line for
+THEME.md. The style is in `services/cratesio/`.
+
+**On calls as one concept** (the open question in SPEC §9.5), the agent:
+"they felt like the same kind of thing that arrives at different times …
+the difference is the effect, not the kind." It decided what to ask by
+whether it was knowingly departing from THEME.md, or the answer would apply
+to other sites; it assumed when THEME.md covered it or the call was local
+and cheap to undo. The `forming` wording made it ask where it would
+otherwise have noted the call in `notes.md`, "and correctly"; it didn't
+invent questions.
+
+**Fixed:**
+
+- **`wait` was per batch; the agent wanted it per call.** It had one call
+  for review and six for the record, and couldn't send them together, so the
+  six only reached its final message: review released the task before it
+  could submit them as assumptions. Calls now carry their own `wait`; a batch
+  parks the task if any call needs it.
+- **The brief pushed review too hard.** "Usually as wait: review for a new
+  site" made it park a task to confirm a default it would have kept anyway.
+  The guidance now says most calls can be for the record (landing and
+  letting the user reopen costs nothing), and review is for options that
+  would mean substantially different work.
+- `task_ask` had no handoff note, so the second session had to infer that
+  the work was finished and only waiting. It now takes `handoff`.
+- `choice` with reasons appended didn't match any option, so the inbox
+  couldn't preselect it. Reasons now move into the context.
+- Screenshots right after a save could show the old styles; `screenshot`
+  now waits for pending reloads, as `styles_status` does.
+- Variants needed element-by-element `eval`. `screenshot(extraCss)` adds CSS
+  for one capture.
+
+**Open:**
+
+- **Variants as files in the tree**, which the user can flip between live
+  in their own tab, and which picking an answer resolves (keep one, delete
+  the other) without an agent: the agent's ideal for "show two versions".
+- **Keeping the claim through a quick review**, so a prompt answer comes
+  back to the same session rather than a fresh one that has to reload
+  everything.
+- Who carries a theme-level answer into THEME.md is still the agent's own
+  summary (no supervisor yet), and services that already landed don't hear
+  about it.
+- Claude Code itself nudges headless sessions with "the user hasn't heard
+  from you in a while", which contradicts the work prompt's "nobody is
+  watching". Not atelier's, but confusing for the agent.

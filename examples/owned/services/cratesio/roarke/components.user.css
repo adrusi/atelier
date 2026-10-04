@@ -1,0 +1,457 @@
+/* ==UserStyle==
+@name           crates.io components (roarke)
+@namespace      atelier
+@version        0.1.0
+@description    Flattens crates.io's dark mode and recolours what its tokens don't reach
+==/UserStyle== */
+
+/* Svelte scopes component rules with hashed classes (.box.svelte-124xg1a)
+   that change whenever a component's CSS does, so these selectors use the
+   readable class only, with html:root[data-color-scheme="dark"] in front
+   for specificity (0,2,1 plus the component's own classes). Where a
+   readable class is generic (.list, .link, .header), a parent narrows it. */
+
+@-moz-document domain("crates.io") {
+  /* ---- Header, footer, hero ---------------------------------------- */
+
+  html:root[data-color-scheme="dark"] :is(.header-inner, .header-inner a, .header-inner a:hover, .hero-title, noscript) {
+    color: #cdd6f4;
+    text-shadow: none;
+  }
+
+  html:root[data-color-scheme="dark"] footer.footer .content :is(h2, a, a:hover) {
+    text-shadow: none;
+  }
+  html:root[data-color-scheme="dark"] footer.footer .content h2 {
+    color: #cdd6f4;
+  }
+  html:root[data-color-scheme="dark"] footer.footer .content a {
+    color: #9399b2;
+  }
+  html:root[data-color-scheme="dark"] footer.footer .content a:hover {
+    color: #b4befe;
+  }
+  html:root[data-color-scheme="dark"] footer.footer .content a:hover .icon {
+    filter: none;
+  }
+
+  html:root[data-color-scheme="dark"] .progress-bar {
+    background: #b4befe;
+    box-shadow: none;
+  }
+
+  /* ---- Search ------------------------------------------------------- */
+
+  /* Inputs are recessed (crust). The search keeps crates.io's pill, which
+     its submit button is shaped to. */
+  html:root[data-color-scheme="dark"] :is(.input-lg, .input-sm) {
+    background: #11111b;
+    color: #cdd6f4;
+    box-shadow: none;
+    border: 1px solid #45475a;
+    border-right: none;
+  }
+  html:root[data-color-scheme="dark"] :is(.input-lg, .input-sm):focus {
+    border-color: #b4befe;
+    box-shadow: none;
+  }
+  html:root[data-color-scheme="dark"] :is(.input-lg, .input-sm)::placeholder {
+    color: #6c7086;
+    opacity: 1;
+  }
+  html:root[data-color-scheme="dark"] .submit-button {
+    background-color: #b4befe;
+    color: #1e1e2e;
+  }
+  html:root[data-color-scheme="dark"] .submit-button:hover {
+    background-color: #cdd6f4;
+  }
+
+  html:root[data-color-scheme="dark"] .base-input {
+    background-color: #11111b;
+    border-color: #45475a;
+    border-radius: 4px;
+    color: #cdd6f4;
+  }
+  html:root[data-color-scheme="dark"] .base-input:focus {
+    border-color: #b4befe;
+    outline: none;
+  }
+  html:root[data-color-scheme="dark"] .base-input[aria-invalid="true"] {
+    background: color-mix(in srgb, #f38ba8 12%, #11111b);
+    border-color: #f38ba8;
+  }
+
+  /* ---- Buttons ------------------------------------------------------ */
+
+  /* crates.io's buttons are yellow (tan, red) gradient pills. Flat here,
+     in the accent; tan is the secondary kind. The pill stays: it's how
+     crates.io draws its buttons. */
+  html:root[data-color-scheme="dark"] .button {
+    background: #b4befe;
+    color: #1e1e2e;
+    box-shadow: none;
+    text-shadow: none;
+    border: none;
+  }
+  html:root[data-color-scheme="dark"] :is(.button:hover, .button:focus, .button.active) {
+    background: #cdd6f4;
+    color: #1e1e2e;
+  }
+  html:root[data-color-scheme="dark"] .button:focus-visible {
+    outline: 2px solid #b4befe;
+    outline-offset: 2px;
+  }
+  html:root[data-color-scheme="dark"] .button--tan {
+    background: #313244;
+    color: #cdd6f4;
+  }
+  html:root[data-color-scheme="dark"] :is(.button--tan:hover, .button--tan:focus, .button--tan.active) {
+    background: #45475a;
+    color: #cdd6f4;
+  }
+  html:root[data-color-scheme="dark"] .button--red {
+    background: #f38ba8;
+    color: #1e1e2e;
+  }
+  html:root[data-color-scheme="dark"] :is(.button--red:hover, .button--red:focus) {
+    background: color-mix(in srgb, #f38ba8 80%, #cdd6f4);
+  }
+  html:root[data-color-scheme="dark"] .button[disabled] {
+    background: #313244;
+    color: #6c7086 !important;
+  }
+  html:root[data-color-scheme="dark"] .button .icon {
+    color: inherit;
+  }
+
+  html:root[data-color-scheme="dark"] .load-more-button {
+    background-color: #181825;
+    color: #cdd6f4;
+  }
+  html:root[data-color-scheme="dark"] :is(.load-more-button:hover, .load-more-button:focus) {
+    background-color: #313244;
+  }
+
+  html:root[data-color-scheme="dark"] .follow-button {
+    border-radius: 4px;
+  }
+  html:root[data-color-scheme="dark"] :is(.follow-button:hover, .follow-button:focus):not(:disabled) {
+    border-color: #b4befe;
+    background: #313244;
+  }
+
+  /* ---- Menus and tooltips -------------------------------------------- */
+
+  /* Dropdowns (colour scheme, sort order, "Display as") are raised. */
+  html:root[data-color-scheme="dark"] .dropdown .list,
+  html:root[data-color-scheme="dark"] ul.list:has(> .item) {
+    background: #313244;
+    border-color: #45475a;
+    border-radius: 8px;
+  }
+  html:root[data-color-scheme="dark"] .item > :is(a, button):hover {
+    background: #45475a;
+    color: #cdd6f4 !important;
+  }
+  html:root[data-color-scheme="dark"] .color-scheme-menu .selected {
+    background: #45475a;
+  }
+
+  html:root[data-color-scheme="dark"] .tooltip {
+    background: #313244;
+    color: #cdd6f4;
+    border: 1px solid #45475a;
+    border-radius: 4px;
+  }
+
+  /* ---- Crate lists (home page boxes) -------------------------------- */
+
+  /* crates.io draws these darker than the page with a drop shadow; here
+     they're recessed rectangles with a border, raised when hovered. */
+  html:root[data-color-scheme="dark"] :is(a.box, .link:has(> .right)) {
+    --shadow: none;
+    background-color: #181825;
+    color: #cdd6f4;
+    border: 1px solid #313244;
+    border-radius: 8px;
+    box-shadow: none;
+  }
+  html:root[data-color-scheme="dark"] :is(a.box:hover, a.box:focus-visible) {
+    background-color: #313244;
+    border-color: #45475a;
+    color: #cdd6f4;
+  }
+  html:root[data-color-scheme="dark"] a.box:focus-visible {
+    border-color: #b4befe;
+    box-shadow: none;
+  }
+  html:root[data-color-scheme="dark"] a.box:active {
+    transform: none;
+  }
+  html:root[data-color-scheme="dark"] :is(a.box, .link:has(> .right)) :is(.subtitle, .right, .version, .downloads) {
+    color: #9399b2;
+  }
+
+  /* Home page stats */
+  html:root[data-color-scheme="dark"] :is(.stats-value .label, .stats-value > .icon) {
+    color: #9399b2;
+  }
+
+  /* ---- Crate page ---------------------------------------------------- */
+
+  /* The header box (name, description, keywords) and the README box. */
+  html:root[data-color-scheme="dark"] :is(.boxed, .docs, .inner-main > .header) {
+    --shadow: none;
+    background-color: #181825;
+    border: 1px solid #313244;
+    border-radius: 8px;
+    box-shadow: none;
+  }
+
+  /* Keyword chips sit on the header box, so base reads as a step up. */
+  html:root[data-color-scheme="dark"] .keywords a {
+    background: #313244;
+    font-weight: 500; /* fg-dim on surface is just under 4.5:1 */
+  }
+  html:root[data-color-scheme="dark"] .keywords a:hover {
+    color: #b4befe;
+  }
+
+  /* Tabs (Readme, Code, Versions...): the current one is lavender. */
+  html:root[data-color-scheme="dark"] nav :is(a, .link).active {
+    color: #b4befe;
+    border-bottom-color: #b4befe;
+    background: #181825;
+  }
+  html:root[data-color-scheme="dark"] nav ul > li > a.link:focus-visible {
+    border-color: #b4befe;
+  }
+
+  html:root[data-color-scheme="dark"] .yanked-badge {
+    color: #f38ba8;
+  }
+
+  /* Download stats: crates.io puts its icons on white discs. */
+  html:root[data-color-scheme="dark"] .stat .stat-icon {
+    background-color: #313244;
+    color: #b4befe;
+  }
+
+  /* ---- Crate rows (search, categories, keywords, user pages) -------- */
+
+  html:root[data-color-scheme="dark"] .crate-row {
+    --shadow: none;
+    background-color: #181825;
+    border: 1px solid #313244;
+    border-radius: 8px;
+    box-shadow: none;
+  }
+  /* Every row's name is a link; in text colour, dimmed once visited. */
+  html:root[data-color-scheme="dark"] .crate-row a.name:visited {
+    color: #9399b2;
+  }
+
+  /* Version list. The release track disc keeps its meaning: green for the
+     latest release, yellow for prereleases, red for yanked ones. */
+  /* Rows in the crate page's lists (versions, dependencies, dependents)
+     share one pattern: a dark row with a shadow, set through --bg-color,
+     --hover-bg-color and the like on .row. */
+  html:root[data-color-scheme="dark"] .inner-main li > .row {
+    --hover-bg-color: #313244;
+    --shadow: none;
+    background-color: #181825;
+    border: 1px solid #313244;
+    border-radius: 8px;
+    box-shadow: none;
+  }
+  html:root[data-color-scheme="dark"] .inner-main li > .row:is(:hover, .focused) {
+    background-color: #313244;
+    border-color: #45475a;
+  }
+  html:root[data-color-scheme="dark"] .inner-main li > .row.focused {
+    border-color: #b4befe;
+    box-shadow: none;
+  }
+
+  /* Dependencies: optional ones are dimmed. */
+  html:root[data-color-scheme="dark"] .inner-main li > .row:has(.range-lg) {
+    --range-color: #9399b2;
+    --crate-color: #cdd6f4;
+  }
+  html:root[data-color-scheme="dark"] .inner-main li > .row.optional:has(.range-lg) {
+    --range-color: #6c7086;
+    --crate-color: #9399b2;
+  }
+  html:root[data-color-scheme="dark"] .row :is(.optional-label, .features-label) {
+    color: #9399b2;
+  }
+  html:root[data-color-scheme="dark"] .row .native-replacement a {
+    color: #9399b2;
+  }
+  html:root[data-color-scheme="dark"] .row .native-replacement a:hover {
+    color: #b4befe;
+  }
+  html:root[data-color-scheme="dark"] .replacement-tooltip code {
+    background: #45475a;
+  }
+
+  html:root[data-color-scheme="dark"] .row:has(> .version > .release-track) {
+    --bg-color: #313244;
+    --fg-color: #cdd6f4;
+  }
+  html:root[data-color-scheme="dark"] .row.latest:has(> .version > .release-track) {
+    --bg-color: color-mix(in srgb, #a6e3a1 22%, #1e1e2e);
+    --fg-color: #a6e3a1;
+  }
+  html:root[data-color-scheme="dark"] .row.prerelease:has(> .version > .release-track) {
+    --bg-color: color-mix(in srgb, #f9e2af 22%, #1e1e2e);
+    --fg-color: #f9e2af;
+  }
+  html:root[data-color-scheme="dark"] .row.yanked:has(> .version > .release-track) {
+    --bg-color: color-mix(in srgb, #f38ba8 22%, #1e1e2e);
+    --fg-color: #f38ba8;
+  }
+  html:root[data-color-scheme="dark"] .row .release-track {
+    border-color: #45475a;
+  }
+  html:root[data-color-scheme="dark"] .row:is(:hover, .focused) .release-track {
+    border-color: #6c7086;
+    box-shadow: none;
+  }
+  html:root[data-color-scheme="dark"] .rt-latest { color: #a6e3a1; }
+  html:root[data-color-scheme="dark"] .rt-prerelease { color: #f9e2af; }
+  html:root[data-color-scheme="dark"] .rt-yanked { color: #f38ba8; }
+  html:root[data-color-scheme="dark"] .row .new { color: #f9e2af; }
+  html:root[data-color-scheme="dark"] .row:has(> .version > .release-track) .metadata {
+    color: #9399b2;
+  }
+  html:root[data-color-scheme="dark"] .row:has(> .version > .release-track) .metadata a:hover {
+    color: #cdd6f4;
+  }
+  html:root[data-color-scheme="dark"] .row:has(> .version > .release-track) .metadata .avatar {
+    box-shadow: none;
+  }
+  html:root[data-color-scheme="dark"] .row:has(> .version > .release-track) .trigger:hover {
+    color: #cdd6f4;
+    background-color: #45475a;
+  }
+  html:root[data-color-scheme="dark"] .load-more {
+    --shadow: none;
+  }
+
+  /* Category and keyword lists: one panel of rows. */
+  html:root[data-color-scheme="dark"] .inner-main .panel {
+    background-color: #181825;
+    border: 1px solid #313244;
+    border-radius: 8px;
+    box-shadow: none;
+  }
+  html:root[data-color-scheme="dark"] .panel .row + .row {
+    border-top-color: #313244;
+  }
+  /* Every row's title is a link: text colour, dimmed once visited. */
+  html:root[data-color-scheme="dark"] .panel .row > div:first-child > a {
+    color: #cdd6f4;
+    font-weight: 500;
+  }
+  html:root[data-color-scheme="dark"] .panel .row > div:first-child > a:visited {
+    color: #9399b2;
+  }
+  html:root[data-color-scheme="dark"] .panel .row > div:first-child > a:hover {
+    color: #b4befe;
+  }
+
+  /* Dropdown triggers: "Sort by", "Display as". */
+  html:root[data-color-scheme="dark"] :is(.sort-dropdown, .toggle-stacked) .trigger {
+    background-color: #181825;
+    border: 1px solid #45475a;
+    border-radius: 4px;
+  }
+  html:root[data-color-scheme="dark"] .sort-dropdown .icon {
+    color: #b4befe;
+  }
+
+  /* Owner avatars are ringed in white with a yellowish shadow. */
+  html:root[data-color-scheme="dark"] :is(.link, a) > .avatar,
+  html:root[data-color-scheme="dark"] img:is(.avatar, .user-page-avatar, .team-page-avatar) {
+    background: #45475a;
+    box-shadow: none;
+  }
+
+  /* Install box (cargo add ...) */
+  html:root[data-color-scheme="dark"] .install-instructions .copy-button {
+    border-width: 1px;
+    border-radius: 4px;
+    background: #11111b;
+  }
+  html:root[data-color-scheme="dark"] .install-instructions .copy-button:hover {
+    background-color: #181825;
+  }
+
+  html:root[data-color-scheme="dark"] :is(.sidebar .purl-copy-button, .purl-help-link):focus {
+    outline-color: #b4befe;
+  }
+
+  /* Feature flags and similar descriptions put code on a green tint. */
+  html:root[data-color-scheme="dark"] .description code {
+    background: #313244;
+  }
+
+  /* ---- Alerts and notifications ------------------------------------ */
+
+  html:root[data-color-scheme="dark"] .alert {
+    border-radius: 4px;
+  }
+  html:root[data-color-scheme="dark"] .alert[data-variant="note"] {
+    background-color: color-mix(in srgb, #89b4fa 14%, #1e1e2e);
+    border-color: #89b4fa;
+  }
+  html:root[data-color-scheme="dark"] .alert[data-variant="note"] .icon { color: #89b4fa; }
+  html:root[data-color-scheme="dark"] .alert:is([data-variant="tip"], [data-variant="success"]) {
+    background-color: color-mix(in srgb, #a6e3a1 14%, #1e1e2e);
+    border-color: #a6e3a1;
+  }
+  html:root[data-color-scheme="dark"] .alert:is([data-variant="tip"], [data-variant="success"]) .icon { color: #a6e3a1; }
+  html:root[data-color-scheme="dark"] .alert[data-variant="important"] {
+    background-color: color-mix(in srgb, #cba6f7 14%, #1e1e2e);
+    border-color: #cba6f7;
+  }
+  html:root[data-color-scheme="dark"] .alert[data-variant="important"] .icon { color: #cba6f7; }
+  html:root[data-color-scheme="dark"] .alert[data-variant="warning"] {
+    background-color: color-mix(in srgb, #f9e2af 14%, #1e1e2e);
+    border-color: #f9e2af;
+  }
+  html:root[data-color-scheme="dark"] .alert[data-variant="warning"] .icon { color: #f9e2af; }
+  html:root[data-color-scheme="dark"] .alert[data-variant="caution"] {
+    background-color: color-mix(in srgb, #f38ba8 14%, #1e1e2e);
+    border-color: #f38ba8;
+  }
+  html:root[data-color-scheme="dark"] .alert[data-variant="caution"] .icon { color: #f38ba8; }
+
+  /* Toasts: Mocha status colours with dark text. */
+  html:root[data-color-scheme="dark"] .notification {
+    color: #1e1e2e;
+    border-radius: 4px;
+  }
+  html:root[data-color-scheme="dark"] .notification--info { background-color: #89b4fa; }
+  html:root[data-color-scheme="dark"] .notification--success { background-color: #a6e3a1; }
+  html:root[data-color-scheme="dark"] .notification--warning { background-color: #fab387; }
+  html:root[data-color-scheme="dark"] .notification--error { background-color: #f38ba8; }
+  html:root[data-color-scheme="dark"] .notification__icon {
+    color: #1e1e2e;
+    background-color: color-mix(in srgb, #1e1e2e 15%, transparent);
+  }
+  html:root[data-color-scheme="dark"] .notification__content a {
+    color: #1e1e2e;
+  }
+  html:root[data-color-scheme="dark"] .notification__countdown {
+    background-color: color-mix(in srgb, #1e1e2e 30%, transparent);
+  }
+
+  html:root[data-color-scheme="dark"] pre.terminal {
+    background: #11111b;
+    color: #cdd6f4;
+    border-radius: 8px;
+  }
+}

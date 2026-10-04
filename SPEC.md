@@ -409,7 +409,7 @@ An author agent with an underspecified task has three moves: make a call itself 
 
 A **call** is a decision an agent faced: the question, what it's about (a page, an element, the theme), the options considered, the agent's provisional choice (if it has one), visual aids, and whether the question concerns this site or the theme as a whole. Assumptions and questions are both calls. An assumption is a call with a provisional choice that the agent was comfortable acting on. A question is a call the agent wants answered first. A blocking question is a call with no acceptable provisional choice.
 
-Calls are posted in batches. Each call in a batch is marked:
+Calls are posted in batches. Each call is marked (the batch waits for the most any of its calls asks, so a question that needs answering and the calls made for the record go together):
 
 - **For the record:** the agent goes ahead and lands with its choices, and the batch shows up in the inbox as decisions the user may revisit. Answering one differently queues a `revise` carrying the answer. This is what `task_submit`'s `assumptions` become.
 - **Before landing:** the task parks (`awaiting user`) with its tree, and the session moves on to other work. The answers come back with the task when it's next claimed. The tree may hold variants for the user to pick between.
@@ -423,7 +423,7 @@ Tools (contractor): `task_ask(calls, wait: record | review | block)`, with scree
 - **After the user:** answered calls go back through the supervisor before the contractor sees them. It decides whether an answer changes something persistent: a site-specific answer goes into that service's `notes.md` (by the contractor, as part of its landing); a theme-level answer goes into the theme notes (the supervisor's `notes` task) or becomes a proposed edit to THEME.md; an answer that shows the brief was missing something improves the brief, and the briefs of other queued tasks it affects.
 - **THEME.md stays the user's.** Agents never land changes to it. The supervisor *proposes* edits as a diff, which the user accepts, edits or declines in the inbox. An accepted edit lands like any other change (journal, undo, hooks).
 - With no separate supervisor (one session doing everything), the session plays both parts in turn, and the work prompt says so. That's what's built first. Batches are stored with an addressee (`supervisor` or `user`) and a delivery state from the start, so adding a separate supervisor later is new tools and routing, not a migration.
-- **Whether "calls" are the right unification** is an open question for agent interviews to answer: whether agents find assumptions and questions natural as one thing, or want them apart.
+- **Whether "calls" are the right unification** was an open question for agent interviews. The first agent to use them: "the same kind of thing that arrives at different times … the difference is the effect, not the kind" (examples/DOGFOODING.md). It also showed that `wait` belongs to each call, not the batch.
 
 #### The theme's lifecycle
 
@@ -444,6 +444,7 @@ A page in the extension (the sidebar, or a tab): batches grouped by task, each w
 - **MCP:** `task_ask(wait, summary, calls)`, and `screenshot(attach: true)`, which saves into the task's scratch space (next to the tree, so it never lands). Briefs say how readily to ask, by the theme's stage, and from five answered calls on, how often the user kept the agent's call. The work prompt sends questions through `task_ask` rather than the conversation.
 - **The inbox** (`inbox.html`): batches as cards, blocking first, with screenshots (click to enlarge), options with the agent's choice preselected, a note per call, and "Send answers" per batch. "Look at the work in progress" opens the page in a new tab of the user's, bound to the task's tree (§6.2). It also shows and sets the theme's stage. The popup links to it, and the toolbar badge counts the batches waiting on the user (record batches aren't counted).
 - **CLI:** `atelier calls`, `atelier answer BATCH [JSON]`, `atelier stage [forming|settled]`.
+- **Next ideas from agents:** variants as files in the tree, which the user flips between live in their own tab and which picking an answer resolves without an agent; and keeping a claim through a quick review, so a prompt answer comes back to the same session.
 - **Not yet:** a separate supervisor (everything goes to the user, though batches have an addressee); THEME.md proposals as diffs; answers updating notes beyond what the agent does in its own landing; a searchable log of earlier answers.
 
 ---

@@ -300,6 +300,21 @@ impl Store {
         Ok(task)
     }
 
+    /// Sets the handoff note of a task nobody is working on.
+    pub fn note(&self, id: &str, handoff: &str, now: u64) -> Result<Task> {
+        let mut task = self.get(id)?;
+        if !matches!(task.state, TaskState::Queued | TaskState::Waiting) {
+            return Err(format!(
+                "task {id} is {}, so it takes no handoff note",
+                state_name(task.state)
+            ));
+        }
+        task.handoff = Some(handoff.trim().to_string()).filter(|h| !h.is_empty());
+        task.updated = now;
+        self.save(&task)?;
+        Ok(task)
+    }
+
     /// How a claimed task's tree differs from when it was claimed.
     pub fn changes(&self, id: &str) -> Result<Vec<FileChange>> {
         let task = self.get(id)?;

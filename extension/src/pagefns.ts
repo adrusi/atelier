@@ -6,6 +6,17 @@
 // references to anything outside its own body, and no imports. Results must
 // be plain JSON.
 
+/** Adds CSS for one capture (after atelier's own styles, so it wins ties),
+ * or removes it (null). For showing variants without editing files. */
+export function extraCss(css: string | null) {
+  document.querySelector("style[data-atelier-extra]")?.remove();
+  if (css === null) return;
+  const el = document.createElement("style");
+  el.setAttribute("data-atelier-extra", "");
+  el.textContent = css;
+  document.documentElement.append(el);
+}
+
 export function finishAnimations(): number {
   let n = 0;
   for (const a of document.getAnimations()) {

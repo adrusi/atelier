@@ -55,6 +55,7 @@ function callCard(batch: Batch, call: Call, i: number, open: boolean) {
     h("p", { class: "q", textContent: call.question }),
     call.context ? h("p", { class: "context", textContent: call.context }) : null,
     call.scope === "theme" ? h("p", { class: "scope", textContent: "About the theme as a whole, not just this site" }) : null,
+    call.wait === "record" && batch.wait !== "record" ? h("p", { class: "scope", textContent: "The agent went ahead with this; change it if you like" }) : null,
     shots(batch, call),
   );
   if (!open) {
@@ -78,7 +79,7 @@ function callCard(batch: Batch, call: Call, i: number, open: boolean) {
     h("textarea", {
       rows: 2,
       name: `${name}-note`,
-      placeholder: call.choice || batch.wait === "record" ? "Anything to change or add? Leave empty to keep the agent's call." : "Your answer",
+      placeholder: call.choice || (call.wait ?? batch.wait) === "record" ? "Anything to change or add? Leave empty to keep the agent's call." : "Your answer",
     }),
   );
   return li;
@@ -111,7 +112,7 @@ function batchCard(b: Batch, task: Task | undefined, open: boolean) {
         const note = card.querySelector<HTMLTextAreaElement>(`textarea[name="${b.id}-${i}-note"]`)?.value.trim();
         return { choice: picked && picked !== c.choice ? picked : null, note: note || null };
       });
-      const unanswered = b.calls.findIndex((c, i) => b.wait !== "record" && !c.choice && !answers[i].choice && !answers[i].note);
+      const unanswered = b.calls.findIndex((c, i) => (c.wait ?? b.wait) !== "record" && !c.choice && !answers[i].choice && !answers[i].note);
       if (unanswered >= 0) {
         status.textContent = `Question ${unanswered + 1} needs an answer.`;
         return;

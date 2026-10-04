@@ -116,30 +116,36 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
             (a first pass is a good one) rather than one by one. For each call, say what you'd choose yourself \
             (`choice`): then answering can be one click, and often is. `scope: theme` marks a call about the \
             theme as a whole rather than this site; those answers can improve THEME.md for every later task. \
-            `wait` says what happens to the task: \
-            record (you go ahead with your choices; the user can revisit them later, and a changed answer becomes a \
-            new task), \
-            review (the task waits for answers before landing: you stop holding it, its tree is kept, and it comes \
-            back to the queue with the answers; meanwhile, work on something else), or \
-            block (for one question you can't make a reasonable call on yourself and that can't wait for a \
-            checkpoint; the task waits as with review). \
-            Screenshots: paths to images in the task's tree or directory, e.g. from screenshot with attach: true. \
-            Side-by-side variants (screenshots of each option, in the tree) make \"this or that?\" questions quick \
-            to answer.",
+            Each call's `wait` (or the batch's, for calls that don't say) is what it asks of the task: \
+            record: you go ahead with your choice; the user can revisit it, and a changed answer becomes a new task. \
+            That's right for most calls, including \"I'd keep this; confirm?\": landing and letting the user reopen \
+            it costs nothing. \
+            review: the work shouldn't land until this is answered, because the options would mean substantially \
+            different work, or you're not confident in any of them. \
+            block: one question you can't make a reasonable call on yourself, that can't wait for a checkpoint. \
+            If any call in a batch is review or block, the task waits for the answers: you stop holding it at once, \
+            its tree is kept, and it comes back to the queue with the answers (and your `handoff` note) for \
+            whoever claims it next, perhaps you; meanwhile, work on something else. So one batch can hold a \
+            question that needs answering and the calls you made for the record, together. \
+            Screenshots: paths to images in the tree or the task's scratch space (screenshot with attach: true \
+            saves there). For \"this or that?\" questions, screenshots of each option (screenshot's extraCss \
+            shows a variant without editing files) make answering quick.",
         schema: || {
             json!({ "type": "object", "properties": {
                 "task": task_prop(),
-                "wait": { "type": "string", "enum": ["record", "review", "block"] },
+                "wait": { "type": "string", "enum": ["record", "review", "block"], "description": "For calls that don't give their own. Default record." },
                 "summary": { "type": "string", "description": "A line to go with the batch, e.g. what state the work is in." },
+                "handoff": { "type": "string", "description": "With review or block: a note for whoever picks the task up after the answers (perhaps you): what's done, what's left." },
                 "calls": { "type": "array", "items": { "type": "object", "properties": {
                     "question": { "type": "string" },
                     "context": { "type": "string", "description": "What it's about and why it matters, for someone looking at your screenshot rather than the page." },
                     "options": { "type": "array", "items": { "type": "string" } },
-                    "choice": { "type": "string", "description": "What you'd do (or did), if you had to decide." },
+                    "choice": { "type": "string", "description": "What you'd do (or did), if you had to decide: exactly one of the options, when there are options (reasons go in context)." },
                     "scope": { "type": "string", "enum": ["site", "theme"], "description": "Default site." },
+                    "wait": { "type": "string", "enum": ["record", "review", "block"] },
                     "screenshots": { "type": "array", "items": { "type": "string" } }
                 }, "required": ["question"] } }
-            }, "required": ["wait", "calls"] })
+            }, "required": ["calls"] })
         },
     },
     Tool {
@@ -514,19 +520,26 @@ impl Server {
             atelier_proto::call_method::POST,
             json!({ "task": id, "session": self.session, "wait": wait, "summary": args.get("summary"), "calls": calls }),
         )?)?;
+        if batch.wait != Wait::Record
+            && let Some(h) = args.get("handoff").and_then(Value::as_str)
+        {
+            // The task is parked: set its note for whoever resumes it.
+            self.daemon_call(tm::NOTE, json!({ "id": id, "handoff": h }))?;
+        }
         let n = batch.calls.len();
         Ok(match batch.wait {
             Wait::Record => format!(
-                "Posted {n} call(s) for the record ({}). Carry on; if the user changes one after this lands, \
-                 that becomes a new task. task_info shows answers that come in while you're still working.",
+                "Posted {n} call(s) for the record ({}). Carry on and land when you're ready; if the user changes \
+                 one, that becomes a new task. task_info shows answers that come in while you're still working.",
                 batch.id
             ),
             Wait::Review | Wait::Block => {
                 self.held.remove(&id);
                 format!(
-                    "Posted {n} call(s) ({}). Task {id} now waits for the user's answers: you don't hold it any \
-                     more, its tree is kept, and it comes back to the queue with the answers, for whoever claims \
-                     it next (perhaps you). Its tabs keep showing the tree. Meanwhile, task_list for other work.",
+                    "Posted {n} call(s) ({}). Task {id} now waits for the user's answers: nothing has landed, you \
+                     don't hold it any more, and its tree is kept. It comes back to the queue with the answers, \
+                     for whoever claims it next (perhaps you), and the calls you posted for the record go with \
+                     it. Its tabs keep showing the tree. Meanwhile, task_list for other work.",
                     batch.id
                 )
             }
@@ -640,7 +653,8 @@ fn brief(
     let _ = write!(
         out,
         "\n## Where to work\n\nThe task's tree is {tree}: a copy of the owned directory for this task alone. \
-         Edit files there with your file tools. Tabs you open with tab_open show the tree's styles and pick \
+         Edit files there with your file tools (give them the tree as the directory to work in, e.g. Glob's path, \
+         since your working directory is elsewhere). Tabs you open with tab_open show the tree's styles and pick \
          up each save within a second; the user's own tabs don't see any of it until you submit. \
          screenshot's saveAs writes into the tree too.\n\nWorth reading first, in the tree:\n"
     );
@@ -718,6 +732,9 @@ fn brief(
             let _ = writeln!(out, "\n{} ({wait}, {status}):", b.id);
             for c in &b.calls {
                 let _ = write!(out, "- {}", c.question);
+                if c.wait.is_some_and(|w| w != b.wait) {
+                    let _ = write!(out, " (for the record)");
+                }
                 if let Some(choice) = &c.choice {
                     let _ = write!(out, " [your call: {choice}]");
                 }
@@ -812,9 +829,11 @@ fn asking(stage: &str, stats: &atelier_proto::CallStats) -> String {
         out.push_str(
             "This theme is **forming**: the user is still working out what they want, and questions help. \
              Answers to questions about the theme improve THEME.md for every task after this one. So where \
-             the theme leaves something open, or you'd be guessing at the user's taste, ask: gather calls, and \
-             at a natural checkpoint (a first pass, with screenshots) send them with task_ask, usually as \
-             wait: review for a new site. Still say what you'd choose, so answering is quick.\n",
+             the theme leaves something open, or you'd be guessing at the user's taste, put it to them rather \
+             than deciding quietly: gather calls, and at a natural checkpoint (a first pass, with screenshots) \
+             send them with task_ask, saying what you'd choose. Most can be for the record (you go ahead; a \
+             different answer reopens it); keep review for the ones where the options would mean substantially \
+             different work.\n",
         );
     }
     if stats.answered >= 5 {

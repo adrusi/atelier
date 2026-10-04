@@ -90,7 +90,9 @@ try {
       calls: [
         { question: "How dark should the background be?", options: ["Mocha base", "Mantle", "Crust"], choice: "Mocha base", screenshots: [shot] },
         { question: "Should headings take the accent colour?", scope: "theme", context: "THEME.md doesn't say." },
+        { question: "Kept the site's rounded buttons", choice: "kept", wait: "record" },
       ],
+      handoff: "Styles done; previews still to take.",
     });
     batch = posted.match(/\((\S+-q\d+)\)/)![1];
     assert.match(posted, /now waits for the user's answers/);
@@ -119,6 +121,8 @@ try {
     const brief = await tool("task_claim");
     assert.match(brief, /How dark should the background be\? \[your call: Mocha base\] → kept/);
     assert.match(brief, /Should headings take the accent colour\? → the user said: No, keep them in the text colour/);
+    assert.match(brief, /Kept the site's rounded buttons \(for the record\) \[your call: kept\] → kept/);
+    assert.match(brief, /## Handoff from whoever worked on this before\n\nStyles done; previews still to take\./);
   });
 
   await check("assumptions made at landing come back as calls; changing one queues a revise", async () => {

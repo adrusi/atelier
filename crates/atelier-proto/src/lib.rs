@@ -284,6 +284,9 @@ pub mod task_method {
     /// `{ "id": … }` → `Vec<FileChange>`: how the task's tree differs from
     /// when it was claimed.
     pub const CHANGES: &str = "task/changes";
+    /// `{ "id": …, "handoff": … }` → [`Task`]: sets the note for whoever
+    /// resumes a task that isn't being worked on (queued, or waiting).
+    pub const NOTE: &str = "task/note";
     /// Notification from the daemon: a [`Task`] changed.
     pub const CHANGED: &str = "task/changed";
     /// `{}` → `Vec<JournalEntry>`, newest first.
@@ -535,13 +538,17 @@ pub struct JournalEntry {
 // ---------------------------------------------------------------------------
 // Calls (SPEC §9.5).
 
-/// What a batch asks of whoever receives it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+/// What a call asks of whoever receives it, least to most. A batch's wait
+/// is the most any of its calls asks.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Serialize, Deserialize, TS,
+)]
 #[serde(rename_all = "lowercase")]
 #[ts(export)]
 pub enum Wait {
     /// The agent went ahead with its choices; these are for the user to
     /// revisit if they like.
+    #[default]
     Record,
     /// Answers wanted before the work lands: the task waits.
     Review,
@@ -595,6 +602,9 @@ pub struct Call {
     /// File names in the batch's directory (screenshots, mostly).
     #[serde(default)]
     pub attachments: Vec<String>,
+    /// What this call asks (filled in from the batch's if not given).
+    #[serde(default)]
+    pub wait: Option<Wait>,
     #[serde(default)]
     pub answer: Option<Answer>,
 }
@@ -643,6 +653,8 @@ pub struct Batch {
 pub struct CallPostParams {
     pub task: String,
     pub session: String,
+    /// For calls that don't give their own.
+    #[serde(default)]
     pub wait: Wait,
     #[serde(default)]
     pub summary: Option<String>,

@@ -216,8 +216,13 @@ const handlers: Record<string, Handler> = {
     return { closed: tab.id };
   },
 
-  async "page/screenshot"(params) {
+  async "page/screenshot"(params, ctx) {
     const tab = await agentTab(params);
+    // Saves just made should show: wait until their styles have reached the page.
+    await ctx.settle(ctx.sourceOf(tab.id!) ?? undefined);
+    await new Promise((r) => setTimeout(r, 150));
+    const extraCss = param<string | null>(params, "extraCss", "string", null);
+    if (extraCss !== null) await call(tab.id!, page.extraCss, extraCss);
     const selector = param<string | null>(params, "selector", "string", null);
     const full = param<boolean>(params, "fullPage", "boolean", false);
     const format = param<string>(params, "format", "string", "png");
@@ -244,12 +249,17 @@ const handlers: Record<string, Handler> = {
     }
     const scale = param<number>(params, "scale", "number", 1);
     if (scale <= 0 || scale > 8) throw new RpcError(INVALID_PARAMS, "`scale` must be between 0 and 8");
-    const dataUrl: string = await (browser.tabs as any).captureTab(tab.id, {
-      format,
-      ...(format === "jpeg" ? { quality: 85 } : {}),
-      ...(rect ? { rect } : {}),
-      ...(scale !== 1 ? { scale } : {}),
-    });
+    let dataUrl: string;
+    try {
+      dataUrl = await (browser.tabs as any).captureTab(tab.id, {
+        format,
+        ...(format === "jpeg" ? { quality: 85 } : {}),
+        ...(rect ? { rect } : {}),
+        ...(scale !== 1 ? { scale } : {}),
+      });
+    } finally {
+      if (extraCss !== null) await call(tab.id!, page.extraCss, null);
+    }
     const [header, data] = dataUrl.split(",", 2);
     return { mimeType: header.slice(5).split(";")[0], data, notes };
   },

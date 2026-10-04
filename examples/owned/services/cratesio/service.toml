@@ -1,0 +1,6 @@
+description = "crates.io, the Rust package registry"
+summary = "crates.io in its dark colour scheme: header, footer and search, the home page, search results, crate pages (README with syntax highlighting, versions, dependencies, the sidebar), category and user pages, menus, buttons, alerts and toasts. The download chart is drawn on a canvas and keeps its own colours. The light scheme is left alone."
+
+[[prerequisites]]
+description = "Leave crates.io's colour scheme (the half-circle button in the header) on System, with the desktop set to dark, or pick Dark. The style restyles only the dark scheme."
+check = "html[data-color-scheme=\"dark\"]"

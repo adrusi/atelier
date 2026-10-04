@@ -2,7 +2,11 @@
 import type { Call } from "./Call";
 import type { Wait } from "./Wait";
 
-export type CallPostParams = { task: string, session: string, wait: Wait, summary: string | null, 
+export type CallPostParams = { task: string, session: string, 
+/**
+ * For calls that don't give their own.
+ */
+wait: Wait, summary: string | null, 
 /**
  * Calls with `attachments` as paths to copy in (from the task's
  * directory); `answer` is ignored.

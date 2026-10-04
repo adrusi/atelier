@@ -131,6 +131,7 @@ const TOOLS: &[Tool] = &[
                 "settleAnimations": { "type": "boolean", "description": "Fast-forward CSS animations first. Default true." },
                 "scale": { "type": "number", "description": "Pixels per CSS pixel. Default 1; use 2–4 to inspect small elements." },
                 "returnImage": { "type": "boolean", "description": "With saveAs or attach: also return the image. Default false." },
+                "extraCss": { "type": "string", "description": "CSS added just for this capture, then removed: for showing a variant (\"this or that?\") without editing files. It beats the page's own CSS; against your styles, it needs higher specificity or !important." },
                 "attach": { "type": "boolean", "description": "Save the image for task_ask (outside the tree, so it won't land); the result gives its path. JPEG." },
                 "saveAs": { "type": "string", "description": "Also save the image at this path, relative to the task's tree (or the owned directory), e.g. services/example/roarke/previews/home.jpg. A .jpg name saves JPEG (smaller; preferred for previews)." }
             }, "required": ["tab"] })

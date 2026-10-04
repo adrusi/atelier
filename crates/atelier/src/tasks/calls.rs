@@ -67,6 +67,8 @@ impl Store {
         let mut calls = p.calls;
         for (i, call) in calls.iter_mut().enumerate() {
             call.answer = None;
+            call.wait = Some(call.wait.unwrap_or(p.wait));
+            normalise_choice(call);
             let mut names = Vec::new();
             for path in &call.attachments {
                 let src = Path::new(path)
@@ -97,7 +99,11 @@ impl Store {
             id: format!("{}-q{n}", task.id),
             task: task.id.clone(),
             to: Addressee::User,
-            wait: p.wait,
+            wait: calls
+                .iter()
+                .filter_map(|c| c.wait)
+                .max()
+                .unwrap_or_default(),
             summary: p.summary.filter(|s| !s.trim().is_empty()),
             calls,
             state: BatchState::Open,
@@ -107,7 +113,7 @@ impl Store {
             service: task.service.clone(),
         };
         self.save_batch(&batch)?;
-        if p.wait != Wait::Record {
+        if batch.wait != Wait::Record {
             task.state = TaskState::Waiting;
             task.lease = None;
             task.updated = now;
@@ -139,6 +145,7 @@ impl Store {
                 choice: None,
                 scope: atelier_proto::CallScope::Site,
                 attachments: Vec::new(),
+                wait: Some(Wait::Record),
                 answer: None,
             })
             .collect();
@@ -266,8 +273,8 @@ impl Store {
             requeued = Some(task.clone());
         }
         let mut revisions = Vec::new();
-        if batch.wait == Wait::Record && task.state == TaskState::Landed {
-            for call in &batch.calls {
+        if task.state == TaskState::Landed {
+            for call in batch.calls.iter().filter(|c| c.wait == Some(Wait::Record)) {
                 let Some(a) = call.answer.as_ref().filter(|a| !a.kept) else {
                     continue;
                 };
@@ -323,7 +330,7 @@ impl Store {
                 continue;
             }
             for call in &batch.calls {
-                if call.choice.is_none() && batch.wait != Wait::Record {
+                if call.choice.is_none() && call.wait != Some(Wait::Record) {
                     continue;
                 }
                 if let Some(a) = &call.answer {
@@ -362,6 +369,39 @@ impl Store {
     }
 }
 
+/// A choice should be one of the options when there are options, so the
+/// inbox can preselect it. Agents sometimes add their reasons to it
+/// ("Recessed, as built: the site's own design survives"): keep the option,
+/// and move the reasons into the context.
+fn normalise_choice(call: &mut atelier_proto::Call) {
+    let Some(choice) = call.choice.clone() else {
+        return;
+    };
+    if call.options.is_empty() || call.options.contains(&choice) {
+        return;
+    }
+    let Some(option) = call
+        .options
+        .iter()
+        .filter(|o| choice.starts_with(o.as_str()))
+        .max_by_key(|o| o.len())
+        .cloned()
+    else {
+        return;
+    };
+    let reasons = choice[option.len()..]
+        .trim_start_matches([':', ';', ',', '.', '-', '—', ' '])
+        .trim();
+    if !reasons.is_empty() {
+        let why = format!("Why the agent would choose \"{option}\": {reasons}");
+        call.context = Some(match call.context.take() {
+            Some(c) => format!("{c}\n\n{why}"),
+            None => why,
+        });
+    }
+    call.choice = Some(option);
+}
+
 #[cfg(test)]
 mod tests {
     use super::super::tests::{create, env, put, tree};
@@ -376,8 +416,34 @@ mod tests {
             choice: choice.map(str::to_string),
             scope: CallScope::Site,
             attachments: Vec::new(),
+            wait: None,
             answer: None,
         }
+    }
+
+    #[test]
+    fn one_batch_can_mix_record_and_review() {
+        let e = env();
+        create(&e, Some("site"));
+        let t = e.store.claim(None, "s1", 1000).unwrap().unwrap();
+        let mut ask = call("Cards raised or recessed?", Some("teal"));
+        ask.wait = Some(Wait::Review);
+        let (task, batch) = e
+            .store
+            .post(
+                CallPostParams {
+                    task: t.id,
+                    session: "s1".into(),
+                    wait: Wait::Record,
+                    summary: None,
+                    calls: vec![ask, call("Kept the pill shapes", Some("teal"))],
+                },
+                2000,
+            )
+            .unwrap();
+        assert_eq!(batch.wait, Wait::Review);
+        assert_eq!(batch.calls[1].wait, Some(Wait::Record));
+        assert_eq!(task.state, TaskState::Waiting);
     }
 
     #[test]
@@ -495,6 +561,14 @@ mod tests {
                 .unwrap()
                 .contains("they chose: mauve")
         );
+    }
+
+    #[test]
+    fn a_choice_with_reasons_is_trimmed_to_its_option() {
+        let mut c = call("q", Some("mauve: it matches the header"));
+        normalise_choice(&mut c);
+        assert_eq!(c.choice.as_deref(), Some("mauve"));
+        assert!(c.context.unwrap().contains("it matches the header"));
     }
 
     #[test]
