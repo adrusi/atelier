@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <title>tokens fixture</title>
   <link rel="stylesheet" href="site.css">
+  <script src="fixture.js" defer></script>
 </head>
 <body>
   <!-- For the browser tools' tests (dev/e2e/tools.ts): design tokens on
@@ -15,6 +16,8 @@
   <main>
     <p class="note">Body text in the base token colours. <a class="button" href="#">A button-like link</a></p>
     <p class="faint">This line is deliberately low contrast.</p>
+    <button class="dim-button" disabled>Disabled, and dim on purpose</button>
+    <input id="search" type="search"> <div id="echo"></div>
   </main>
 </body>
 </html>

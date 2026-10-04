@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::net::{UnixListener, UnixStream};
@@ -66,6 +66,8 @@ struct State {
     /// Connected extensions, most recent last. Browser calls go to the last.
     browsers: Mutex<Vec<(u64, mpsc::Sender<BrowserRequest>)>>,
     next_link: AtomicU64,
+    /// Set when the watcher sees a change, cleared once it's been loaded.
+    reload_pending: AtomicBool,
 }
 
 /// A request for the extension, and where to send its result.
@@ -286,6 +288,7 @@ async fn serve(dir: PathBuf) -> std::io::Result<()> {
         notify,
         browsers: Mutex::new(Vec::new()),
         next_link: AtomicU64::new(1),
+        reload_pending: AtomicBool::new(false),
     });
     state.reload();
 
@@ -303,8 +306,10 @@ async fn serve(dir: PathBuf) -> std::io::Result<()> {
 fn watch(state: Arc<State>) -> std::io::Result<notify::RecommendedWatcher> {
     use notify::{RecursiveMode, Watcher};
     let (tx, mut rx) = mpsc::channel::<()>(64);
+    let seen = state.clone();
     let mut watcher = notify::recommended_watcher(move |res: notify::Result<notify::Event>| {
         if res.is_ok_and(|e| !e.kind.is_access()) {
+            seen.reload_pending.store(true, Ordering::SeqCst);
             let _ = tx.try_send(());
         }
     })
@@ -323,6 +328,8 @@ fn watch(state: Arc<State>) -> std::io::Result<notify::RecommendedWatcher> {
             // Let a burst of writes (an editor saving, a landing) settle.
             tokio::time::sleep(Duration::from_millis(150)).await;
             while rx.try_recv().is_ok() {}
+            // Cleared before loading, so a change during the load sets it again.
+            state.reload_pending.store(false, Ordering::SeqCst);
             if let Some(blob_ref) = state.reload() {
                 let _ = state
                     .notify
@@ -640,5 +647,7 @@ fn status(state: &State) -> StatusResult {
         styles: inner.bundle.styles.len() as u32,
         clients: inner.clients.clone(),
         diagnostics: inner.bundle.diagnostics.clone(),
+        reload_pending: state.reload_pending.load(Ordering::SeqCst),
+        bundle_hash: inner.bundle_ref.hash.clone(),
     }
 }

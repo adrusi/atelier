@@ -72,12 +72,28 @@ export function computed(selector: string, properties: string[] | null) {
   return Object.fromEntries(props.map((p) => [p, cs.getPropertyValue(p)]));
 }
 
-/** Custom properties defined by the page's stylesheets: where, under which
- * conditions, and which selectors other than :root re-declare them (nested
- * theme scopes, which undo :root overrides inside them). */
-export function tokens(filter: string | null, limit: number) {
+/** Custom properties defined by the page's stylesheets (following @import):
+ * where, under which conditions, and where they're used; and which selectors
+ * other than :root re-declare them (nested theme scopes, which undo :root
+ * overrides inside them). */
+export function tokens(filter: string | null, limit: number, usage: boolean) {
   type Def = { selector: string; value: string; context?: string; sheet: string };
+  const SHORTHANDS = [
+    "background", "border", "border-top", "border-right", "border-bottom", "border-left", "border-block",
+    "border-inline", "border-color", "border-radius", "outline", "font", "margin", "padding", "inset",
+    "text-decoration", "column-rule", "list-style", "transition", "animation", "box-shadow", "gap",
+  ];
+  // A declaration block's text, with shorthands restored where the CSSOM can
+  // only serialise their longhands as empty (a var() shorthand mixed with
+  // overriding longhands).
+  const declarations = (style: CSSStyleDeclaration): string => {
+    const text = style.cssText;
+    if (!/:\s*;/.test(text)) return text;
+    const restored = SHORTHANDS.map((sh) => [sh, style.getPropertyValue(sh)]).filter(([, v]) => v).map(([sh, v]) => `${sh}: ${v};`);
+    return `${text.replace(/[\w-]+:\s*;\s*/g, "")} ${restored.join(" ")}`.trim();
+  };
   const defs = new Map<string, Def[]>();
+  const uses = new Map<string, { count: number; examples: string[] }>();
   const scopes = new Map<string, number>();
   const unreadable: string[] = [];
   const contextOf = (r: any): string => {
@@ -89,7 +105,15 @@ export function tokens(filter: string | null, limit: number) {
   };
   const visit = (rules: CSSRuleList, context: string, sheet: string) => {
     for (const r of rules as any) {
-      if (r.selectorText !== undefined && r.style) {
+      if (r.styleSheet && r.href !== undefined) {
+        // @import: the imported sheet's rules count as the page's.
+        const c = [context, `@import${r.media?.mediaText ? ` ${r.media.mediaText}` : ""}`].filter(Boolean).join(" ");
+        try {
+          visit(r.styleSheet.cssRules, c, r.styleSheet.href ?? sheet);
+        } catch {
+          unreadable.push(r.styleSheet?.href ?? r.href);
+        }
+      } else if (r.selectorText !== undefined && r.style) {
         for (let i = 0; i < r.style.length; i++) {
           const name: string = r.style[i];
           if (!name.startsWith("--") || (filter && !name.includes(filter))) continue;
@@ -104,16 +128,23 @@ export function tokens(filter: string | null, limit: number) {
           defs.set(name, list);
           if (!/^\s*(:root|html)\b/.test(r.selectorText)) scopes.set(r.selectorText, (scopes.get(r.selectorText) ?? 0) + 1);
         }
+        if (usage) {
+          for (const m of declarations(r.style).matchAll(/var\(\s*(--[\w-]+)/g)) {
+            const u = uses.get(m[1]) ?? { count: 0, examples: [] };
+            u.count++;
+            if (u.examples.length < 3 && !u.examples.includes(r.selectorText)) u.examples.push(r.selectorText.slice(0, 80));
+            uses.set(m[1], u);
+          }
+        }
         if (r.cssRules?.length) visit(r.cssRules, context, sheet);
       } else if (r.cssRules) {
         visit(r.cssRules, [context, contextOf(r)].filter(Boolean).join(" "), sheet);
       }
     }
   };
-  const sheets = [...document.styleSheets, ...document.adoptedStyleSheets];
-  for (const s of sheets) {
+  for (const s of [...document.styleSheets, ...document.adoptedStyleSheets]) {
     const owner = s.ownerNode as Element | null;
-    if (owner?.getAttribute?.("data-atelier")) continue; // atelier's own styles
+    if (owner?.getAttribute?.("data-atelier") || owner?.hasAttribute?.("data-atelier-force")) continue; // atelier's own
     const name = s.href ?? (owner ? `<${owner.tagName.toLowerCase()}>` : "adopted");
     try {
       visit(s.cssRules, "", name);
@@ -125,7 +156,11 @@ export function tokens(filter: string | null, limit: number) {
   return {
     total: names.length,
     shown: Math.min(limit, names.length),
-    tokens: names.slice(0, limit).map((name) => ({ name, definitions: defs.get(name) })),
+    tokens: names.slice(0, limit).map((name) => ({
+      name,
+      definitions: defs.get(name),
+      ...(usage ? { used: uses.get(name) ?? { count: 0, examples: [] } } : {}),
+    })),
     // Selectors other than :root/html that define custom properties, with how
     // many they define, and which elements they match now. Those matching
     // elements inside the page (`nested`) re-declare tokens there, undoing
@@ -201,13 +236,40 @@ export function matchedRules(selector: string, property: string | null, limit: n
     return total;
   };
 
+  const SHORTHANDS = [
+    "background", "border", "border-top", "border-right", "border-bottom", "border-left", "border-block",
+    "border-inline", "border-color", "border-radius", "outline", "font", "margin", "padding", "inset",
+    "text-decoration", "column-rule", "list-style", "transition", "animation", "box-shadow", "gap",
+  ];
+  // Rule text, with shorthands restored where the CSSOM serialises only empty
+  // longhands (a var() shorthand mixed with overriding longhands).
+  const declarationsOf = (style: CSSStyleDeclaration): string => {
+    const text = style.cssText;
+    if (!/:\s*;/.test(text)) return text;
+    const restored = SHORTHANDS.map((sh) => [sh, style.getPropertyValue(sh)]).filter(([, v]) => v).map(([sh, v]) => `${sh}: ${v};`);
+    return `${text.replace(/[\w-]+:\s*;\s*/g, "")} ${restored.join(" ")}`.trim();
+  };
+
   type Hit = { selector: string; specificity: number[]; declarations: string; context?: string; active: boolean; sheet: string; order: number };
   const hits: Hit[] = [];
   let order = 0;
   const visit = (rules: CSSRuleList, context: string, active: boolean, sheet: string) => {
     for (const r of rules as any) {
       order++;
-      if (r.selectorText !== undefined && r.style) {
+      if (r.styleSheet && r.href !== undefined) {
+        // @import: the imported sheet's rules, under its media condition.
+        const media = r.media?.mediaText;
+        try {
+          visit(
+            r.styleSheet.cssRules,
+            [context, `@import${media ? ` ${media}` : ""}`].filter(Boolean).join(" "),
+            active && (!media || matchMedia(media).matches),
+            r.styleSheet.href ?? sheet,
+          );
+        } catch {
+          // Unreadable cross-origin import.
+        }
+      } else if (r.selectorText !== undefined && r.style) {
         const matching = splitTop(r.selectorText).filter((part) => {
           try {
             return el.matches(part);
@@ -216,7 +278,7 @@ export function matchedRules(selector: string, property: string | null, limit: n
           }
         });
         if (!matching.length) continue;
-        let declarations: string = r.style.cssText;
+        let declarations: string = declarationsOf(r.style);
         if (property) {
           const v = r.style.getPropertyValue(property);
           if (!v) continue;
@@ -262,7 +324,12 @@ export function matchedRules(selector: string, property: string | null, limit: n
   return {
     element: el.tagName.toLowerCase() + (el.id ? `#${el.id}` : "") + [...el.classList].map((c) => `.${c}`).join(""),
     ...(property ? { computed: getComputedStyle(el).getPropertyValue(property) } : {}),
-    ...(inline ? { inlineStyle: inline } : {}),
+    ...(inline
+      ? {
+          inlineStyle: inline,
+          note: "The element has an inline style attribute, which beats every rule here unless the rule uses !important.",
+        }
+      : {}),
     total: hits.length,
     rules: hits.slice(0, limit).map(({ order: _, ...h }) => h),
   };
@@ -329,6 +396,7 @@ export function contrast(minRatio: number, limit: number) {
   const failures: object[] = [];
   let checked = 0;
   let unknown = 0;
+  let disabled = 0;
   const walker = document.createTreeWalker(document.body ?? document.documentElement, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const el = node.parentElement;
@@ -336,6 +404,11 @@ export function contrast(minRatio: number, limit: number) {
     seen.add(el);
     const cs = getComputedStyle(el);
     if (cs.visibility !== "visible" || !el.getClientRects().length) continue;
+    // WCAG exempts disabled controls; sites dim them on purpose.
+    if (el.closest(':disabled, [aria-disabled="true"]')) {
+      disabled++;
+      continue;
+    }
     checked++;
     const bg = background(el);
     if (!bg) {
@@ -363,7 +436,7 @@ export function contrast(minRatio: number, limit: number) {
     }
   }
   failures.sort((a: any, b: any) => a.ratio - b.ratio);
-  return { checked, failing: failures.length, failures: failures.slice(0, limit), unknownBackground: unknown };
+  return { checked, failing: failures.length, failures: failures.slice(0, limit), unknownBackground: unknown, skippedDisabled: disabled };
 }
 
 /** Forces pseudo-class states on an element, like devtools' "force element
@@ -416,4 +489,49 @@ export function forceState(selector: string, states: string[]) {
   style.textContent = clones.join("\n");
   document.documentElement.append(style);
   return { forced: states, rulesCloned: clones.length };
+}
+
+/** Waits (up to timeoutMs) for images to load and decode, so a screenshot
+ * doesn't catch them blank. */
+export async function imagesReady(timeoutMs: number) {
+  const pending = [...document.images].map((img) =>
+    img.complete
+      ? img.decode().catch(() => {})
+      : new Promise((r) => {
+          img.addEventListener("load", r, { once: true });
+          img.addEventListener("error", r, { once: true });
+        }),
+  );
+  await Promise.race([Promise.all(pending), new Promise((r) => setTimeout(r, timeoutMs))]);
+  return pending.length;
+}
+
+/** Waits until `selector` matches something, for pages that render after
+ * load. Resolves true if it did within timeoutMs. */
+export async function waitForSelector(selector: string, timeoutMs: number) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (document.querySelector(selector)) return true;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  return false;
+}
+
+/** Fills a form field as typing would: focuses it, sets the value, and
+ * dispatches input and change events, so scripts listening for input (search
+ * suggestions, filters) respond. */
+export function fill(selector: string, text: string, submit: boolean) {
+  const el = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | null;
+  if (!el) return null;
+  el.focus();
+  el.value = text;
+  el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
+  el.dispatchEvent(new Event("change", { bubbles: true }));
+  if (submit) {
+    for (const type of ["keydown", "keypress", "keyup"]) {
+      el.dispatchEvent(new KeyboardEvent(type, { key: "Enter", code: "Enter", bubbles: true }));
+    }
+    el.form?.requestSubmit();
+  }
+  return { value: el.value, focused: document.activeElement === el };
 }

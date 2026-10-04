@@ -62,6 +62,14 @@ async function connect() {
       bundle: () => state.bundle,
       hasShim: (tabId) => [...shimPorts].some((p) => p.sender?.tab?.id === tabId),
       unmet: (tabId) => unmetByTab.get(tabId) ?? [],
+      settle: async () => {
+        const deadline = Date.now() + 3000;
+        while (rpc === r && Date.now() < deadline) {
+          const s = await r.call<{ reloadPending: boolean; bundleHash: string }>("status");
+          if (!s.reloadPending && s.bundleHash === state.bundleHash) return;
+          await new Promise((res) => setTimeout(res, 100));
+        }
+      },
     });
   try {
     const init = await r.call<InitializeResult>("initialize", {

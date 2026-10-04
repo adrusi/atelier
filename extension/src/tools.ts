@@ -15,6 +15,9 @@ export type ToolContext = {
   hasShim: (tabId: number) => boolean;
   /** Prerequisites the page in this tab reported as unmet. */
   unmet: (tabId: number) => { style: string; description: string }[];
+  /** Resolves once the daemon has loaded every file change it has seen, and
+   * the extension has that bundle. */
+  settle: () => Promise<void>;
 };
 
 const INVALID_PARAMS = -32602;
@@ -103,6 +106,15 @@ function describeTab(tab: browser.tabs.Tab) {
 const HIDDEN_NOTE =
   "This tab is in the background, where Firefox doesn't run animation frames: content drawn with requestAnimationFrame (canvases, some JS animations) may be missing or stale. CSS animations were fast-forwarded to their end state.";
 
+/** For pages that render after load (JavaScript apps): waits for the
+ * `waitFor` selector, if given. */
+async function waitFor(tabId: number, params: any): Promise<object> {
+  const selector = param<string | null>(params, "waitFor", "string", null);
+  if (!selector) return {};
+  const found = await call(tabId, page.waitForSelector, selector, param<number>(params, "waitForMs", "number", 10_000));
+  return found ? {} : { warning: `\`${selector}\` didn't appear within the time allowed; the page may still be loading` };
+}
+
 type Handler = (params: any, ctx: ToolContext) => Promise<unknown>;
 
 const handlers: Record<string, Handler> = {
@@ -113,7 +125,7 @@ const handlers: Record<string, Handler> = {
     agentTabs.add(tab.id!);
     await saveTabs();
     await settled(tab.id!);
-    return describeTab(await browser.tabs.get(tab.id!));
+    return { ...describeTab(await browser.tabs.get(tab.id!)), ...(await waitFor(tab.id!, params)) };
   },
 
   async "tab/navigate"(params) {
@@ -121,7 +133,7 @@ const handlers: Record<string, Handler> = {
     const url = param<string>(params, "url", "string");
     await browser.tabs.update(tab.id!, { url });
     await settled(tab.id!);
-    return describeTab(await browser.tabs.get(tab.id!));
+    return { ...describeTab(await browser.tabs.get(tab.id!)), ...(await waitFor(tab.id!, params)) };
   },
 
   async "tab/reload"(params) {
@@ -153,6 +165,7 @@ const handlers: Record<string, Handler> = {
     if (format !== "png" && format !== "jpeg") throw new RpcError(INVALID_PARAMS, "`format` must be png or jpeg");
     const notes: string[] = [];
     if (param<boolean>(params, "settleAnimations", "boolean", true)) await call(tab.id!, page.finishAnimations);
+    await call(tab.id!, page.imagesReady, 3000);
     if (!tab.active) notes.push(HIDDEN_NOTE);
 
     let rect: { x: number; y: number; width: number; height: number } | undefined;
@@ -167,10 +180,13 @@ const handlers: Record<string, Handler> = {
       rect = { x: 0, y: 0, width: s.width, height: Math.min(s.height, maxHeight) };
       if (s.height > maxHeight) notes.push(`The page is ${s.height}px tall; captured the top ${maxHeight}px (raise maxHeight, or capture elements with \`selector\`).`);
     }
+    const scale = param<number>(params, "scale", "number", 1);
+    if (scale <= 0 || scale > 8) throw new RpcError(INVALID_PARAMS, "`scale` must be between 0 and 8");
     const dataUrl: string = await (browser.tabs as any).captureTab(tab.id, {
       format,
       ...(format === "jpeg" ? { quality: 85 } : {}),
       ...(rect ? { rect } : {}),
+      ...(scale !== 1 ? { scale } : {}),
     });
     const [header, data] = dataUrl.split(",", 2);
     return { mimeType: header.slice(5).split(";")[0], data, notes };
@@ -178,7 +194,17 @@ const handlers: Record<string, Handler> = {
 
   async "page/eval"(params) {
     const tab = await agentTab(params);
-    return { result: (await run(tab.id!, param<string>(params, "expression", "string"))) ?? null };
+    // In a block of its own, so declarations don't collide with earlier calls'.
+    return { result: (await run(tab.id!, `{\n${param<string>(params, "expression", "string")}\n}`)) ?? null };
+  },
+
+  async "page/type"(params) {
+    const tab = await agentTab(params);
+    const selector = param<string>(params, "selector", "string");
+    const r = await call(tab.id!, page.fill, selector, param<string>(params, "text", "string"), param<boolean>(params, "submit", "boolean", false));
+    if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\``);
+    await new Promise((res) => setTimeout(res, 300)); // let the page react
+    return r;
   },
 
   async "page/query"(params) {
@@ -202,7 +228,13 @@ const handlers: Record<string, Handler> = {
 
   async "page/tokens"(params) {
     const tab = await agentTab(params);
-    return call(tab.id!, page.tokens, param<string | null>(params, "filter", "string", null), param<number>(params, "limit", "number", 200));
+    return call(
+      tab.id!,
+      page.tokens,
+      param<string | null>(params, "filter", "string", null),
+      param<number>(params, "limit", "number", 200),
+      param<boolean>(params, "usage", "boolean", true),
+    );
   },
 
   async "page/matched_rules"(params) {
@@ -236,10 +268,14 @@ const handlers: Record<string, Handler> = {
   },
 
   async "styles/status"(params, ctx) {
+    await ctx.settle();
     const bundle = ctx.bundle();
+    const byService: Record<string, number> = {};
+    for (const s of bundle?.styles ?? []) byService[s.service ?? "(theme-wide)"] = (byService[s.service ?? "(theme-wide)"] ?? 0) + 1;
     const out: Record<string, unknown> = {
       theme: bundle?.theme ?? null,
       styles: bundle?.styles.length ?? 0,
+      byService,
       diagnostics: bundle?.diagnostics ?? [],
     };
     if (params?.tab !== undefined) {

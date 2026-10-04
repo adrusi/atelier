@@ -45,13 +45,13 @@ const TOOLS: &[Tool] = &[
         description: "Open a URL in a new agent tab and wait for it to load. Agent tabs are background tabs in the user's \
             browser, so they share the user's logins, and the user isn't interrupted. Returns the tab's id, which the \
             other tools take. Close tabs you're finished with (tab_close).",
-        schema: || json!({ "type": "object", "properties": { "url": { "type": "string" } }, "required": ["url"] }),
+        schema: || json!({ "type": "object", "properties": { "url": { "type": "string" }, "waitFor": { "type": "string", "description": "For pages that render after load (JavaScript apps): also wait until this CSS selector matches, up to waitForMs (default 10000)." }, "waitForMs": { "type": "integer" } }, "required": ["url"] }),
     },
     Tool {
         name: "tab_navigate",
         method: "tab/navigate",
-        description: "Load a URL in an existing agent tab and wait for it to load.",
-        schema: || json!({ "type": "object", "properties": { "tab": tab_prop(), "url": { "type": "string" } }, "required": ["tab", "url"] }),
+        description: "Load a URL in an existing agent tab and wait for it to load (and for waitFor, if given).",
+        schema: || json!({ "type": "object", "properties": { "tab": tab_prop(), "url": { "type": "string" }, "waitFor": { "type": "string", "description": "For pages that render after load (JavaScript apps): also wait until this CSS selector matches, up to waitForMs (default 10000)." }, "waitForMs": { "type": "integer" } }, "required": ["tab", "url"] }),
     },
     Tool {
         name: "tab_reload",
@@ -81,7 +81,9 @@ const TOOLS: &[Tool] = &[
             animation frames, so content drawn by JavaScript animation (canvases) can be stale; the result says so \
             when it applies. Prefer selector captures for details: whole pages are large and hard to read. \
             With saveAs, the image is also written into the owned directory: that's how to leave the preview \
-            screenshots each style keeps in its previews/ folder (SPEC.md §5.2).",
+            screenshots each style keeps in its previews/ folder (SPEC.md §5.2). The image isn't sent back to you \
+            then unless you ask (returnImage), since you've usually just looked at the page. Images on the page are \
+            given a moment to load first. For small details, raise scale (e.g. 3).",
         schema: || {
             json!({ "type": "object", "properties": {
                 "tab": tab_prop(),
@@ -90,6 +92,8 @@ const TOOLS: &[Tool] = &[
                 "maxHeight": { "type": "integer", "description": "Height limit for fullPage, in CSS pixels. Default 4000." },
                 "format": { "type": "string", "enum": ["png", "jpeg"], "description": "Default png." },
                 "settleAnimations": { "type": "boolean", "description": "Fast-forward CSS animations first. Default true." },
+                "scale": { "type": "number", "description": "Pixels per CSS pixel. Default 1; use 2–4 to inspect small elements." },
+                "returnImage": { "type": "boolean", "description": "With saveAs: also return the image. Default false." },
                 "saveAs": { "type": "string", "description": "Also save the image at this path, relative to the owned directory, e.g. services/example/roarke/previews/home.jpg. A .jpg name saves JPEG (smaller; preferred for previews)." }
             }, "required": ["tab"] })
         },
@@ -97,8 +101,10 @@ const TOOLS: &[Tool] = &[
     Tool {
         name: "css_tokens",
         method: "page/tokens",
-        description: "Inventory the custom properties (design tokens) the page's stylesheets define: each one's \
-            values, the selectors defining them, and the conditions (media queries, layers) around them. \
+        description: "Inventory the custom properties (design tokens) the page's stylesheets define, following \
+            @import: each one's values, the selectors defining them, the conditions (media queries, layers, imports) \
+            around them, and where it's used (how many declarations reference it, with example selectors; tokens \
+            used by nothing are rarely worth overriding). \
             `otherScopes` lists selectors other than :root that define tokens, and the elements they match: those \
             nested scopes (e.g. a header marked as a dark theme region) re-declare tokens, which undoes :root \
             overrides inside them, so cover them too. Stylesheets the page can't read (cross-origin without CORS) \
@@ -107,7 +113,8 @@ const TOOLS: &[Tool] = &[
             json!({ "type": "object", "properties": {
                 "tab": tab_prop(),
                 "filter": { "type": "string", "description": "Only properties whose names contain this." },
-                "limit": { "type": "integer", "description": "Maximum properties to list. Default 200." }
+                "limit": { "type": "integer", "description": "Maximum properties to list. Default 200." },
+                "usage": { "type": "boolean", "description": "Include where each token is used. Default true." }
             }, "required": ["tab"] })
         },
     },
@@ -148,14 +155,29 @@ const TOOLS: &[Tool] = &[
         description: "Find visible text whose contrast with its background is below the WCAG threshold (minRatio, \
             default 4.5; 3 for large text), worst first. Backgrounds are composited from the element upwards; text \
             over background images is counted as unknown rather than checked, and text inside shadow roots isn't \
-            reached. Problems like dark text left on a dark background often don't stand out in a screenshot, so \
-            run this after changing colours.",
+            reached. Disabled controls are skipped (WCAG exempts them). Problems like dark text left on a dark \
+            background often don't stand out in a screenshot, so run this after changing colours.",
         schema: || {
             json!({ "type": "object", "properties": {
                 "tab": tab_prop(),
                 "minRatio": { "type": "number" },
                 "limit": { "type": "integer", "description": "Maximum failures to list. Default 40." }
             }, "required": ["tab"] })
+        },
+    },
+    Tool {
+        name: "type_text",
+        method: "page/type",
+        description: "Fill in a text field as typing would: focus it, set its value, and fire input and change events, \
+            so the page reacts (search suggestions, live filters). With submit, also press Enter and submit its form. \
+            The events aren't trusted, so a rare page that checks for real keystrokes won't respond.",
+        schema: || {
+            json!({ "type": "object", "properties": {
+                "tab": tab_prop(),
+                "selector": { "type": "string" },
+                "text": { "type": "string" },
+                "submit": { "type": "boolean" }
+            }, "required": ["tab", "selector", "text"] })
         },
     },
     Tool {
@@ -177,9 +199,12 @@ const TOOLS: &[Tool] = &[
         name: "eval",
         method: "page/eval",
         description: "Evaluate JavaScript in an agent tab and return the value of its last expression (must be \
-            JSON-serialisable). It runs in an isolated world: it sees the page's DOM and CSSOM, but not the page's \
-            own JavaScript globals. Useful for anything the other tools don't cover, such as scrolling \
-            (window.scrollTo({top: 800, behavior: 'instant'})) or opening a menu by clicking.",
+            JSON-serialisable; a promise is awaited). It runs in an isolated world: it sees the page's DOM and \
+            CSSOM, but not the page's own JavaScript globals, so it can't call the site's functions. Each call runs \
+            in a fresh block scope, so const and let don't carry over between calls. Network requests are subject \
+            to the page's Content-Security-Policy and may be refused. Useful for anything the other tools don't \
+            cover, such as scrolling (window.scrollTo({top: 800, behavior: 'instant'})) or opening a menu by \
+            clicking.",
         schema: || {
             json!({ "type": "object", "properties": {
                 "tab": tab_prop(),
@@ -207,10 +232,13 @@ const TOOLS: &[Tool] = &[
     Tool {
         name: "styles_status",
         method: "styles/status",
-        description: "The active theme, how many styles are loaded, and every diagnostic from loading them (with \
-            file and line). With `tab`, also which styles apply to that tab's page and whether its page has \
-            atelier's style shim. Check diagnostics after editing: a style with errors keeps its last good \
-            version applied, so a mistake can look as if nothing happened.",
+        description: "The active theme, how many styles are loaded (in total and per service; other agents may \
+            be adding styles for other services at the same time), and every diagnostic from loading them, with \
+            file and line. It waits until file changes you just made have been loaded, so it's safe to call right \
+            after saving. With `tab`, also which styles apply to that tab's page, whether the page has atelier's \
+            style shim, and any prerequisite (site setting) the page shows isn't met. Check diagnostics after \
+            editing: a style with errors keeps its last good version applied, so a mistake can look as if nothing \
+            happened.",
         schema: || json!({ "type": "object", "properties": { "tab": tab_prop() } }),
     },
 ];
@@ -303,6 +331,11 @@ impl Server {
             Some(_) => return tool_error("`saveAs` must be a string"),
             None => None,
         };
+        let return_image = args
+            .as_object_mut()
+            .and_then(|a| a.remove("returnImage"))
+            .and_then(|v| v.as_bool())
+            .unwrap_or(save_as.is_none());
         match self.browser_call(tool.method, args) {
             Ok(mut result) => {
                 if let Some(path) = save_as {
@@ -312,6 +345,16 @@ impl Server {
                     };
                     let notes = result["notes"].as_array().cloned().unwrap_or_default();
                     result["notes"] = json!([notes, vec![json!(note)]].concat());
+                }
+                if !return_image {
+                    let notes: Vec<String> = result["notes"]
+                        .as_array()
+                        .into_iter()
+                        .flatten()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect();
+                    return json!({ "content": [{ "type": "text", "text": notes.join("\n") }] });
                 }
                 tool_result(tool.name, result)
             }

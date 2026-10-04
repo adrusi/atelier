@@ -126,6 +126,11 @@ pub struct StatusResult {
     pub styles: u32,
     pub clients: BTreeMap<String, u32>,
     pub diagnostics: Vec<Diagnostic>,
+    /// The daemon has seen file changes it hasn't loaded yet; the bundle is
+    /// about to change.
+    pub reload_pending: bool,
+    /// The current bundle's hash, to compare with what a client has loaded.
+    pub bundle_hash: String,
 }
 
 // ---------------------------------------------------------------------------

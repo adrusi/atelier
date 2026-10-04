@@ -112,6 +112,17 @@ try {
     assert.deepEqual([scope.tokens, scope.matchesRoot, scope.nested], [2, false, ["header"]]);
   });
 
+  await check("css_tokens follows @import, and says where tokens are used", async () => {
+    const r = await tool("css_tokens", { tab });
+    const link = r.tokens.find((t: any) => t.name === "--color-link");
+    assert.equal(link.definitions[0].context, "@import");
+    assert.match(link.definitions[0].sheet, /theme\.css$/);
+    assert.deepEqual(link.used, { count: 1, examples: ["a"] });
+    // body, header, h1, a.button and .dim-button, the last through a border shorthand.
+    const fg = r.tokens.find((t: any) => t.name === "--color-fg");
+    assert.equal(fg.used.count, 5, JSON.stringify(fg.used));
+  });
+
   await check("matched_rules orders by specificity, labels layers, and includes atelier's rules", async () => {
     const r = await tool("matched_rules", { tab, selector: "h1", property: "color" });
     assert.deepEqual(
@@ -122,12 +133,13 @@ try {
     assert.ok(note.rules.some((x: any) => x.sheet.startsWith("atelier: services/fixtures/e2e/tokens.user.css")));
   });
 
-  await check("contrast_scan finds exactly the two low-contrast lines", async () => {
+  await check("contrast_scan finds exactly the two low-contrast lines, skipping the disabled button", async () => {
     // The faint line, and the title: accent blue inside the inverted header,
     // whose nested scope re-declares background and text but not the accent.
     const r = await tool("contrast_scan", { tab });
     assert.deepEqual(r.failures.map((f: any) => f.text).sort(), ["This line is deliberately low contrast.", "Tokens"]);
     assert.ok(r.failures.every((f: any) => f.ratio < 3));
+    assert.equal(r.skippedDisabled, 1);
   });
 
   await check("computed_style and query report what's on the page", async () => {
@@ -144,10 +156,12 @@ try {
     assert.match(content[1].text, /background/);
   });
 
-  await check("screenshot saveAs writes into the owned directory, and refuses paths outside it", async () => {
-    const content = await tool("screenshot", { tab, saveAs: "services/fixtures/e2e/previews/tokens.jpg" });
-    assert.equal(content[0].mimeType, "image/jpeg");
-    assert.match(content.at(-1).text, /Saved to/);
+  await check("screenshot saveAs writes into the owned directory without echoing the image, and refuses paths outside it", async () => {
+    const r = (await rpc("tools/call", { name: "screenshot", arguments: { tab, saveAs: "services/fixtures/e2e/previews/tokens.jpg" } })).result;
+    assert.deepEqual(r.content.map((c: any) => c.type), ["text"]);
+    assert.match(r.content[0].text, /Saved to/);
+    const echoed = await tool("screenshot", { tab, saveAs: "services/fixtures/e2e/previews/tokens.jpg", returnImage: true });
+    assert.equal(echoed[0].mimeType, "image/jpeg");
     const saved = fs.readFileSync(path.join(owned, "services/fixtures/e2e/previews/tokens.jpg"));
     assert.equal(saved[0], 0xff); // JPEG magic
     const outside = await rpc("tools/call", { name: "screenshot", arguments: { tab, saveAs: "../escape.png" } });
@@ -162,11 +176,43 @@ try {
     assert.notEqual((await tool("computed_style", { tab, selector: "a.button", properties: ["color"] })).color, "rgb(1, 2, 3)");
   });
 
-  await check("eval sees the DOM", async () => {
+  await check("eval sees the DOM, awaits promises, and doesn't leak declarations between calls", async () => {
     assert.deepEqual(await tool("eval", { tab, expression: "document.title" }), { result: "tokens fixture" });
+    assert.deepEqual(await tool("eval", { tab, expression: "const out = 1; out" }), { result: 1 });
+    assert.deepEqual(await tool("eval", { tab, expression: "const out = 2; Promise.resolve(out + 1)" }), { result: 3 });
+  });
+
+  await check("screenshot scale enlarges small captures", async () => {
+    const size = async (scale: number) => {
+      const [img] = await tool("screenshot", { tab, selector: "h1", scale });
+      return Buffer.from(img.data, "base64").readUInt32BE(16); // PNG IHDR width
+    };
+    const [one, three] = [await size(1), await size(3)];
+    assert.ok(Math.abs(three - 3 * one) <= 3, `${one} → ${three}`);
+  });
+
+  await check("type_text fires input events the page reacts to", async () => {
+    await tool("type_text", { tab, selector: "#search", text: "firefox" });
+    assert.deepEqual(await tool("eval", { tab, expression: "document.getElementById('echo').textContent" }), { result: "firefox" });
+  });
+
+  await check("tab_navigate's waitFor waits for late content, and warns when it doesn't come", async () => {
+    const ok = await tool("tab_navigate", { tab, url: fixture, waitFor: "#late" });
+    assert.equal(ok.warning, undefined);
+    const missing = await tool("tab_navigate", { tab, url: fixture, waitFor: "#never", waitForMs: 500 });
+    assert.match(missing.warning, /didn't appear/);
+  });
+
+  await check("styles_status waits for a file just written, and counts per service", async () => {
+    fs.writeFileSync(path.join(owned, "services/fixtures/e2e/extra.user.css"), `@-moz-document url-prefix("http://127.0.0.1:") { main { margin-top: 1px; } }\n`);
+    const r = await tool("styles_status", { tab });
+    assert.ok(r.tab.applying.includes("services/fixtures/e2e/extra.user.css"), JSON.stringify(r.tab.applying));
+    assert.equal(r.byService.fixtures, 2);
+    fs.rmSync(path.join(owned, "services/fixtures/e2e/extra.user.css"));
   });
 
   await check("styles_status says what applies to the tab", async () => {
+    await tool("styles_status", {}); // let the removal above settle
     const r = await tool("styles_status", { tab });
     assert.deepEqual(r.tab.applying, ["services/fixtures/e2e/tokens.user.css"]);
     assert.equal(r.tab.shim, true);
