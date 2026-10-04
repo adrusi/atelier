@@ -44,6 +44,13 @@
   }
   #logo a { filter: brightness(0.12); }
 
+  /* Story titles are links, but on a list of them the accent would be
+     everywhere: text colour, visited dimmed, as on Hacker News. (Owner's
+     call; the theme leaves link colours to judgement.) */
+  .link a.u-url { color: #cdd6f4; }
+  .link a.u-url:visited { color: #9399b2; }
+  .link a.u-url:hover { color: #b4befe; }
+
   /* Links in comments and story text are grey and underlined on Lobsters;
      here they take the accent like every other link. */
   div.comment_text a, div.story_text a,

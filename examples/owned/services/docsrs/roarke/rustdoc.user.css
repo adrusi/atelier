@@ -157,9 +157,10 @@
     --toolbar-button-border-radius: 4px;
     --button-border-radius: 4px;
 
-    /* Type. Docs prose keeps rustdoc's serif (THEME.md allows it for
-       long-form reading); code is Noto Sans Mono. Rustdoc's own "Use
-       sans-serif fonts" setting is honoured below. */
+    /* Type: all Noto Sans. Docs are technical writing meant to be skimmed,
+       so the theme's typography takes over from rustdoc's serif (owner's
+       call). Code is Noto Sans Mono. */
+    --font-family: "Noto Sans", sans-serif;
     --font-family-code: "Noto Sans Mono", monospace;
   }
 

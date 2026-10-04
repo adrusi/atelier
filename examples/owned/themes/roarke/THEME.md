@@ -63,7 +63,24 @@ precisely by not being lavender: use peach.
 
 Keep colours whose meaning matters (errors, diff additions and deletions,
 status badges) mapped to the matching Mocha colour, but use them sparingly.
-Dark text (`#1e1e2e`) on these pastel colours is fine.
+Dark text (`#1e1e2e`) on these pastel colours is fine. Categorical colours
+that tell things apart (rustdoc's types, traits and functions; a site's tag
+categories) are meaningful in this sense: map them to distinct Mocha colours
+rather than collapsing them into lavender.
+
+Where a site colours something as a link, the restyled version usually does
+too, but not always: use judgement about where the accent belongs. A list
+whose every item title is a link (Lobsters, Hacker News) would be all
+lavender; titles in text colour, with visited ones dimmed, read better.
+
+**Syntax highlighting** uses Catppuccin Mocha's standard syntax mapping (mauve
+keywords, green strings, peach numbers and so on), even though that brings in
+colours the table above doesn't list. Peach in code isn't the "attention"
+peach.
+
+**Muted text** (`#6c7086`) is readable enough for short de-emphasised text,
+like "[comment removed]" or a disabled control, though not for anything meant
+to be read at length.
 
 ## Typography
 
@@ -83,8 +100,14 @@ Dark text (`#1e1e2e`) on these pastel colours is fine.
 - Where text is borderline on contrast or size (small metadata, text on
   coloured backgrounds), a slightly heavier weight (500 or 600) is the preferred fix, before
   changing colours.
-- Long-form reading (articles, docs) may keep a serif if the site uses one,
-  but in the Mocha text colour.
+- **When to keep a site's typography** is a judgement call, without a hard
+  line. One consistent family across the screen looks good, and is the
+  default. But a page that's like a magazine article can take its type from
+  the publisher, serif included (in the Mocha text colour). Application UI and
+  technical writing meant to be skimmed (docs.rs, MDN) should use the theme's
+  fonts. And sometimes a site uses typography to *mean* something, like a chat
+  UI setting one speaker's messages in serif and the other's in sans: keep
+  that distinction rather than flattening it.
 
 ## Things to avoid
 
