@@ -452,7 +452,7 @@ These scopes are the main defence against prompt injection from page content (§
 
 ### 11.2 When checks run
 
-- **Prerequisite checks (proposed, from dogfooding).** A service whose styles build on a site setting ("set Appearance to Automatic") can declare a cheap check next to the prerequisite in `service.toml`, e.g. "`<html>` has class `skin-theme-clientpref-os` or `skin-theme-clientpref-night`". The popup then says "this style needs a site setting changed" instead of the style silently doing nothing.
+- **Prerequisite checks.** A service whose styles build on a site setting can give a prerequisite a `check` in `service.toml` (`[[prerequisites]]` with `description` and `check`): a CSS selector that matches in the page when the setting is right. The shim evaluates it once the document is parsed, on pages where the style applies. If it doesn't match, the toolbar badge shows "!" and the popup says what to change; agents see it in `styles_status`. Without this, a style whose prerequisite isn't met just seems to do nothing, which is what happened to the owner on Wikipedia.
 - **Passive checks run during ordinary browsing**, debounced, sampled and idle-scheduled (`requestIdleCallback`), at most once per style per page load. They cover logged-in state and real content without a background crawler.
 - **Active checks run** when a task is submitted (as the gate) and when the user asks.
 
