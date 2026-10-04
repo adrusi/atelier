@@ -8,20 +8,22 @@
 
 use crate::{loader, paths, wire};
 use atelier_proto::{
-    BlobChunk, BlobGetParams, BlobRef, Bundle, CompiledStyle, Diagnostic, InitializeParams,
-    InitializeResult, PROTOCOL_VERSION, Role, Severity, StatusResult, method,
+    BlobChunk, BlobGetParams, BlobRef, BrowserCallParams, Bundle, CompiledStyle, Diagnostic,
+    InitializeParams, InitializeResult, PROTOCOL_VERSION, Role, Severity, StatusResult, error_code,
+    method,
 };
 use base64::Engine;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::net::{UnixListener, UnixStream};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc, oneshot};
 
 /// Raw bytes per `blob/get` chunk. Base64 grows it by a third, which keeps a
 /// chunk's message comfortably under native messaging's 1 MB limit.
@@ -61,7 +63,19 @@ struct State {
     dir: PathBuf,
     inner: Mutex<Inner>,
     notify: broadcast::Sender<Value>,
+    /// Connected extensions, most recent last. Browser calls go to the last.
+    browsers: Mutex<Vec<(u64, mpsc::Sender<BrowserRequest>)>>,
+    next_link: AtomicU64,
 }
+
+/// A request for the extension, and where to send its result.
+struct BrowserRequest {
+    method: String,
+    params: Value,
+    reply: oneshot::Sender<RpcResult>,
+}
+
+type RpcResult = Result<Value, (i64, String)>;
 
 struct Inner {
     bundle: Bundle,
@@ -270,6 +284,8 @@ async fn serve(dir: PathBuf) -> std::io::Result<()> {
             idle_since: Some(Instant::now()),
         }),
         notify,
+        browsers: Mutex::new(Vec::new()),
+        next_link: AtomicU64::new(1),
     });
     state.reload();
 
@@ -373,26 +389,69 @@ async fn handle(stream: UnixStream, state: Arc<State>) {
         inner.idle_since = None;
     }
 
+    // Everything this connection sends goes through `out`, so replies can be
+    // produced later (browser calls) without holding up the loop.
+    let (out, mut outgoing) = mpsc::channel::<Value>(32);
+    // Extensions also take requests from the daemon.
+    let (requests_tx, mut requests) = mpsc::channel::<BrowserRequest>(16);
+    let link = (role == Role::Extension).then(|| {
+        let id = state.next_link.fetch_add(1, Ordering::Relaxed);
+        state
+            .browsers
+            .lock()
+            .unwrap()
+            .push((id, requests_tx.clone()));
+        id
+    });
+    drop(requests_tx);
+    let mut pending: HashMap<String, oneshot::Sender<RpcResult>> = HashMap::new();
+    let mut next_request = 0u64;
+
     let mut notifications = state.notify.subscribe();
     loop {
-        let out = tokio::select! {
+        let frame = tokio::select! {
             frame = frames.recv() => match frame {
-                Some(frame) => dispatch(&state, frame),
+                Some(frame) => {
+                    if frame.get("method").is_none() {
+                        // A response to one of our requests to this extension.
+                        let id = frame.get("id").and_then(Value::as_str).unwrap_or_default();
+                        if let Some(reply) = pending.remove(id) {
+                            let _ = reply.send(rpc_result(&frame));
+                        }
+                    } else {
+                        handle_request(&state, frame, out.clone());
+                    }
+                    continue;
+                }
                 None => break,
             },
             note = notifications.recv() => match note {
-                Ok(note) => Some(note),
+                Ok(note) => note,
                 Err(broadcast::error::RecvError::Lagged(_)) => continue,
                 Err(broadcast::error::RecvError::Closed) => break,
             },
+            Some(frame) = outgoing.recv() => frame,
+            Some(request) = requests.recv() => {
+                next_request += 1;
+                let id = format!("d{next_request}");
+                pending.insert(id.clone(), request.reply);
+                json!({ "jsonrpc": "2.0", "id": id, "method": request.method, "params": request.params })
+            }
         };
-        if let Some(out) = out
-            && wire::write_frame_async(&mut writer, &out).await.is_err()
-        {
+        if wire::write_frame_async(&mut writer, &frame).await.is_err() {
             break;
         }
     }
 
+    if let Some(link) = link {
+        state.browsers.lock().unwrap().retain(|(id, _)| *id != link);
+    }
+    for (_, reply) in pending {
+        let _ = reply.send(Err((
+            error_code::BROWSER_NOT_CONNECTED,
+            "the browser disconnected".into(),
+        )));
+    }
     let mut inner = state.inner.lock().unwrap();
     if let Some(n) = inner.clients.get_mut(&role_name) {
         *n -= 1;
@@ -452,7 +511,90 @@ fn initialize(state: &State, msg: &Value) -> Result<(Role, Value), Value> {
     Ok((params.role, wire::response(id, json!(result))))
 }
 
-/// Handles one message after initialization. Returns the reply, if any.
+/// Handles a request or notification from a client, sending any reply to `out`.
+fn handle_request(state: &Arc<State>, msg: Value, out: mpsc::Sender<Value>) {
+    if msg.get("method").and_then(Value::as_str) == Some(method::BROWSER_CALL) {
+        let Some(id) = msg.get("id").cloned() else {
+            return;
+        };
+        let state = state.clone();
+        tokio::spawn(async move {
+            let reply =
+                match browser_call(&state, msg.get("params").cloned().unwrap_or(Value::Null)).await
+                {
+                    Ok(result) => wire::response(id, result),
+                    Err((code, message)) => wire::error_response(id, code, message),
+                };
+            let _ = out.send(reply).await;
+        });
+        return;
+    }
+    if let Some(reply) = dispatch(state, msg) {
+        let _ = out.try_send(reply);
+    }
+}
+
+/// Forwards a call to the most recently connected extension.
+async fn browser_call(state: &State, params: Value) -> RpcResult {
+    let p: BrowserCallParams =
+        serde_json::from_value(params).map_err(|e| (wire::code::INVALID_PARAMS, e.to_string()))?;
+    let link = state
+        .browsers
+        .lock()
+        .unwrap()
+        .last()
+        .map(|(_, tx)| tx.clone());
+    let link = link.ok_or((
+        error_code::BROWSER_NOT_CONNECTED,
+        "no browser is connected to atelier's daemon: Firefox may not be running, or the atelier extension isn't installed or enabled there".to_string(),
+    ))?;
+    let (reply, result) = oneshot::channel();
+    link.send(BrowserRequest {
+        method: p.method.clone(),
+        params: p.params,
+        reply,
+    })
+    .await
+    .map_err(|_| {
+        (
+            error_code::BROWSER_NOT_CONNECTED,
+            "the browser disconnected".to_string(),
+        )
+    })?;
+    let timeout = Duration::from_millis(p.timeout_ms.unwrap_or(30_000));
+    match tokio::time::timeout(timeout, result).await {
+        Ok(Ok(r)) => r,
+        Ok(Err(_)) => Err((
+            error_code::BROWSER_NOT_CONNECTED,
+            "the browser disconnected".into(),
+        )),
+        Err(_) => Err((
+            error_code::BROWSER_TIMEOUT,
+            format!(
+                "the browser didn't answer `{}` within {}s",
+                p.method,
+                timeout.as_secs()
+            ),
+        )),
+    }
+}
+
+fn rpc_result(frame: &Value) -> RpcResult {
+    match frame.get("error") {
+        Some(e) => Err((
+            e.get("code")
+                .and_then(Value::as_i64)
+                .unwrap_or(wire::code::INTERNAL),
+            e.get("message")
+                .and_then(Value::as_str)
+                .unwrap_or("error")
+                .to_string(),
+        )),
+        None => Ok(frame.get("result").cloned().unwrap_or(Value::Null)),
+    }
+}
+
+/// Handles one synchronous request. Returns the reply, if any.
 fn dispatch(state: &State, msg: Value) -> Option<Value> {
     let id = msg.get("id").cloned()?; // notifications from clients need no reply
     let params = msg.get("params").cloned().unwrap_or(Value::Null);

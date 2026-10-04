@@ -10,6 +10,7 @@ import type { Bundle } from "./proto/Bundle";
 import type { InitializeResult } from "./proto/InitializeResult";
 import { cssFor } from "./matching";
 import { Rpc } from "./rpc";
+import * as tools from "./tools";
 import { onUserScriptConnect, type UserScript, userScripts } from "./userscripts";
 
 declare const ATELIER_NATIVE_HOST: string;
@@ -55,6 +56,12 @@ async function connect() {
   r.onNotification = (method, params) => {
     if (method === "bundle/changed") void loadBundle(r, params as BlobRef);
   };
+  // Browser tools, on behalf of agents (atelier mcp) and the CLI.
+  r.onRequest = (method, params) =>
+    tools.handle(method, params, {
+      bundle: () => state.bundle,
+      hasShim: (tabId) => [...shimPorts].some((p) => p.sender?.tab?.id === tabId),
+    });
   try {
     const init = await r.call<InitializeResult>("initialize", {
       protocolVersion: PROTOCOL_VERSION,

@@ -101,15 +101,16 @@ Instances live in `$XDG_RUNTIME_DIR/atelier-dev/<name>/` (override with `ATELIER
 ### Driving an instance
 
 - **From outside atelier:** WebDriver BiDi for navigation, script evaluation, screenshots and assertions, and `grim` for true compositor screenshots. Use these to check what atelier can't observe about itself (e.g. whether a page ever painted without its styles).
-- **Through atelier:** `atelier-dev atelier NAME ARGS…` runs the CLI with the instance's XDG directories, so e.g. `status` reaches the instance's daemon. (`atelier-dev env` only exports BiDi and fixture addresses.) The same will go for `atelier mcp` once it exists, which exercises the real agent-facing tools while developing them.
+- **Through atelier:** `atelier-dev atelier NAME ARGS…` runs the CLI with the instance's XDG directories, so it reaches the instance's daemon: `status`, `browser METHOD JSON` (the agent tools, e.g. `browser tab/open '{"url":"…"}'`), or `mcp` to point an MCP client at the instance. (`atelier-dev env` only exports BiDi and fixture addresses.)
 - Don't use Playwright here: it uses a patched Firefox, and its extension support is weak.
 
 ### End-to-end tests
 
 `dev/e2e/` holds end-to-end tests that run the whole stack in a dev instance:
 owned directory, daemon, native host, extension and page shim. Build first
-(`cargo build`, `(cd extension && npm run build)`), then e.g.
-`node dev/e2e/phase1.ts`. A failing run keeps the instance and its owned
+(`cargo build`, `(cd extension && npm run build)`), then
+`node dev/e2e/phase1.ts` (styles reaching pages) and `node dev/e2e/tools.ts`
+(the agent tools, driven through `atelier mcp` the way a harness would). A failing run keeps the instance and its owned
 directory (`$XDG_RUNTIME_DIR/atelier-dev/<name>{,-owned}`) for inspection.
 
 Unit and integration tests for the Rust side run with `cargo test`. Those for

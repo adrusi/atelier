@@ -25,6 +25,32 @@ pub mod method {
     pub const BLOB_GET: &str = "blob/get";
     /// Request: no params → [`StatusResult`].
     pub const STATUS: &str = "status";
+    /// Request from any client: [`BrowserCallParams`] → whatever the browser
+    /// method returns. The daemon forwards the inner request to the most
+    /// recently connected extension and relays its response (SPEC §10).
+    pub const BROWSER_CALL: &str = "browser/call";
+}
+
+/// atelier-specific JSON-RPC error codes.
+pub mod error_code {
+    /// No extension is connected to the daemon, so browser tools can't run.
+    pub const BROWSER_NOT_CONNECTED: i64 = -32010;
+    /// The extension didn't answer a browser call in time.
+    pub const BROWSER_TIMEOUT: i64 = -32011;
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct BrowserCallParams {
+    /// The extension method, e.g. `tab/open` (extension/src/tools.ts).
+    pub method: String,
+    #[serde(default)]
+    pub params: serde_json::Value,
+    /// How long to wait for the browser, in milliseconds. Default 30000.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

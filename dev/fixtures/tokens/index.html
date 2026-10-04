@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>tokens fixture</title>
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <!-- For the browser tools' tests (dev/e2e/tools.ts): design tokens on
+       :root, a nested scope that re-declares them, rules of known
+       specificity, and two low-contrast lines: one deliberate, and the title,
+       where the nested scope re-declares background and text but not the
+       accent the title uses. -->
+  <header data-theme="inverted"><h1 id="title" class="title">Tokens</h1></header>
+  <main>
+    <p class="note">Body text in the base token colours.</p>
+    <p class="faint">This line is deliberately low contrast.</p>
+  </main>
+</body>
+</html>

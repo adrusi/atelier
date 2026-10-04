@@ -1,6 +1,7 @@
 mod cli;
 mod daemon;
 mod loader;
+mod mcp;
 mod native_host;
 mod paths;
 mod setup;
@@ -18,6 +19,9 @@ usage: atelier [--dir DIR] <command>
   status                daemon, theme, styles and problems
   lint                  load the owned directory and report problems
   match URL             which styles apply to URL
+  browser METHOD [JSON] [--out FILE]
+                        call a browser tool through the daemon (see extension/src/tools.ts)
+  mcp                   MCP server (stdio) with browser tools for agents
   daemon                serve the owned directory (normally started for you)
   native-host           bridge for the browser extension (started by the browser)
 
@@ -42,8 +46,24 @@ fn main() -> ExitCode {
         "native-host" => native_host::run(&args),
         "setup" => setup::run(dir.as_deref()),
         "daemon" => daemon::run(dir.as_deref()),
+        "mcp" => mcp::run(dir.as_deref()),
         "status" => cli::status(dir.as_deref()),
         "lint" => cli::lint(dir.as_deref()),
+        "browser" => {
+            let out = take_option(&mut args, "--out");
+            match args.first() {
+                Some(m) => cli::browser(
+                    dir.as_deref(),
+                    m,
+                    args.get(1).map(String::as_str),
+                    out.as_deref(),
+                ),
+                None => {
+                    eprintln!("usage: atelier browser METHOD [JSON] [--out FILE]");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         "match" => match args.first() {
             Some(url) => cli::match_url(dir.as_deref(), url),
             None => {

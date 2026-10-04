@@ -39,6 +39,22 @@ it restarts.
 Each service's styles have screenshots in `previews/` next to them, if you'd
 rather look first.
 
+## Letting an agent work on styles
+
+`atelier mcp` is an MCP server with tools for working in your browser: agent
+tabs (background tabs, logged in where you are), screenshots, a design-token
+inventory, "why does this rule (not) apply", a contrast scan, and so on. With
+Firefox and the extension running, register it with your harness, e.g. for
+Claude Code:
+
+```sh
+claude mcp add atelier -- atelier mcp
+```
+
+Then ask the agent to style a site, pointing it at your theme. For now the
+agent edits the owned directory directly; tasks, reviews and the rest of the
+workflow in SPEC.md §8–9 come later.
+
 ## Watching agents work
 
 Agents test styles in jailed Firefox instances that are headless by default.

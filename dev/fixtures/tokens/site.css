@@ -1,0 +1,21 @@
+:root {
+  --color-bg: #ffffff;
+  --color-fg: #222222;
+  --color-accent: #0055cc;
+}
+[data-theme="inverted"] {
+  --color-bg: #222222;
+  --color-fg: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --color-accent: #88aaff; }
+}
+@layer base {
+  h1 { color: red; }
+}
+body { background: var(--color-bg); color: var(--color-fg); font-family: sans-serif; }
+header { background: var(--color-bg); color: var(--color-fg); padding: 1rem; }
+h1 { color: var(--color-fg); }
+.title { color: var(--color-accent); }
+#title { letter-spacing: 0.02em; }
+.faint { color: #dddddd; }

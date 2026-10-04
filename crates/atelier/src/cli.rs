@@ -55,8 +55,9 @@ impl Client {
         self.next_id += 1;
         wire::write_frame(&mut self.stream, &wire::request(id, method, params))?;
         loop {
-            let msg = wire::read_frame(&mut self.stream)?
-                .ok_or_else(|| io::Error::other("daemon closed the connection"))?;
+            let msg = wire::read_frame(&mut self.stream)?.ok_or_else(|| {
+                io::Error::new(io::ErrorKind::UnexpectedEof, "daemon closed the connection")
+            })?;
             if msg.get("id") != Some(&json!(id)) {
                 continue; // a notification
             }
@@ -316,4 +317,51 @@ fn describe_matcher(m: &atelier_proto::Matcher) -> String {
         Domain(v) => format!("domain(\"{v}\")"),
         Regexp(v) => format!("regexp(\"{v}\")"),
     }
+}
+
+/// Calls a browser tool through the daemon (SPEC §10) and prints the result
+/// as JSON. With `out`, a result carrying image `data` (base64) has it written
+/// to that file instead.
+pub fn browser(
+    dir: Option<&str>,
+    method: &str,
+    params: Option<&str>,
+    out: Option<&str>,
+) -> ExitCode {
+    let dir = match paths::resolve_dir(dir) {
+        Ok(d) => d,
+        Err(e) => return fail(e),
+    };
+    let params: Value = match params.map(serde_json::from_str).transpose() {
+        Ok(p) => p.unwrap_or(Value::Null),
+        Err(e) => return fail(format!("params aren't valid JSON: {e}")),
+    };
+    let mut client = match Client::connect(&dir, Role::Cli) {
+        Ok(Some((c, _))) => c,
+        Ok(None) => return fail(format!("no daemon is running for {}", dir.display())),
+        Err(e) => return fail(e),
+    };
+    let mut result = match client.call(
+        method::BROWSER_CALL,
+        json!({ "method": method, "params": params }),
+    ) {
+        Ok(r) => r,
+        Err(e) => return fail(e),
+    };
+    if let (Some(path), Some(data)) = (out, result.get("data").and_then(Value::as_str)) {
+        use base64::Engine;
+        let bytes = match base64::engine::general_purpose::STANDARD.decode(data) {
+            Ok(b) => b,
+            Err(e) => return fail(format!("result data isn't base64: {e}")),
+        };
+        if let Err(e) = fs::write(path, bytes) {
+            return fail(e);
+        }
+        result["data"] = json!(format!("(written to {path})"));
+    }
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&result).unwrap_or_default()
+    );
+    ExitCode::SUCCESS
 }
