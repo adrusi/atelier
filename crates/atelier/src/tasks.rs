@@ -867,7 +867,7 @@ mod tests {
     #[test]
     fn claim_copies_the_owned_directory_without_dotfiles() {
         let e = env();
-        let t = create(&e, Some("site"));
+        create(&e, Some("site"));
         let t = e.store.claim(None, "s1", 1000).unwrap().unwrap();
         assert_eq!(t.state, TaskState::Claimed);
         assert!(tree(&t).join("services/site/t/a.user.css").exists());
