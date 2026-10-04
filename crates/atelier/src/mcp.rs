@@ -79,7 +79,7 @@ const TOOLS: &[Tool] = &[
             maxHeight pixels), or one element (selector). CSS animations are fast-forwarded first, so entrance \
             animations don't leave content invisible. Agent tabs are in the background, where Firefox doesn't run \
             animation frames, so content drawn by JavaScript animation (canvases) can be stale; the result says so \
-            when it applies. Prefer selector captures for details: whole pages are large and hard to read. \
+            the first time it applies to a tab. Prefer selector captures for details: whole pages are large and hard to read. \
             With saveAs, the image is also written into the owned directory: that's how to leave the preview \
             screenshots each style keeps in its previews/ folder (SPEC.md §5.2). The image isn't sent back to you \
             then unless you ask (returnImage), since you've usually just looked at the page. Images on the page are \
@@ -108,13 +108,18 @@ const TOOLS: &[Tool] = &[
             `otherScopes` lists selectors other than :root that define tokens, and the elements they match: those \
             nested scopes (e.g. a header marked as a dark theme region) re-declare tokens, which undoes :root \
             overrides inside them, so cover them too. Stylesheets the page can't read (cross-origin without CORS) \
-            are listed as unreadable. Use `filter` (a substring of the name) on large design systems.",
+            are listed as unreadable. Output is compact (one line per definition, stylesheets numbered in \
+            `sheets`); design systems with several themes define each token many times, so narrow it with \
+            `scope` (a substring of the defining selector, e.g. [data-theme=\"dark\"]) and/or `filter` (a \
+            substring of the token name). verbose gives structured definitions.",
         schema: || {
             json!({ "type": "object", "properties": {
                 "tab": tab_prop(),
                 "filter": { "type": "string", "description": "Only properties whose names contain this." },
                 "limit": { "type": "integer", "description": "Maximum properties to list. Default 200." },
-                "usage": { "type": "boolean", "description": "Include where each token is used. Default true." }
+                "usage": { "type": "boolean", "description": "Include where each token is used. Default true." },
+                "scope": { "type": "string", "description": "Only definitions whose selector contains this, e.g. [data-theme=\"dark\"]." },
+                "verbose": { "type": "boolean", "description": "Structured definitions instead of one line each. Default false." }
             }, "required": ["tab"] })
         },
     },
@@ -123,7 +128,9 @@ const TOOLS: &[Tool] = &[
         method: "page/matched_rules",
         description: "Explain an element's styling: every style rule that matches it (including atelier's, labelled), \
             most specific first, with specificity, enclosing media queries and layers, whether those conditions \
-            hold now, and its declarations. Give `property` to see only rules setting it, plus its computed value. \
+            hold now, and its declarations. Give `property` to see only rules setting it (including through a \
+            shorthand, e.g. font: … resets font-stretch), plus its computed value; if nothing on the element sets \
+            it, the result says which ancestor the inherited value comes from. \
             This is how to find out why a rule of yours doesn't win: compare specificity, and remember that \
             unlayered rules beat layered ones regardless of specificity.",
         schema: || {
@@ -218,8 +225,10 @@ const TOOLS: &[Tool] = &[
         description: "Show an element as if hovered, focused or pressed, so you can check and screenshot those \
             styles: agent tabs have no real pointer or keyboard focus, and scripted focus() doesn't trigger \
             :focus-visible. Like devtools' \"force element state\": rules using the states are cloned with an \
-            attribute in place of the pseudo-class. States stay forced until you call this again (states: [] \
-            clears them); only one element at a time. Rules in unreadable cross-origin stylesheets aren't cloned.",
+            attribute in place of the pseudo-class, and hover also fires mouseover/mouseenter for sites that \
+            react to hover from JavaScript. States stay forced until you call this again (states: [] clears \
+            them), and are redone automatically when styles change, so saved edits show in the forced state. \
+            Only one element at a time. Rules in unreadable cross-origin stylesheets aren't cloned.",
         schema: || {
             json!({ "type": "object", "properties": {
                 "tab": tab_prop(),

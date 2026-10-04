@@ -62,6 +62,7 @@ async function connect() {
       bundle: () => state.bundle,
       hasShim: (tabId) => [...shimPorts].some((p) => p.sender?.tab?.id === tabId),
       unmet: (tabId) => unmetByTab.get(tabId) ?? [],
+      atelierDir: () => state.atelierDir,
       settle: async () => {
         const deadline = Date.now() + 3000;
         while (rpc === r && Date.now() < deadline) {
@@ -171,6 +172,7 @@ async function applyBundle(bundle: Bundle) {
 
   for (const port of shimPorts) port.postMessage({ type: "bundle", styles: bundle.styles });
   await injectIntoOpenTabs(bundle);
+  void tools.reapplyForcedStates();
 }
 
 /** Registered scripts only run on page loads, so pages that were already open

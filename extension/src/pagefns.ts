@@ -76,7 +76,7 @@ export function computed(selector: string, properties: string[] | null) {
  * where, under which conditions, and where they're used; and which selectors
  * other than :root re-declare them (nested theme scopes, which undo :root
  * overrides inside them). */
-export function tokens(filter: string | null, limit: number, usage: boolean) {
+export function tokens(filter: string | null, limit: number, usage: boolean, scope: string | null, verbose: boolean) {
   type Def = { selector: string; value: string; context?: string; sheet: string };
   const SHORTHANDS = [
     "background", "border", "border-top", "border-right", "border-bottom", "border-left", "border-block",
@@ -114,9 +114,10 @@ export function tokens(filter: string | null, limit: number, usage: boolean) {
           unreadable.push(r.styleSheet?.href ?? r.href);
         }
       } else if (r.selectorText !== undefined && r.style) {
+        const inScope = !scope || r.selectorText.includes(scope);
         for (let i = 0; i < r.style.length; i++) {
           const name: string = r.style[i];
-          if (!name.startsWith("--") || (filter && !name.includes(filter))) continue;
+          if (!inScope || !name.startsWith("--") || (filter && !name.includes(filter))) continue;
           const list = defs.get(name) ?? [];
           const value: string = r.style.getPropertyValue(name).trim();
           list.push({
@@ -153,14 +154,28 @@ export function tokens(filter: string | null, limit: number, usage: boolean) {
     }
   }
   const names = [...defs.keys()].sort();
+  // Compact by default: one string per definition, and stylesheets listed once.
+  const sheets: string[] = [];
+  const sheetIndex = (name: string) => {
+    let i = sheets.indexOf(name);
+    if (i < 0) i = sheets.push(name) - 1;
+    return i;
+  };
   return {
     total: names.length,
     shown: Math.min(limit, names.length),
-    tokens: names.slice(0, limit).map((name) => ({
-      name,
-      definitions: defs.get(name),
-      ...(usage ? { used: uses.get(name) ?? { count: 0, examples: [] } } : {}),
-    })),
+    tokens: names.slice(0, limit).map((name) => {
+      const ds = defs.get(name)!;
+      const used = uses.get(name) ?? { count: 0, examples: [] };
+      if (verbose) return { name, definitions: ds, ...(usage ? { used } : {}) };
+      return {
+        name,
+        // "selector = value  [conditions] (sheet N)"
+        defs: ds.map((d) => `${d.selector} = ${d.value}${d.context ? `  [${d.context}]` : ""} (sheet ${sheetIndex(d.sheet)})`),
+        ...(usage ? { used: used.count ? `${used.count}× e.g. ${used.examples.join(" | ")}` : "unused" } : {}),
+      };
+    }),
+    ...(verbose ? {} : { sheets }),
     // Selectors other than :root/html that define custom properties, with how
     // many they define, and which elements they match now. Those matching
     // elements inside the page (`nested`) re-declare tokens there, undoing
@@ -250,6 +265,14 @@ export function matchedRules(selector: string, property: string | null, limit: n
     return `${text.replace(/[\w-]+:\s*;\s*/g, "")} ${restored.join(" ")}`.trim();
   };
 
+  // Shorthands that can set `property`.
+  const FONT = ["font-style", "font-variant", "font-weight", "font-stretch", "font-width", "font-size", "line-height", "font-family"];
+  const setters = property
+    ? SHORTHANDS.filter((sh) => property.startsWith(`${sh}-`) || (sh === "font" && FONT.includes(property)) ||
+        (sh === "border" && /^border-(top|right|bottom|left)-(color|style|width)$/.test(property)) ||
+        (sh === "inset" && /^(top|right|bottom|left)$/.test(property)))
+    : [];
+
   type Hit = { selector: string; specificity: number[]; declarations: string; context?: string; active: boolean; sheet: string; order: number };
   const hits: Hit[] = [];
   let order = 0;
@@ -281,8 +304,17 @@ export function matchedRules(selector: string, property: string | null, limit: n
         let declarations: string = declarationsOf(r.style);
         if (property) {
           const v = r.style.getPropertyValue(property);
-          if (!v) continue;
-          declarations = `${property}: ${v}${r.style.getPropertyPriority(property) ? " !important" : ""}`;
+          if (v) {
+            declarations = `${property}: ${v}${r.style.getPropertyPriority(property) ? " !important" : ""}`;
+            // Say so when it comes from a shorthand, which is easy to miss (font: … resets font-stretch).
+            const via = setters.find((name) => r.style.getPropertyValue(name));
+            if (via) declarations += ` (via ${via}: ${r.style.getPropertyValue(via)})`;
+          } else {
+            // A shorthand that sets it (font: … resets font-stretch, border: … sets border-top-color).
+            const sh = setters.find((name) => r.style.getPropertyValue(name));
+            if (!sh) continue;
+            declarations = `${sh}: ${r.style.getPropertyValue(sh)} (sets ${property})`;
+          }
         }
         hits.push({
           selector: r.selectorText,
@@ -309,7 +341,12 @@ export function matchedRules(selector: string, property: string | null, limit: n
   for (const s of [...document.styleSheets, ...document.adoptedStyleSheets]) {
     const owner = s.ownerNode as Element | null;
     const atelier = owner?.getAttribute?.("data-atelier");
-    const name = atelier ? `atelier: ${atelier}` : (s.href ?? (owner ? `<${owner.tagName.toLowerCase()}>` : "adopted"));
+    const forced = owner?.getAttribute?.("data-atelier-force");
+    const name = atelier
+      ? `atelier: ${atelier}`
+      : forced
+        ? `atelier: force_state clones (${forced})`
+        : (s.href ?? (owner ? `<${owner.tagName.toLowerCase()}>` : "adopted"));
     try {
       visit(s.cssRules, "", true, name);
     } catch {
@@ -321,7 +358,18 @@ export function matchedRules(selector: string, property: string | null, limit: n
     return b.order - a.order;
   });
   const inline = (el as HTMLElement).style?.cssText;
+  // Nothing here sets it: say which ancestor the inherited value comes from.
+  let inheritedFrom: string | undefined;
+  if (property && !hits.length && !inline) {
+    const value = getComputedStyle(el).getPropertyValue(property);
+    let origin: Element = el;
+    for (let p = el.parentElement; p && getComputedStyle(p).getPropertyValue(property) === value; p = p.parentElement) origin = p;
+    if (origin !== el) {
+      inheritedFrom = origin.tagName.toLowerCase() + (origin.id ? `#${origin.id}` : "") + [...origin.classList].slice(0, 3).map((c) => `.${c}`).join("");
+    }
+  }
   return {
+    ...(inheritedFrom ? { inheritedFrom, hint: `No rule sets ${property} on this element; it inherits from ${inheritedFrom}. Run matched_rules on that.` } : {}),
     element: el.tagName.toLowerCase() + (el.id ? `#${el.id}` : "") + [...el.classList].map((c) => `.${c}`).join(""),
     ...(property ? { computed: getComputedStyle(el).getPropertyValue(property) } : {}),
     ...(inline
@@ -483,6 +531,12 @@ export function forceState(selector: string, states: string[]) {
   const propagate = new Set(["hover", "active", "focus-within"]);
   for (const s of states) {
     for (let e: Element | null = el; e; e = propagate.has(s) ? e.parentElement : null) e.setAttribute(attr(s), "");
+  }
+  // Some sites react to hover from JavaScript (mouseover), not CSS.
+  if (states.includes("hover")) {
+    for (const type of ["mouseover", "mouseenter", "pointerover", "pointerenter"]) {
+      el.dispatchEvent(new MouseEvent(type, { bubbles: type.endsWith("over"), composed: true }));
+    }
   }
   const style = document.createElement("style");
   style.setAttribute("data-atelier-force", states.join(" "));

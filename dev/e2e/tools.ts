@@ -102,7 +102,7 @@ try {
   });
 
   await check("css_tokens lists tokens, their conditions, and the nested scope", async () => {
-    const r = await tool("css_tokens", { tab });
+    const r = await tool("css_tokens", { tab, verbose: true });
     const accent = r.tokens.find((t: any) => t.name === "--color-accent");
     assert.deepEqual(
       accent.definitions.map((d: any) => [d.selector, d.value, d.context ?? null]),
@@ -112,8 +112,17 @@ try {
     assert.deepEqual([scope.tokens, scope.matchesRoot, scope.nested], [2, false, ["header"]]);
   });
 
+  await check("css_tokens is compact by default, and scope narrows to a selector", async () => {
+    const r = await tool("css_tokens", { tab, filter: "--color-bg" });
+    assert.deepEqual(r.tokens[0].defs.map((d: string) => d.replace(/ \(sheet \d+\)$/, "")), [":root = #ffffff", '[data-theme="inverted"] = #222222']);
+    assert.match(r.tokens[0].used, /^2× e\.g\. /);
+    assert.ok(r.sheets[0].endsWith("/tokens/site.css"));
+    const scoped = await tool("css_tokens", { tab, scope: "inverted" });
+    assert.deepEqual(scoped.tokens.map((t: any) => t.name), ["--color-bg", "--color-fg"]);
+  });
+
   await check("css_tokens follows @import, and says where tokens are used", async () => {
-    const r = await tool("css_tokens", { tab });
+    const r = await tool("css_tokens", { tab, verbose: true });
     const link = r.tokens.find((t: any) => t.name === "--color-link");
     assert.equal(link.definitions[0].context, "@import");
     assert.match(link.definitions[0].sheet, /theme\.css$/);
@@ -129,6 +138,12 @@ try {
       r.rules.map((x: any) => [x.selector, x.specificity.join(","), x.context ?? null]),
       [[".title", "0,1,0", null], ["h1", "0,0,1", null], ["h1", "0,0,1", "@layer base"]],
     );
+    // A font shorthand resets font-stretch.
+    const stretch = await tool("matched_rules", { tab, selector: ".note", property: "font-stretch" });
+    assert.match(stretch.rules[0].declarations, /^font-stretch: normal \(via font: /);
+    // Nothing on #echo sets its colour; it comes from body.
+    const echo = await tool("matched_rules", { tab, selector: "#echo", property: "color" });
+    assert.equal(echo.inheritedFrom, "body");
     const note = await tool("matched_rules", { tab, selector: ".note" });
     assert.ok(note.rules.some((x: any) => x.sheet.startsWith("atelier: services/fixtures/e2e/tokens.user.css")));
   });
@@ -172,6 +187,13 @@ try {
     await tool("force_state", { tab, selector: "a.button", states: ["hover", "focus-visible"] });
     const forced = await tool("computed_style", { tab, selector: "a.button", properties: ["color", "outline-color"] });
     assert.deepEqual([forced.color, forced["outline-color"]], ["rgb(1, 2, 3)", "rgb(4, 5, 6)"]);
+    // A rule saved after forcing shows up in the forced state.
+    fs.writeFileSync(path.join(owned, "services/fixtures/e2e/hover.user.css"), `@-moz-document url-prefix("http://127.0.0.1:") { a.button:hover { background-color: rgb(7, 8, 9); } }\n`);
+    await tool("styles_status", {});
+    await new Promise((r) => setTimeout(r, 800));
+    assert.equal((await tool("computed_style", { tab, selector: "a.button", properties: ["background-color"] }))["background-color"], "rgb(7, 8, 9)");
+    fs.rmSync(path.join(owned, "services/fixtures/e2e/hover.user.css"));
+    await tool("styles_status", {});
     await tool("force_state", { tab, selector: "a.button", states: [] });
     assert.notEqual((await tool("computed_style", { tab, selector: "a.button", properties: ["color"] })).color, "rgb(1, 2, 3)");
   });

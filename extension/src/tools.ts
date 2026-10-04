@@ -18,6 +18,8 @@ export type ToolContext = {
   /** Resolves once the daemon has loaded every file change it has seen, and
    * the extension has that bundle. */
   settle: () => Promise<void>;
+  /** The owned directory, as the daemon reports it. */
+  atelierDir: () => string | undefined;
 };
 
 const INVALID_PARAMS = -32602;
@@ -115,6 +117,26 @@ async function waitFor(tabId: number, params: any): Promise<object> {
   return found ? {} : { warning: `\`${selector}\` didn't appear within the time allowed; the page may still be loading` };
 }
 
+/** Forced states per agent tab, so they can be redone when styles change:
+ * force_state clones rules when it's called, and a later save would
+ * otherwise not show up in the forced state. */
+const forced = new Map<number, { selector: string; states: string[] }>();
+
+/** Called after a new bundle has reached open pages. */
+export async function reapplyForcedStates() {
+  await new Promise((r) => setTimeout(r, 300)); // let the shims swap their styles first
+  for (const [tabId, f] of forced) {
+    try {
+      await call(tabId, page.forceState, f.selector, f.states);
+    } catch {
+      forced.delete(tabId);
+    }
+  }
+}
+
+/** Tabs that have already been told about background-tab rendering. */
+const toldHidden = new Set<number>();
+
 type Handler = (params: any, ctx: ToolContext) => Promise<unknown>;
 
 const handlers: Record<string, Handler> = {
@@ -166,7 +188,10 @@ const handlers: Record<string, Handler> = {
     const notes: string[] = [];
     if (param<boolean>(params, "settleAnimations", "boolean", true)) await call(tab.id!, page.finishAnimations);
     await call(tab.id!, page.imagesReady, 3000);
-    if (!tab.active) notes.push(HIDDEN_NOTE);
+    if (!tab.active && !toldHidden.has(tab.id!)) {
+      notes.push(HIDDEN_NOTE);
+      toldHidden.add(tab.id!);
+    }
 
     let rect: { x: number; y: number; width: number; height: number } | undefined;
     if (selector) {
@@ -234,6 +259,8 @@ const handlers: Record<string, Handler> = {
       param<string | null>(params, "filter", "string", null),
       param<number>(params, "limit", "number", 200),
       param<boolean>(params, "usage", "boolean", true),
+      param<string | null>(params, "scope", "string", null),
+      param<boolean>(params, "verbose", "boolean", false),
     );
   },
 
@@ -264,6 +291,8 @@ const handlers: Record<string, Handler> = {
     const r = (await call(tab.id!, page.forceState, selector, states)) as any;
     if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\``);
     if (r.error) throw new RpcError(INVALID_PARAMS, r.error);
+    if (states.length) forced.set(tab.id!, { selector, states });
+    else forced.delete(tab.id!);
     return r;
   },
 
@@ -273,6 +302,7 @@ const handlers: Record<string, Handler> = {
     const byService: Record<string, number> = {};
     for (const s of bundle?.styles ?? []) byService[s.service ?? "(theme-wide)"] = (byService[s.service ?? "(theme-wide)"] ?? 0) + 1;
     const out: Record<string, unknown> = {
+      atelierDir: ctx.atelierDir() ?? null,
       theme: bundle?.theme ?? null,
       styles: bundle?.styles.length ?? 0,
       byService,
