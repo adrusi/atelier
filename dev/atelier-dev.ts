@@ -299,6 +299,8 @@ async function cmdCapture(args: string[]) {
       context,
       origin: full || selector ? "document" : "viewport",
       ...(clip ? { clip } : {}),
+      // A .jpg/.jpeg output name gets JPEG, which keeps previews small enough to commit.
+      ...(/\.jpe?g$/i.test(file) ? { format: { type: "image/jpeg", quality: 0.85 } } : {}),
     });
     fs.writeFileSync(file, Buffer.from(r.data, "base64"));
   });

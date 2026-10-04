@@ -143,12 +143,14 @@ ATELIER_DIR/
         └── <theme>/
             ├── *.user.css
             ├── *.user.js
-            └── checks/*.check.js
+            ├── checks/*.check.js
+            └── previews/*.jpg        # screenshots of the styled site, for people and the UI
 ```
 
 - **`service.toml`** (optional) records the user's original description (`description`), a short summary written by the agent (`summary`), any **prerequisites** (`prerequisites`, for example "set GitHub's appearance to 'sync with system'"), and whether to keep Dark Reader off its pages (`dark_reader_lock`, default true; §6.5). Every style file in `services/<service>/<active theme>/` is loaded. Canaries (§11) will be added here too.
 - **Service notes are independent of theme.** They record things like "the user wants the sidebar kept visible". They are written by contractors when a task lands, so later contractors inherit decisions without reading old threads.
 - **Theme notes are written only by the supervisor** (§9.3).
+- **Previews.** Whoever writes or revises a style leaves a few screenshots of representative pages in `previews/`, named for what they show (`repo-home.jpg`). They let the user judge a style without visiting the site, and are meant for thumbnails in the extension's UI later. JPEG at viewport size keeps them small enough to commit.
 - Scopes are expressed inside each style using UserCSS `@-moz-document` blocks. A service is not itself a scope.
 - A service with no styles for the active theme is left unstyled. The UI can offer to queue a `port` task.
 

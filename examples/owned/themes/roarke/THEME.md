@@ -4,7 +4,8 @@
 (~/jury/modules/stylesheet/roarke.nix) and a screenshot of the desktop
 (not kept here: it showed personal window titles), for dogfooding atelier.
 It's a reading of the desktop, not the owner's own statement of intent:
-replace it with that. -->
+replace it with that. Revised 2026-10-03 with the owner's answers to questions
+raised while styling GitHub and MDN (examples/DOGFOODING.md). -->
 
 ## Vision
 
@@ -20,9 +21,13 @@ floating on a canvas.
   in surface colour and from borders, never from elevation.
 - **Borders and shape.** Thin (1px) borders in a muted colour separate things.
   Focus and "you are here" get a lavender border or left edge, the way the
-  window manager marks the focused window. Corners are 8px on containers
-  (cards, menus, dialogs, code blocks) and 4px on small controls (buttons,
-  inputs, badges); never pill-shaped.
+  window manager marks the focused window.
+- **Corners.** The desktop's radius is 8px, and a good default is 8px on
+  containers (cards, menus, dialogs, code blocks) and 4px on small controls
+  (buttons, inputs, badges). This is a preference, not a rule: a site whose
+  design leans on pills or circles (toggle switches, avatars, round icon
+  buttons) can keep them. Fighting a site's design language to make radii
+  uniform is usually the wrong trade-off.
 - **Dense but not cramped.** Keep the site's information density; don't add
   padding for its own sake. Gaps between major regions are 10px.
 - **Motion.** Keep existing transitions short, and don't add new animation.
@@ -42,15 +47,23 @@ these values.
 | muted | `#6c7086` (overlay0) | borders, disabled text, separators |
 | fg-dim | `#9399b2` (overlay2) | secondary text, metadata, timestamps |
 | fg | `#cdd6f4` (text) | body text |
-| accent | `#b4befe` (lavender) | focus, current item, primary buttons |
-| link | `#89b4fa` (blue) | links; visited links `#cba6f7` (mauve) |
+| accent | `#b4befe` (lavender) | selected and active things: focus, current item, primary buttons, links |
+| visited | `#cba6f7` (mauve) | visited links |
+| attention | `#fab387` (peach) | the rare thing that really needs attention (the desktop's "urgent" colour) |
 | selection | `#353749` | text selection background |
 | error | `#f38ba8` (red), warning `#f9e2af` (yellow), success `#a6e3a1` (green) | status only |
 
-Accent colour is scarce: one or two things per screen. Most of the page should
-be bg, surface and text. Keep semantic colours (errors, diffs, votes, status
-badges) semantic: map them to the matching Mocha colour rather than to the
-accent.
+On the desktop, the accent marks what is selected or active: the focused
+window's border, the statusline in the editor. On a page, most of the colour
+that isn't text, surface or a subtle border should be the accent (links,
+primary buttons, current tab, focus), not a pastel rainbow. So a site's green
+or blue primary button usually becomes lavender, unless its colour carries
+meaning on that page. Something that really needs attention can stand out
+precisely by not being lavender: use peach.
+
+Keep colours whose meaning matters (errors, diff additions and deletions,
+status badges) mapped to the matching Mocha colour, but use them sparingly.
+Dark text (`#1e1e2e`) on these pastel colours is fine.
 
 ## Typography
 
@@ -59,11 +72,21 @@ accent.
 - Monospace: `"NotoSansM NFM ExtCond", "NotoSansM Nerd Font Mono", monospace`.
 - Don't change sizes much. The browser runs at the toolkit's 1.25 scale
   already.
+- Noto is a variable font. Where text is borderline on contrast or size
+  (small metadata, text on coloured backgrounds), a slightly heavier weight
+  is the preferred fix, before changing colours.
 - Long-form reading (articles, docs) may keep a serif if the site uses one,
   but in the Mocha text colour.
 
 ## Things to avoid
 
 - Pure black or pure white anywhere.
-- Inverting images, logos or photos. Dark-mode by recolouring, not by filter.
+- Recolouring images, logos, photos or diagrams in any way, including
+  inverting them or filtering them. A diagram with a white background stays as
+  it is: any automatic method would sometimes get it wrong, and that's worse.
 - Making the site unrecognisable: restyle its surfaces, keep its layout.
+
+## Out of scope
+
+- **Ads.** Hiding ads is an ad blocker's job, not a style's. Don't hide them.
+  (Whether to make ads that do show match the theme is an open question.)
