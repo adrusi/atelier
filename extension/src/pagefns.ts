@@ -620,3 +620,61 @@ export function fill(selector: string, text: string, submit: boolean) {
   }
   return { value: el.value, focused: document.activeElement === el };
 }
+
+/** Visible elements still drawn as boxes (rounded, shadowed, framed, or
+ * filled differently from what's behind them), grouped by tag and classes.
+ * For themes that change shapes: what's left to flatten, or left on purpose. */
+export function shapeScan(scope: string | null, limit: number) {
+  const root = scope ? document.querySelector(scope) : document.body;
+  if (!root) return null;
+  const transparent = (c: string) => c === "transparent" || /rgba\([^)]*,\s*0\)$/.test(c);
+  const behind = (el: Element | null): string => {
+    for (let e = el; e; e = e.parentElement) {
+      const bg = getComputedStyle(e).backgroundColor;
+      if (!transparent(bg)) return bg;
+    }
+    return getComputedStyle(document.documentElement).backgroundColor;
+  };
+  const CONTROLS = new Set(["INPUT", "SELECT", "TEXTAREA", "BUTTON"]);
+  type Group = { selector: string; count: number; features: Set<string>; example: string; control: boolean; round: boolean };
+  const groups = new Map<string, Group>();
+  let checked = 0;
+  for (const el of [root, ...root.querySelectorAll("*")]) {
+    if (el.closest("[data-atelier-extra], style, script, head")) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 12 || r.height < 12) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility === "hidden" || cs.display === "none" || Number(cs.opacity) === 0) continue;
+    checked++;
+    const features: string[] = [];
+    const radius = Math.max(...["borderTopLeftRadius", "borderTopRightRadius", "borderBottomLeftRadius", "borderBottomRightRadius"].map((p) => parseFloat((cs as any)[p]) || 0));
+    if (radius > 0) features.push(`rounded ${Math.round(radius)}px`);
+    if (cs.boxShadow !== "none") features.push("shadow");
+    const sides = ["Top", "Right", "Bottom", "Left"].filter((s) => parseFloat((cs as any)[`border${s}Width`]) > 0 && (cs as any)[`border${s}Style`] !== "none").length;
+    if (sides >= 3) features.push("framed");
+    const bg = cs.backgroundColor;
+    if (!transparent(bg) && bg !== behind(el.parentElement) && r.height >= 24) features.push("filled");
+    if (!features.length) continue;
+    const classes = [...el.classList].filter((c) => !/\d{3,}|^[a-z]{1,3}-[a-zA-Z0-9]{5,}$/.test(c)).slice(0, 2);
+    const selector = el.tagName.toLowerCase() + (el.id && !/\d{3,}/.test(el.id) ? `#${el.id}` : "") + classes.map((c) => `.${c}`).join("");
+    // Small and square with a radius of about half its size: round by nature (avatars, radios, dots).
+    const round = radius >= Math.min(r.width, r.height) * 0.4 && Math.abs(r.width - r.height) < 4 && r.width <= 96;
+    let g = groups.get(selector);
+    if (!g) {
+      const text = (el.textContent ?? "").replace(/\s+/g, " ").trim();
+      g = { selector, count: 0, features: new Set(), example: text.length > 50 ? `${text.slice(0, 50)}…` : text, control: CONTROLS.has(el.tagName), round };
+      groups.set(selector, g);
+    }
+    g.count++;
+    for (const f of features) g.features.add(f.replace(/ \d+px$/, ` ${Math.round(radius)}px`));
+  }
+  const all = [...groups.values()].sort((a, b) => b.count - a.count);
+  const show = (gs: Group[]) => gs.slice(0, limit).map((g) => ({ selector: g.selector, count: g.count, features: [...g.features], ...(g.example ? { example: g.example } : {}) }));
+  return {
+    checked,
+    boxes: show(all.filter((g) => !g.control && !g.round)),
+    controls: show(all.filter((g) => g.control && !g.round)),
+    probablyRoundByNature: show(all.filter((g) => g.round)),
+    ...(all.length > limit ? { note: `${all.length} groups in all; showing the largest. Narrow with scope.` } : {}),
+  };
+}

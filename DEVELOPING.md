@@ -138,6 +138,7 @@ the daemon start real daemons against temporary directories.
 | shadow-dom | open and closed shadow roots; styles that need a script | planned |
 | hashed-classes | selector-fragility linting; canaries | planned |
 | color-scheme | every common way a page picks light or dark, including a cross-origin stylesheet (R2) | exists |
+| cards | boxes of each kind (filled, rounded, shadowed, framed), a flat row, a control and a round avatar, for `shape_scan` | exists |
 
 Write the planned ones alongside the spikes that need them. `_shared/probe.js` is a reusable probe for style-injection tests; its header comment describes how to use it. Directories starting with `_` are served but not listed.
 

@@ -29,7 +29,7 @@ Work arrives as tasks (task_list, task_claim), and questions for the user go thr
 The tools, in case your harness lists only some at first: tasks (task_list, task_create, task_claim, \
 task_info, task_ask, task_submit, task_decline, task_release, theme_propose); tabs (tab_open, \
 tab_navigate, tab_reload, tab_list, tab_close); looking at pages (screenshot, query, computed_style, \
-matched_rules, css_tokens, contrast_scan, force_state, type_text, eval); and styles_status. A claimed task gives you a copy of the owned directory, its \
+matched_rules, css_tokens, contrast_scan, shape_scan, force_state, type_text, eval); and styles_status. A claimed task gives you a copy of the owned directory, its \
 tree, to edit with your file tools; task_submit checks your changes and lands them in the owned directory, \
 where the user's tabs pick them up, with a journal entry the user can undo. Work through tasks rather than \
 editing the owned directory directly: only landings are recorded, undoable, and passed to the user's hooks.\n\n\
@@ -215,6 +215,24 @@ const TOOLS: &[Tool] = &[
                 "tab": tab_prop(),
                 "minRatio": { "type": "number" },
                 "limit": { "type": "integer", "description": "Maximum failures to list. Default 40." }
+            }, "required": ["tab"] })
+        },
+    },
+    Tool {
+        name: "shape_scan",
+        method: "page/shapes",
+        description: "List the visible elements still drawn as boxes: rounded corners, shadows, frames (borders on \
+            three or four sides), or a fill different from what's behind them. They're grouped by tag and \
+            classes, with counts, what makes each a box, and an example of its text; form controls and small round \
+            things (avatars, radio buttons, dots) are listed separately. When a theme changes shapes (no cards, \
+            square corners), this is the list of what's left to do, or left on purpose, which screenshots are bad \
+            at showing: a theme like that is mostly a list of things that must be absent. Use `scope` for one part \
+            of the page. Run it on each kind of page you style, since boxes differ from page to page.",
+        schema: || {
+            json!({ "type": "object", "properties": {
+                "tab": tab_prop(),
+                "scope": { "type": "string", "description": "Only inside the first element matching this selector." },
+                "limit": { "type": "integer", "description": "Groups per list. Default 40." }
             }, "required": ["tab"] })
         },
     },

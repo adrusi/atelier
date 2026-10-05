@@ -349,6 +349,14 @@ const handlers: Record<string, Handler> = {
     return call(tab.id!, page.contrast, param<number>(params, "minRatio", "number", 4.5), param<number>(params, "limit", "number", 40));
   },
 
+  async "page/shapes"(params) {
+    const tab = await agentTab(params);
+    const scope = param<string | null>(params, "scope", "string", null);
+    const r = await call(tab.id!, page.shapeScan, scope, param<number>(params, "limit", "number", 40));
+    if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${scope}\``);
+    return r;
+  },
+
   async "page/force_state"(params) {
     const tab = await agentTab(params);
     const selector = param<string>(params, "selector", "string");

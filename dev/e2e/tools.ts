@@ -261,6 +261,19 @@ try {
     assert.equal(result, true, "the extra style is removed afterwards");
   });
 
+  await check("shape_scan lists what's still drawn as a box, controls and round things apart", async () => {
+    const { tab: cards } = await tool("tab_open", { url: fixture.replace("/tokens/", "/cards/") });
+    const r = await tool("shape_scan", { tab: cards });
+    const card = r.boxes.find((g: any) => g.selector === "div.card");
+    assert.equal(card?.count, 2, JSON.stringify(r));
+    assert.deepEqual([...card.features].sort(), ["filled", "rounded 8px", "shadow"]);
+    assert.ok(r.boxes.some((g: any) => g.selector === "div.panel" && g.features.includes("framed")));
+    assert.ok(!r.boxes.some((g: any) => g.selector === "div.row"), "a flat row isn't a box");
+    assert.ok(r.controls.some((g: any) => g.selector === "button"));
+    assert.ok(r.probablyRoundByNature.some((g: any) => g.selector === "span.avatar"));
+    await tool("tab_close", { tab: cards });
+  });
+
   await check("tab_navigate and tab_close", async () => {
     const r = await tool("tab_navigate", { tab, url: `http://127.0.0.1:${state.fixturesPort}/basic/` });
     assert.equal(r.title, "basic fixture");
