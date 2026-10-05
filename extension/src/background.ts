@@ -9,6 +9,7 @@
 import type { BlobChunk } from "./proto/BlobChunk";
 import type { BlobRef } from "./proto/BlobRef";
 import type { Bundle } from "./proto/Bundle";
+import type { CompiledStyle } from "./proto/CompiledStyle";
 import type { Batch } from "./proto/Batch";
 import type { Proposal } from "./proto/Proposal";
 import type { BundleChanged } from "./proto/BundleChanged";
@@ -242,11 +243,11 @@ function sendStyles(port: browser.runtime.Port) {
   const source = tabId === undefined ? undefined : bindings.get(tabId);
   port.postMessage({ type: "bind", source: source ?? null });
   if (source === undefined) {
-    if (state.bundle) port.postMessage({ type: "bundle", styles: state.bundle.styles });
+    if (state.bundle) port.postMessage({ type: "bundle", styles: withOverride(tabId, state.bundle.styles) });
     return;
   }
   const loaded = sources.get(source);
-  if (loaded) port.postMessage({ type: "bundle", styles: loaded.bundle.styles });
+  if (loaded) port.postMessage({ type: "bundle", styles: withOverride(tabId, loaded.bundle.styles) });
   else if (rpc) void loadSource(rpc, source).catch(() => closeSource(source));
 }
 
@@ -288,7 +289,7 @@ async function applyBundle(bundle: Bundle) {
 
   for (const port of shimPorts) {
     const tabId = port.sender?.tab?.id;
-    if (tabId === undefined || !bindings.has(tabId)) port.postMessage({ type: "bundle", styles: bundle.styles });
+    if (tabId === undefined || !bindings.has(tabId)) port.postMessage({ type: "bundle", styles: withOverride(tabId, bundle.styles) });
   }
   await injectIntoOpenTabs(bundle);
   void tools.reapplyForcedStates();
@@ -399,6 +400,9 @@ browser.runtime.onMessage.addListener((msg: unknown) => {
   if (i?.type === "attachment" && i.batch && i.name) return attachment(i.batch, i.name);
   if (i?.type === "answer" && i.batch) return daemon().call<Batch>("call/answer", { batch: i.batch, answers: i.answers ?? [] });
   if (i?.type === "preview" && i.task && i.url) return preview(i.task, i.url);
+  const v = msg as { type?: string; key?: string; task?: string | null; url?: string; file?: string; name?: string; css?: string };
+  if (v?.type === "variant" && v.key && v.url && v.file && v.name && v.css !== undefined)
+    return showVariant({ key: v.key, task: v.task ?? null, url: v.url, file: v.file, name: v.name, css: v.css });
   const d = msg as { type?: string; id?: string; accept?: boolean; note?: string; text?: string };
   if (d?.type === "decide" && d.id) return daemon().call<Proposal>("theme/decide", { id: d.id, accept: Boolean(d.accept), note: d.note ?? null, text: d.text ?? null });
   if (i?.type === "stage") return daemon().call("call/stage", i.stage ? { stage: i.stage } : {});
@@ -472,6 +476,69 @@ async function updateInboxBadge() {
   await browser.action.setBadgeText({ text: waiting ? String(waiting) : "" });
   if (waiting) await browser.action.setBadgeBackgroundColor({ color: "#b4befe" });
 }
+
+// ---------------------------------------------------------------------------
+// Variants (SPEC §9.5): one tab per variant call, showing the page with an
+// option swapped in, so the user can flip between options live.
+
+type Override = { file: string; name: string; css: string };
+/** Per tab: a variant block to replace in the styles it gets. */
+const overrides = new Map<number, Override>();
+/** The tab showing each variant call (by batch and call), for reuse. */
+const variantTabs = new Map<string, number>();
+
+/** The CSS between a variant's markers replaced (mirrors the daemon's). */
+function replaceBlock(text: string, name: string, css: string): string {
+  const start = `/* atelier:variant ${name} */`;
+  const end = `/* atelier:end ${name} */`;
+  const s = text.indexOf(start);
+  if (s < 0) return text;
+  const from = s + start.length;
+  const e = text.indexOf(end, from);
+  if (e < 0) return text;
+  return `${text.slice(0, from)}\n${css.trimEnd()}\n${text.slice(e)}`;
+}
+
+function withOverride(tabId: number | undefined, styles: CompiledStyle[]): CompiledStyle[] {
+  const o = tabId === undefined ? undefined : overrides.get(tabId);
+  if (!o) return styles;
+  return styles.map((s) => (s.id === o.file ? { ...s, sections: s.sections.map((sec) => ({ ...sec, css: replaceBlock(sec.css, o.name, o.css) })) } : s));
+}
+
+/** Shows a variant option in its own tab of the user's: the task's tree if
+ * the work hasn't landed, else their own styles, with the option swapped in. */
+const showing = new Map<string, Promise<boolean>>();
+function showVariant(m: { key: string; task: string | null; url: string } & Override): Promise<boolean> {
+  // One at a time per call, so two quick clicks can't open two tabs.
+  const next = (showing.get(m.key) ?? Promise.resolve(true)).catch(() => true).then(() => showVariantNow(m));
+  showing.set(m.key, next);
+  return next;
+}
+
+async function showVariantNow(m: { key: string; task: string | null; url: string } & Override): Promise<boolean> {
+  let tabId = variantTabs.get(m.key);
+  const exists = tabId !== undefined && (await browser.tabs.get(tabId).then(() => true, () => false));
+  overrides.set(-1, m); // placeholder until the tab id is known
+  if (!exists) {
+    const tab = await browser.tabs.create({ url: "about:blank", active: true });
+    tabId = tab.id!;
+    variantTabs.set(m.key, tabId);
+    overrides.set(tabId, m);
+    if (m.task) await bindTab(tabId, m.task);
+    await browser.tabs.update(tabId, { url: m.url });
+  } else {
+    overrides.set(tabId!, m);
+    for (const port of shimPorts) if (port.sender?.tab?.id === tabId) sendStyles(port);
+    await browser.tabs.update(tabId!, { active: true });
+  }
+  overrides.delete(-1);
+  return true;
+}
+
+browser.tabs.onRemoved.addListener((tabId) => {
+  overrides.delete(tabId);
+  for (const [k, t] of variantTabs) if (t === tabId) variantTabs.delete(k);
+});
 
 // ---------------------------------------------------------------------------
 // Requests from the popup (SPEC §6.4)

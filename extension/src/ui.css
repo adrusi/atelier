@@ -55,3 +55,4 @@ pre.diff .ctx { display: block; opacity: 0.75; }
 pre.diff .skip { display: block; opacity: 0.5; }
 .proposal textarea { margin-top: 0.4rem; }
 .proposal footer button + button { margin-left: 0; }
+label button.show { font-size: 0.85rem; }

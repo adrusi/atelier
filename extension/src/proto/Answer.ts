@@ -12,4 +12,10 @@ note: string | null,
 /**
  * The user kept the agent's provisional choice, with nothing to add.
  */
-kept: boolean, time: bigint, };
+kept: boolean, 
+/**
+ * For a variant call answered with another option: that option was
+ * written into the style (the task's tree, or once landed, the owned
+ * directory), so nobody has to.
+ */
+applied: boolean, time: bigint, };

@@ -11,4 +11,10 @@ wait: Wait, summary: string | null,
  * Calls with `attachments` as paths to copy in (from the task's
  * directory); `answer` is ignored.
  */
-calls: Array<Call>, };
+calls: Array<Call>, 
+/**
+ * For a batch that waits: keep the task claimed for up to this long,
+ * because the user may answer soon, instead of parking it at once. If
+ * the hold runs out unanswered, the task parks then.
+ */
+holdMs?: bigint, };

@@ -620,6 +620,9 @@ pub struct Call {
     /// What this call asks (filled in from the batch's if not given).
     #[serde(default)]
     pub wait: Option<Wait>,
+    /// For a choice between versions of part of a style (SPEC §9.5).
+    #[serde(default)]
+    pub variant: Option<Variant>,
     #[serde(default)]
     pub answer: Option<Answer>,
 }
@@ -638,6 +641,11 @@ pub struct Answer {
     pub note: Option<String>,
     /// The user kept the agent's provisional choice, with nothing to add.
     pub kept: bool,
+    /// For a variant call answered with another option: that option was
+    /// written into the style (the task's tree, or once landed, the owned
+    /// directory), so nobody has to.
+    #[serde(default)]
+    pub applied: bool,
     pub time: u64,
 }
 
@@ -787,4 +795,22 @@ pub struct DecideParams {
     /// Accept this text instead of the proposed one (the user's edit of it).
     #[serde(default)]
     pub text: Option<String>,
+}
+
+/// A part of a style with alternative versions. The style file marks the
+/// part with two comments, `atelier:variant NAME` before and `atelier:end
+/// NAME` after; each option's CSS was in `variants/NAME/<option>.css`
+/// beside it. (Comment markers aren't spelt out here because these docs end
+/// up inside comments in the generated TypeScript.)
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Variant {
+    pub name: String,
+    /// The style file, relative to the owned directory (its style id).
+    #[serde(default)]
+    pub file: String,
+    /// Each option's CSS, by option (filled in when posted).
+    #[serde(default)]
+    pub css: BTreeMap<String, String>,
 }

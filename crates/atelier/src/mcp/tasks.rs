@@ -131,7 +131,12 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
             question that needs answering and the calls you made for the record, together. \
             Screenshots: paths to images in the tree or the task's scratch space (screenshot with attach: true \
             saves there). For \"this or that?\" questions, screenshots of each option (screenshot's extraCss \
-            shows a variant without editing files) make answering quick.",
+            shows a variant without editing files) make answering quick. \
+            Better still, for a choice between versions of part of a style: mark that part in the style file with \
+            /* atelier:variant NAME */ … /* atelier:end NAME */ (what's between them is your choice), put each \
+            option's CSS, yours included, in variants/NAME/<option>.css beside the style file, and give the call \
+            variant: NAME. The user can then flip between the options live in their own tab, and picking another \
+            one writes it into the style for you (or, once the work has landed, straight into their styles).",
         schema: || {
             json!({ "type": "object", "properties": {
                 "task": task_prop(),
@@ -146,6 +151,7 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
                     "choice": { "type": "string", "description": "What you'd do (or did), if you had to decide: exactly one of the options, when there are options (reasons go in context)." },
                     "scope": { "type": "string", "enum": ["site", "theme"], "description": "Default site." },
                     "wait": { "type": "string", "enum": ["record", "review", "block"] },
+                    "variant": { "type": "string", "description": "For choosing between versions of part of a style: the name the style file marks it with (see the tool description). Options and choice then come from the variant files." },
                     "screenshots": { "type": "array", "items": { "type": "string" } }
                 }, "required": ["question"] } }
             }, "required": ["calls"] })
@@ -560,6 +566,9 @@ impl Server {
                 if let Some(o) = c.as_object_mut() {
                     o.remove("screenshots");
                     o.insert("attachments".into(), json!(shots));
+                    if let Some(Value::String(name)) = o.remove("variant") {
+                        o.insert("variant".into(), json!({ "name": name }));
+                    }
                 }
                 c
             })
@@ -987,6 +996,9 @@ fn batch_text(b: &atelier_proto::Batch) -> String {
                     .filter(|ch| Some(*ch) != c.choice.as_ref())
                 {
                     let _ = write!(out, " → the user chose: {ch}");
+                    if a.applied {
+                        let _ = write!(out, " (already written into the style)");
+                    }
                 }
                 if let Some(n) = &a.note {
                     let _ = write!(out, " → the user said: {n}");

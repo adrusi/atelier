@@ -196,6 +196,57 @@ try {
     assert.match(brief, /marked this theme \*\*settled\*\*/);
     assert.match(brief, /expect to be satisfied with whatever provisional calls you make/);
   });
+  await check("a variant can be flipped live in the user's own tab, and picking one writes it in", async () => {
+    const created = await tool("task_create", { description: "variant test", kind: "revise", service: "fixtures", origin: fixture });
+    const task = created.match(/task (\S+)\./)![1];
+    const brief = await tool("task_claim", { id: task });
+    const tree = brief.match(/The task's tree is (\S+): /)![1];
+    const dir = path.join(tree, path.dirname(STYLE));
+    fs.writeFileSync(
+      path.join(tree, STYLE),
+      `/* ==UserStyle==\n@name e2e\n==/UserStyle== */\n@-moz-document url-prefix("http://127.0.0.1:") {\n  /* atelier:variant v */\n  html { --variant: one; }\n  /* atelier:end v */\n}\n`,
+    );
+    fs.mkdirSync(path.join(dir, "variants/v"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "variants/v/one.css"), "html { --variant: one; }\n");
+    fs.writeFileSync(path.join(dir, "variants/v/two.css"), "html { --variant: two; }\n");
+    const posted = await tool("task_ask", { task, wait: "review", calls: [{ question: "One or two?", variant: "v" }] });
+    const batch = posted.match(/\((\S+-q\d+)\)/)![1];
+    assert.match(atelier("calls"), /One or two\?\s+\[agent's call: one\]/);
+
+    // The inbox's "show" for an option opens the page in a tab of the
+    // user's, with that option swapped in; another option flips it live.
+    const variantValue = async (option: string) =>
+      withSession(state.bidiPort, async (bidi) => {
+        let { contexts } = await bidi.send("browsingContext.getTree", { maxDepth: 0 });
+        const ext = contexts.find((c: { url: string }) => c.url.startsWith("moz-extension://"));
+        const base = ext.url.replace(/\/[^/]*$/, "");
+        const { context } = await bidi.send("browsingContext.create", { type: "tab", background: true });
+        await bidi.send("browsingContext.navigate", { context, url: `${base}/inbox.html?show=${encodeURIComponent(`${batch}#0`)}&option=${option}`, wait: "complete" });
+        await new Promise((r) => setTimeout(r, 2500));
+        ({ contexts } = await bidi.send("browsingContext.getTree", { maxDepth: 0 }));
+        const { evaluate } = await import("../bidi.ts");
+        // The tabs showing a variant: exactly one, however many times it's shown.
+        const seen: [string, string, unknown][] = [];
+        for (const c of contexts as { context: string; url: string }[]) {
+          if (!c.url.startsWith("http")) continue;
+          seen.push([c.context, c.url, await evaluate(bidi, c.context, "getComputedStyle(document.documentElement).getPropertyValue('--variant').trim()")]);
+        }
+        const showing = seen.filter(([, , v]) => v);
+        assert.equal(showing.length, 1, JSON.stringify(seen));
+        // BiDi context ids differ between sessions, so count the tabs instead.
+        return [seen.length, showing[0][2]];
+      });
+    const [first, two] = await variantValue("two");
+    assert.equal(two, "two");
+    const [second, one] = await variantValue("one");
+    assert.equal(second, first, "no new tab: the same one, flipped");
+    assert.equal(one, "one");
+
+    atelier("answer", batch, JSON.stringify([{ choice: "two" }]));
+    assert.match(fs.readFileSync(path.join(tree, STYLE), "utf8"), /--variant: two/);
+    const resumed = await tool("task_claim", { id: task });
+    assert.match(resumed, /One or two\? \[your call: one\] → the user chose: two \(already written into the style\)/);
+  });
 } finally {
   server.stdin!.end();
   dev("down", ...(failures ? ["--keep"] : []), NAME);

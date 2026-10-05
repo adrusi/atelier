@@ -70,7 +70,18 @@ function callCard(batch: Batch, call: Call, i: number, open: boolean) {
     const set = h("fieldset", { class: "options" });
     for (const option of call.options) {
       const input = h("input", { type: "radio", name, value: option, checked: option === call.choice });
-      set.append(h("label", {}, input, ` ${option}`, option === call.choice ? h("span", { class: "mine", textContent: " (agent's choice)" }) : null));
+      const row = h("label", {}, input, ` ${option}`, option === call.choice ? h("span", { class: "mine", textContent: " (agent's choice)" }) : null);
+      // A variant: show this option on the page itself, in a tab of the user's.
+      const v = call.variant;
+      if (v && batch.origin && v.css[option] !== undefined) {
+        const show = h("button", { type: "button", class: "link show", textContent: "show" });
+        show.addEventListener("click", (e) => {
+          e.preventDefault();
+          showVariant(batch, i, option);
+        });
+        row.append(" ", show);
+      }
+      set.append(row);
     }
     li.append(set);
   } else if (call.choice) {
@@ -213,9 +224,36 @@ function proposalCard(p: Proposal) {
   return card;
 }
 
+/** Shows a variant call's option on the page, in a tab of the user's. */
+function showVariant(batch: Batch, i: number, option: string) {
+  const v = batch.calls[i]?.variant;
+  if (!v || !batch.origin || v.css[option] === undefined) return;
+  const task = tasks.get(batch.task);
+  const unlanded = task && task.state !== "landed" && task.tree;
+  void browser.runtime.sendMessage({
+    type: "variant",
+    key: `${batch.id}#${i}`,
+    task: unlanded ? task.id : null,
+    url: batch.origin,
+    file: v.file,
+    name: v.name,
+    css: v.css[option],
+  });
+}
+
+/** inbox.html?show=BATCH#CALL&option=NAME opens that option straight away. */
+const params = new URLSearchParams(location.search);
+let pendingShow = params.get("show") ? { key: params.get("show")!, option: params.get("option") ?? "" } : null;
+
+/** The tasks of the batches shown, for the variant buttons. */
+const tasks = new Map<string, Task>();
+
 let shown = "";
 
 async function render(force = false) {
+  // Taken before anything is awaited, so overlapping renders act on it once.
+  const show = pendingShow;
+  pendingShow = null;
   let inbox: Inbox;
   try {
     inbox = (await browser.runtime.sendMessage({ type: "inbox" })) as Inbox;
@@ -229,6 +267,8 @@ async function render(force = false) {
   if (key === shown && !force) return;
   shown = key;
 
+  tasks.clear();
+  for (const [id, t] of Object.entries(inbox.tasks)) tasks.set(id, t);
   const open = inbox.batches.filter((b) => b.state === "open");
   // Blocking first, then review, then calls for the record.
   const rank = { block: 0, review: 1, record: 2 } as const;
@@ -240,6 +280,12 @@ async function render(force = false) {
   const decided = inbox.proposals.filter((p) => p.state !== "open");
   el("answered-heading").hidden = answered.length + decided.length === 0;
   el("answered").replaceChildren(...decided.map(proposalCard), ...answered.map((b) => batchCard(b, inbox.tasks[b.task], false)));
+
+  if (show) {
+    const [id, i] = show.key.split("#");
+    const b = inbox.batches.find((b) => b.id === id);
+    if (b) showVariant(b, Number(i), show.option);
+  }
 
   el("theme").hidden = !inbox.theme;
   if (inbox.theme) {
