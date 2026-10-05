@@ -10,6 +10,7 @@ import type { BlobChunk } from "./proto/BlobChunk";
 import type { BlobRef } from "./proto/BlobRef";
 import type { Bundle } from "./proto/Bundle";
 import type { Batch } from "./proto/Batch";
+import type { Proposal } from "./proto/Proposal";
 import type { BundleChanged } from "./proto/BundleChanged";
 import type { InitializeResult } from "./proto/InitializeResult";
 import type { JournalEntry } from "./proto/JournalEntry";
@@ -64,7 +65,7 @@ async function connect() {
       const { source, ...ref } = params as BundleChanged;
       if (source === undefined) void loadBundle(r, ref);
       else if (sources.has(source)) void loadSource(r, source, ref);
-    } else if (method === "call/changed") {
+    } else if (method === "call/changed" || method === "theme/changed") {
       void updateInboxBadge();
     } else if (method === "task/changed") {
       const task = params as Task;
@@ -398,6 +399,8 @@ browser.runtime.onMessage.addListener((msg: unknown) => {
   if (i?.type === "attachment" && i.batch && i.name) return attachment(i.batch, i.name);
   if (i?.type === "answer" && i.batch) return daemon().call<Batch>("call/answer", { batch: i.batch, answers: i.answers ?? [] });
   if (i?.type === "preview" && i.task && i.url) return preview(i.task, i.url);
+  const d = msg as { type?: string; id?: string; accept?: boolean; note?: string; text?: string };
+  if (d?.type === "decide" && d.id) return daemon().call<Proposal>("theme/decide", { id: d.id, accept: Boolean(d.accept), note: d.note ?? null, text: d.text ?? null });
   if (i?.type === "stage") return daemon().call("call/stage", i.stage ? { stage: i.stage } : {});
   if (i?.type === "open-inbox") return browser.tabs.create({ url: browser.runtime.getURL("inbox.html") }).then(() => true);
   return undefined;
@@ -408,6 +411,8 @@ browser.runtime.onMessage.addListener((msg: unknown) => {
 
 export type Inbox = {
   batches: Batch[];
+  /** Proposed THEME.md edits: open ones, then a few recent decisions. */
+  proposals: Proposal[];
   /** The tasks they belong to, by id. */
   tasks: Record<string, Task>;
   theme: string | null;
@@ -425,7 +430,9 @@ async function inbox(): Promise<Inbox> {
     tasks[id] = await r.call<Task>("task/get", { id });
   }
   const stage = await r.call<{ theme: string; stage: string }>("call/stage", {}).catch(() => null);
-  return { batches, tasks, theme: stage?.theme ?? null, stage: stage?.stage ?? null };
+  const allProposals = await r.call<Proposal[]>("theme/proposals", {}).catch(() => [] as Proposal[]);
+  const proposals = [...allProposals.filter((p) => p.state === "open"), ...allProposals.filter((p) => p.state !== "open").slice(0, 3)];
+  return { batches, proposals, tasks, theme: stage?.theme ?? null, stage: stage?.stage ?? null };
 }
 
 /** An attachment, as a data URL the inbox can show. */
@@ -460,7 +467,8 @@ async function preview(task: string, url: string): Promise<boolean> {
 async function updateInboxBadge() {
   if (!rpc || state.connection !== "connected") return;
   const open = await rpc.call<Batch[]>("call/list", { open: true }).catch(() => []);
-  const waiting = open.filter((b) => b.wait !== "record").length;
+  const proposals = await rpc.call<Proposal[]>("theme/proposals", { open: true }).catch(() => []);
+  const waiting = open.filter((b) => b.wait !== "record").length + proposals.length;
   await browser.action.setBadgeText({ text: waiting ? String(waiting) : "" });
   if (waiting) await browser.action.setBadgeBackgroundColor({ color: "#b4befe" });
 }

@@ -295,6 +295,18 @@ pub mod task_method {
     pub const UNDO: &str = "journal/undo";
 }
 
+/// Proposed edits to THEME.md, which only the user lands (SPEC §9.5).
+pub mod theme_method {
+    /// [`ProposeParams`] → [`Proposal`].
+    pub const PROPOSE: &str = "theme/propose";
+    /// `{ "open"?: bool }` → `Vec<Proposal>`, newest first.
+    pub const PROPOSALS: &str = "theme/proposals";
+    /// [`DecideParams`] → [`Proposal`]. Accepting lands it, with a journal entry.
+    pub const DECIDE: &str = "theme/decide";
+    /// Notification from the daemon: a [`Proposal`] was made or decided.
+    pub const CHANGED: &str = "theme/changed";
+}
+
 /// Calls: questions and assumptions, posted in batches (SPEC §9.5).
 pub mod call_method {
     /// [`CallPostParams`] → [`Batch`]. A `review` or `block` batch parks
@@ -690,4 +702,80 @@ pub struct CallStats {
     pub answered: u32,
     /// Of those, how many the user kept.
     pub kept: u32,
+}
+
+// ---------------------------------------------------------------------------
+// Proposals to THEME.md (SPEC §9.5).
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "lowercase")]
+#[ts(export)]
+pub enum ProposalState {
+    Open,
+    Accepted,
+    Declined,
+    /// THEME.md changed after the proposal was made, so it no longer applies.
+    Stale,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Proposal {
+    pub id: String,
+    pub theme: String,
+    /// The file, relative to the owned directory (themes/<theme>/THEME.md).
+    pub path: String,
+    /// The file as it was when proposed, and as proposed.
+    pub before: String,
+    pub after: String,
+    /// What changes, in a line.
+    pub summary: String,
+    /// Why: the answers or observations behind it.
+    pub why: Option<String>,
+    /// The task it came out of, if any.
+    pub task: Option<String>,
+    pub state: ProposalState,
+    /// The user's note when declining (or accepting with edits).
+    pub note: Option<String>,
+    /// The journal entry, once accepted.
+    pub journal: Option<u64>,
+    pub created: u64,
+    pub decided: Option<u64>,
+}
+
+/// One edit to the current text: replace `find` (which must occur exactly
+/// once), or, with no `find`, append `replace` at the end.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TextEdit {
+    #[serde(default)]
+    pub find: Option<String>,
+    pub replace: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ProposeParams {
+    pub edits: Vec<TextEdit>,
+    pub summary: String,
+    #[serde(default)]
+    pub why: Option<String>,
+    #[serde(default)]
+    pub task: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DecideParams {
+    pub id: String,
+    pub accept: bool,
+    #[serde(default)]
+    pub note: Option<String>,
+    /// Accept this text instead of the proposed one (the user's edit of it).
+    #[serde(default)]
+    pub text: Option<String>,
 }

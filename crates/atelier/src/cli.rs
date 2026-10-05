@@ -511,6 +511,29 @@ pub fn tasks(dir: Option<&str>, args: &[String]) -> ExitCode {
                 json!({ "batch": batch, "answers": answers }),
             )
         }
+        (Some("proposals"), _) => client
+            .call(
+                atelier_proto::theme_method::PROPOSALS,
+                json!({ "open": true }),
+            )
+            .map(|v| {
+                for p in v.as_array().into_iter().flatten() {
+                    println!(
+                        "{}  {}: {}",
+                        p["id"].as_str().unwrap_or("?"),
+                        p["path"].as_str().unwrap_or("?"),
+                        p["summary"].as_str().unwrap_or("")
+                    );
+                }
+                Value::Null
+            }),
+        (Some("decide"), Some(id)) => match arg(2) {
+            Some(d @ ("accept" | "decline")) => client.call(
+                atelier_proto::theme_method::DECIDE,
+                json!({ "id": id, "accept": d == "accept", "note": arg(3) }),
+            ),
+            _ => return fail("usage: atelier decide PROPOSAL accept|decline [NOTE]"),
+        },
         (Some("stage"), stage) => {
             client.call(atelier_proto::call_method::STAGE, json!({ "stage": stage }))
         }

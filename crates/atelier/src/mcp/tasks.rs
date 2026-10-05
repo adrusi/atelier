@@ -149,6 +149,29 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
         },
     },
     Tool {
+        name: "theme_propose",
+        method: "",
+        description: "Propose a change to THEME.md, the user's own description of the look they want. You never \
+            edit THEME.md yourself; the user sees your proposal as a diff in the browser and accepts it (perhaps \
+            after editing it), or declines it with a note. Propose when something settles a question for the theme \
+            as a whole: an answer the user gave to a theme-level call, or a gap you keep running into, so the next \
+            agent doesn't have to ask again. Write it in THEME.md's own voice and place (it's the user's \
+            document, and reads as theirs), keep it short, and say in `why` what it comes from. Edits apply to \
+            THEME.md as it is now: each `find` must match its current text exactly, once (if it doesn't, the \
+            error includes the current text); an edit without `find` appends.",
+        schema: || {
+            json!({ "type": "object", "properties": {
+                "summary": { "type": "string", "description": "What changes, in a line." },
+                "why": { "type": "string", "description": "What it comes from: the user's answer, the sites where it came up." },
+                "edits": { "type": "array", "items": { "type": "object", "properties": {
+                    "find": { "type": "string", "description": "Text in THEME.md to replace (exactly, once). Omit to append." },
+                    "replace": { "type": "string" }
+                }, "required": ["replace"] } },
+                "task": task_prop()
+            }, "required": ["summary", "edits"] })
+        },
+    },
+    Tool {
         name: "task_release",
         method: "",
         description: "Stop working on a task for now without finishing it: it goes back to the queue with its \
@@ -237,6 +260,7 @@ impl Server {
             "task_decline" => self.task_finish(args, tm::DECLINE, "reason"),
             "task_release" => self.task_finish(args, tm::RELEASE, "handoff"),
             "task_ask" => self.task_ask(args),
+            "theme_propose" => self.theme_propose(args),
             _ => return None,
         };
         Some(match result {
@@ -424,7 +448,22 @@ impl Server {
             atelier_proto::call_method::STATS,
             json!({ "theme": task.theme }),
         )?)?;
-        Ok(brief(&task, &changes, &batches, &stats))
+        let proposals: Vec<atelier_proto::Proposal> = parse(self.daemon_call(
+            atelier_proto::theme_method::PROPOSALS,
+            json!({ "open": false }),
+        )?)?;
+        let proposals: Vec<_> = proposals
+            .into_iter()
+            .filter(|p| Some(&p.theme) == task.theme.as_ref())
+            .filter(|p| {
+                matches!(
+                    p.state,
+                    atelier_proto::ProposalState::Open | atelier_proto::ProposalState::Declined
+                )
+            })
+            .take(8)
+            .collect();
+        Ok(brief(&task, &changes, &batches, &stats, &proposals))
     }
 
     fn task_submit(&mut self, args: &Value) -> Result<String, String> {
@@ -546,6 +585,24 @@ impl Server {
         })
     }
 
+    fn theme_propose(&mut self, args: &Value) -> Result<String, String> {
+        let task = args
+            .get("task")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| (self.held.len() == 1).then(|| self.held.keys().next().unwrap().clone()));
+        let p: atelier_proto::Proposal = parse(self.daemon_call(
+            atelier_proto::theme_method::PROPOSE,
+            json!({ "edits": args.get("edits"), "summary": args.get("summary"), "why": args.get("why"), "task": task }),
+        )?)?;
+        Ok(format!(
+            "Proposed ({}). The user will see it as a diff in the inbox and accept, edit or decline it; \
+             until then THEME.md is unchanged, so don't count on it in this task. Briefs show pending and \
+             declined proposals, so it won't be proposed twice.",
+            p.id
+        ))
+    }
+
     /// Decline or release: either way, this session lets go of the task.
     fn task_finish(&mut self, args: &Value, method: &str, field: &str) -> Result<String, String> {
         let id = self.task_arg(args)?;
@@ -616,6 +673,7 @@ fn brief(
     changes: &[atelier_proto::FileChange],
     batches: &[atelier_proto::Batch],
     stats: &atelier_proto::CallStats,
+    proposals: &[atelier_proto::Proposal],
 ) -> String {
     let theme = t.theme.as_deref().unwrap_or("<theme>");
     let tree = t.tree.as_deref().unwrap_or("?");
@@ -760,13 +818,30 @@ fn brief(
             }
         }
         out.push_str(
-            "\nIf an answer settles something that will matter beyond this task, record it: in the \
-             service's notes.md if it's about this site, or in your summary as a suggestion for the theme if \
-             it's about the theme (so it can be worked into THEME.md or the theme notes, and the user isn't asked \
-             again).\n",
+            "\nIf an answer settles something that will matter beyond this task, record it so nobody asks \
+             again: in the service's notes.md if it's about this site; if it's about the theme, propose it for \
+             THEME.md with theme_propose (unless a proposal below already covers it).\n",
         );
     }
     out.push_str(&asking(&theme_stage(tree, theme), stats));
+    if !proposals.is_empty() {
+        out.push_str("\n## Proposed changes to THEME.md\n\n");
+        for p in proposals {
+            match p.state {
+                atelier_proto::ProposalState::Open => {
+                    let _ = writeln!(out, "- Waiting for the user: {}", p.summary);
+                }
+                _ => {
+                    let note = p
+                        .note
+                        .as_deref()
+                        .map(|n| format!(" (they said: {n})"))
+                        .unwrap_or_default();
+                    let _ = writeln!(out, "- Declined by the user: {}{note}", p.summary);
+                }
+            }
+        }
+    }
     if !changes.is_empty() {
         out.push_str("\n## Changed in the tree so far\n\n");
         for c in changes {
@@ -831,7 +906,8 @@ fn asking(stage: &str, stats: &atelier_proto::CallStats) -> String {
              Answers to questions about the theme improve THEME.md for every task after this one. So where \
              the theme leaves something open, or you'd be guessing at the user's taste, put it to them rather \
              than deciding quietly: gather calls, and at a natural checkpoint (a first pass, with screenshots) \
-             send them with task_ask, saying what you'd choose. Most can be for the record (you go ahead; a \
+             send them with task_ask, saying what you'd choose. When an answer settles something for the \
+             theme as a whole, propose it for THEME.md (theme_propose). Most can be for the record (you go ahead; a \
              different answer reopens it); keep review for the ones where the options would mean substantially \
              different work.\n",
         );

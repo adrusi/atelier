@@ -5,6 +5,7 @@
 import type { Inbox } from "./background";
 import type { Batch } from "./proto/Batch";
 import type { Call } from "./proto/Call";
+import type { Proposal } from "./proto/Proposal";
 import type { Task } from "./proto/Task";
 
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -133,6 +134,85 @@ function batchCard(b: Batch, task: Task | undefined, open: boolean) {
   return card;
 }
 
+/** A line diff (longest common subsequence): small files, so simple is fine. */
+function diffLines(a: string[], b: string[]): { op: " " | "-" | "+"; line: string }[] {
+  const n = a.length;
+  const m = b.length;
+  const lcs = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) lcs[i][j] = a[i] === b[j] ? lcs[i + 1][j + 1] + 1 : Math.max(lcs[i + 1][j], lcs[i][j + 1]);
+  const out: { op: " " | "-" | "+"; line: string }[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) out.push({ op: " ", line: a[i++] }), j++;
+    // Removals before additions, as diffs usually read.
+    else if (i < n && (j >= m || lcs[i + 1][j] >= lcs[i][j + 1])) out.push({ op: "-", line: a[i++] });
+    else out.push({ op: "+", line: b[j++] });
+  }
+  return out;
+}
+
+/** The diff with unchanged stretches folded to a couple of lines of context. */
+function diffView(before: string, after: string) {
+  const lines = diffLines(before.split("\n"), after.split("\n"));
+  const near = (k: number) => lines.slice(Math.max(0, k - 2), k + 3).some((l) => l.op !== " ");
+  const pre = h("pre", { class: "diff" });
+  let skipped = false;
+  lines.forEach((l, k) => {
+    if (l.op === " " && !near(k)) {
+      if (!skipped) pre.append(h("span", { class: "skip", textContent: "⋯" }));
+      skipped = true;
+      return;
+    }
+    skipped = false;
+    pre.append(h("span", { class: l.op === "+" ? "add" : l.op === "-" ? "del" : "ctx", textContent: `${l.op} ${l.line}` }));
+  });
+  return pre;
+}
+
+function proposalCard(p: Proposal) {
+  const open = p.state === "open";
+  const card = h(
+    "section",
+    { class: "batch proposal" },
+    h("header", {}, h("span", { class: "site", textContent: p.path }), h("span", { class: "what", textContent: p.summary })),
+    open
+      ? h("p", { class: "wait", textContent: "A proposed change to your theme. Nothing changes unless you accept it." })
+      : h("p", { class: "wait", textContent: { accepted: "Accepted", declined: "Declined", stale: "Out of date: the file changed after this was proposed", open: "" }[p.state] + (p.note ? `: ${p.note}` : "") }),
+    p.why ? h("p", { class: "summary", textContent: p.why }) : null,
+    diffView(p.before, p.after),
+  );
+  if (!open) return card;
+  const edit = h("textarea", { rows: 12, hidden: true, value: p.after, class: "edit" } as Partial<HTMLTextAreaElement>);
+  const note = h("textarea", { rows: 2, placeholder: "A note (optional; if you decline, say why, so it isn't proposed again)" });
+  const status = h("span", { class: "sent", role: "status" } as Partial<HTMLSpanElement>);
+  const editButton = h("button", { type: "button", class: "link", textContent: "Edit before accepting" });
+  editButton.addEventListener("click", () => {
+    edit.hidden = !edit.hidden;
+  });
+  const decide = (accept: boolean) => async () => {
+    try {
+      await browser.runtime.sendMessage({
+        type: "decide",
+        id: p.id,
+        accept,
+        note: note.value.trim() || undefined,
+        text: accept && !edit.hidden && edit.value !== p.after ? edit.value : undefined,
+      });
+      status.textContent = accept ? "Accepted: your theme is updated (undo with atelier undo)." : "Declined.";
+      setTimeout(() => void render(true), 1500);
+    } catch (e) {
+      status.textContent = e instanceof Error ? e.message : String(e);
+    }
+  };
+  const accept = h("button", { type: "button", textContent: "Accept" });
+  accept.addEventListener("click", decide(true));
+  const decline = h("button", { type: "button", textContent: "Decline" });
+  decline.addEventListener("click", decide(false));
+  card.append(editButton, edit, note, h("footer", {}, accept, decline, status));
+  return card;
+}
+
 let shown = "";
 
 async function render(force = false) {
@@ -145,7 +225,7 @@ async function render(force = false) {
     return;
   }
   // Re-render only when the batches change, so answers being typed survive.
-  const key = JSON.stringify([inbox.batches.map((b) => [b.id, b.state]), inbox.stage]);
+  const key = JSON.stringify([inbox.batches.map((b) => [b.id, b.state]), inbox.proposals.map((p) => [p.id, p.state]), inbox.stage]);
   if (key === shown && !force) return;
   shown = key;
 
@@ -153,11 +233,13 @@ async function render(force = false) {
   // Blocking first, then review, then calls for the record.
   const rank = { block: 0, review: 1, record: 2 } as const;
   open.sort((a, b) => rank[a.wait] - rank[b.wait]);
-  el("open").replaceChildren(...open.map((b) => batchCard(b, inbox.tasks[b.task], true)));
-  el("empty").hidden = open.length > 0;
+  const openProposals = inbox.proposals.filter((p) => p.state === "open");
+  el("open").replaceChildren(...openProposals.map(proposalCard), ...open.map((b) => batchCard(b, inbox.tasks[b.task], true)));
+  el("empty").hidden = open.length + openProposals.length > 0;
   const answered = inbox.batches.filter((b) => b.state === "answered");
-  el("answered-heading").hidden = answered.length === 0;
-  el("answered").replaceChildren(...answered.map((b) => batchCard(b, inbox.tasks[b.task], false)));
+  const decided = inbox.proposals.filter((p) => p.state !== "open");
+  el("answered-heading").hidden = answered.length + decided.length === 0;
+  el("answered").replaceChildren(...decided.map(proposalCard), ...answered.map((b) => batchCard(b, inbox.tasks[b.task], false)));
 
   el("theme").hidden = !inbox.theme;
   if (inbox.theme) {

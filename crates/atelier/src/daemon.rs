@@ -823,6 +823,7 @@ fn dispatch(state: &State, msg: Value, role: Role) -> Option<Value> {
             Ok(start_session(state, None, in_progress, force))
         }
         Some(m) if m.starts_with("call/") => call_call(state, m, params, role),
+        Some(m) if m.starts_with("theme/") => theme_call(state, m, params),
         Some(m) if m.starts_with("task/") || m.starts_with("journal/") => {
             task_call(state, m, params, role)
         }
@@ -938,7 +939,7 @@ fn task_call(
                     Ok(None) => {}
                     Err(e) => eprintln!("atelier daemon: recording assumptions: {e}"),
                 }
-                run_hook(state, "on_land", &task, *journal, &p.summary, changed);
+                run_hook(state, "on_land", Some(&task), *journal, &p.summary, changed);
             }
             Ok(json!(result))
         }
@@ -989,16 +990,14 @@ fn task_call(
             let seq = params.get("seq").and_then(Value::as_u64);
             let entry = store.undo(seq, now).map_err(failed)?;
             let task = entry.task.as_deref().and_then(|id| store.get(id).ok());
-            if let Some(task) = &task {
-                run_hook(
-                    state,
-                    "on_undo",
-                    task,
-                    entry.seq,
-                    &entry.summary,
-                    &entry.files,
-                );
-            }
+            run_hook(
+                state,
+                "on_undo",
+                task.as_ref(),
+                entry.seq,
+                &entry.summary,
+                &entry.files,
+            );
             Ok(json!(entry))
         }
         other => Err((
@@ -1013,7 +1012,7 @@ fn task_call(
 fn run_hook(
     state: &State,
     hook: &str,
-    task: &atelier_proto::Task,
+    task: Option<&atelier_proto::Task>,
     seq: u64,
     summary: &str,
     changed: &[atelier_proto::FileChange],
@@ -1032,8 +1031,8 @@ fn run_hook(
         eprintln!("atelier daemon: {hook}: {e}");
         return;
     }
-    let kind = serde_json::to_value(task.kind)
-        .ok()
+    let kind = task
+        .and_then(|t| serde_json::to_value(t.kind).ok())
         .and_then(|v| v.as_str().map(str::to_string))
         .unwrap_or_default();
     let child = std::process::Command::new("sh")
@@ -1041,9 +1040,15 @@ fn run_hook(
         .arg(&command)
         .current_dir(&state.dir)
         .env("ATELIER_DIR", &state.dir)
-        .env("ATELIER_TASK_ID", &task.id)
+        .env(
+            "ATELIER_TASK_ID",
+            task.map(|t| t.id.as_str()).unwrap_or_default(),
+        )
         .env("ATELIER_TASK_KIND", kind)
-        .env("ATELIER_SERVICE", task.service.clone().unwrap_or_default())
+        .env(
+            "ATELIER_SERVICE",
+            task.and_then(|t| t.service.clone()).unwrap_or_default(),
+        )
         .env("ATELIER_JOURNAL_SEQ", seq.to_string())
         .env("ATELIER_CHANGED_FILE", &list)
         .stdin(std::process::Stdio::piped())
@@ -1273,6 +1278,69 @@ fn call_call(
                 .and_then(|v| v.as_str())
                 .unwrap_or("forming");
             Ok(json!({ "theme": theme, "stage": stage }))
+        }
+        other => Err((
+            wire::code::METHOD_NOT_FOUND,
+            format!("unknown method `{other}`"),
+        )),
+    }
+}
+
+/// Proposals to THEME.md (SPEC §9.5).
+fn theme_call(state: &State, method_name: &str, params: Value) -> Result<Value, (i64, String)> {
+    use atelier_proto::{DecideParams, ProposeParams, theme_method as th};
+    let bad = |e: serde_json::Error| (wire::code::INVALID_PARAMS, e.to_string());
+    let failed = |e: String| (error_code::TASK_REFUSED, e);
+    let now = now_ms();
+    let store = state.tasks.lock().unwrap();
+    let changed = |p: &atelier_proto::Proposal| {
+        let _ = state.notify.send(wire::notification(th::CHANGED, json!(p)));
+    };
+    match method_name {
+        th::PROPOSE => {
+            let p: ProposeParams = serde_json::from_value(params).map_err(bad)?;
+            let theme = state
+                .inner
+                .lock()
+                .unwrap()
+                .default
+                .bundle
+                .theme
+                .clone()
+                .ok_or((
+                    error_code::TASK_REFUSED,
+                    "atelier.toml names no theme".to_string(),
+                ))?;
+            let proposal = store.propose(&theme, p, now).map_err(failed)?;
+            changed(&proposal);
+            Ok(json!(proposal))
+        }
+        th::PROPOSALS => {
+            let open = params.get("open").and_then(Value::as_bool).unwrap_or(false);
+            Ok(json!(store.proposals(open).map_err(failed)?))
+        }
+        th::DECIDE => {
+            let d: DecideParams = serde_json::from_value(params).map_err(bad)?;
+            let id = d.id.clone();
+            match store.decide(d, now) {
+                Ok((proposal, entry)) => {
+                    changed(&proposal);
+                    if let Some(e) = &entry {
+                        let task = proposal.task.as_deref().and_then(|t| store.get(t).ok());
+                        run_hook(state, "on_land", task.as_ref(), e.seq, &e.summary, &e.files);
+                    }
+                    Ok(json!(proposal))
+                }
+                Err(e) => {
+                    // A stale proposal changed state: say so to whoever shows it.
+                    if let Ok(p) = store.proposals(false)
+                        && let Some(p) = p.iter().find(|p| p.id == id)
+                    {
+                        changed(p);
+                    }
+                    Err(failed(e))
+                }
+            }
         }
         other => Err((
             wire::code::METHOD_NOT_FOUND,

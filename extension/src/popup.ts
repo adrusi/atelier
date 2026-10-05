@@ -72,12 +72,16 @@ async function render() {
  * rest of the popup has rendered, so it never holds that up. */
 async function renderInbox(state: State) {
   if (state.connection === "connected") {
-    const inbox = (await browser.runtime.sendMessage({ type: "inbox" }).catch(() => null)) as { batches: { wait: string; state: string }[] } | null;
-    const waiting = inbox?.batches.filter((b) => b.state === "open" && b.wait !== "record").length ?? 0;
+    const inbox = (await browser.runtime.sendMessage({ type: "inbox" }).catch(() => null)) as {
+      batches: { wait: string; state: string }[];
+      proposals: { state: string }[];
+    } | null;
+    const waiting =
+      (inbox?.batches.filter((b) => b.state === "open" && b.wait !== "record").length ?? 0) + (inbox?.proposals.filter((p) => p.state === "open").length ?? 0);
     const record = inbox?.batches.filter((b) => b.state === "open" && b.wait === "record").length ?? 0;
     el("inbox").hidden = waiting + record === 0;
     el("inbox").textContent =
-      waiting > 0 ? `${waiting} question${waiting === 1 ? "" : "s"} from agents, waiting for you` : `${record} set${record === 1 ? "" : "s"} of calls to look over`;
+      waiting > 0 ? `${waiting} thing${waiting === 1 ? "" : "s"} from agents, waiting for you` : `${record} set${record === 1 ? "" : "s"} of calls to look over`;
   }
 
 }

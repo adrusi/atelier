@@ -13,6 +13,7 @@
 use crate::loader;
 
 mod calls;
+mod proposals;
 use atelier_proto::{
     ChangeKind, FileChange, JournalEntry, Lease, Severity, SubmitProblem, SubmitResult, Task,
     TaskCreateParams, TaskKind, TaskOutcome, TaskState,

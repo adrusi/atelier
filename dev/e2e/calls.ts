@@ -125,6 +125,39 @@ try {
     assert.match(brief, /## Handoff from whoever worked on this before\n\nStyles done; previews still to take\./);
   });
 
+  await check("a theme-level answer becomes a THEME.md proposal, which lands only when accepted", async () => {
+    const out = await tool("theme_propose", {
+      summary: "Headings stay in the text colour",
+      why: "The user's answer on the e2e fixture",
+      edits: [{ find: "Calm and dark.", replace: "Calm and dark. Headings stay in the text colour, not the accent." }],
+    });
+    const id = out.match(/^Proposed \((\S+)\)/)![1];
+    assert.match(atelier("proposals"), new RegExp(id));
+    assert.doesNotMatch(fs.readFileSync(path.join(owned, "themes/e2e/THEME.md"), "utf8"), /Headings stay/);
+    await withSession(state.bidiPort, async (bidi) => {
+      const { contexts } = await bidi.send("browsingContext.getTree", { maxDepth: 0 });
+      const ext = contexts.find((c: { url: string }) => c.url.startsWith("moz-extension://"));
+      const base = ext.url.replace(/\/[^/]*$/, "");
+      const { context } = await bidi.send("browsingContext.create", { type: "tab" });
+      await bidi.send("browsingContext.navigate", { context, url: `${base}/inbox.html`, wait: "complete" });
+    });
+    await new Promise((r) => setTimeout(r, 2500));
+    dev("screenshot", NAME, `${instance}-proposal.png`);
+    console.log(`      (proposal: ${instance}-proposal.png)`);
+    // Pending proposals show in briefs, so nobody proposes them twice.
+    assert.match(await tool("task_info"), /Waiting for the user: Headings stay in the text colour/);
+    atelier("decide", id, "accept");
+    assert.match(fs.readFileSync(path.join(owned, "themes/e2e/THEME.md"), "utf8"), /Headings stay in the text colour/);
+    assert.match(atelier("journal"), /themes\/e2e\/THEME\.md: Headings stay in the text colour/);
+  });
+
+  await check("a declined proposal shows in briefs with the user's reason", async () => {
+    const out = await tool("theme_propose", { summary: "No rounded corners anywhere", edits: [{ replace: "\nNo rounded corners.\n" }] });
+    const id = out.match(/^Proposed \((\S+)\)/)![1];
+    atelier("decide", id, "decline", "Small radii are fine");
+    assert.match(await tool("task_info"), /Declined by the user: No rounded corners anywhere \(they said: Small radii are fine\)/);
+  });
+
   await check("assumptions made at landing come back as calls; changing one queues a revise", async () => {
     const tree = (await tool("task_info")).match(/The task's tree is (\S+): /)![1];
     fs.appendFileSync(path.join(tree, STYLE), "/* calmer */\n");

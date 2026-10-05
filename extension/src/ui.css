@@ -48,3 +48,10 @@ fieldset.options { border: none; padding: 0; margin: 0.35rem 0; display: grid; g
 fieldset.options .mine { opacity: 0.7; font-size: 0.85rem; }
 .batch footer { display: flex; gap: 0.75rem; align-items: baseline; }
 .batch .sent { font-size: 0.9rem; opacity: 0.8; }
+pre.diff { font: 0.85rem/1.4 ui-monospace, monospace; white-space: pre-wrap; padding: 0.5rem; border-radius: 4px; background: color-mix(in srgb, CanvasText 5%, Canvas); }
+pre.diff .add { background: color-mix(in srgb, #40a02b 22%, transparent); display: block; }
+pre.diff .del { background: color-mix(in srgb, #d20f39 18%, transparent); display: block; text-decoration: line-through; opacity: 0.8; }
+pre.diff .ctx { display: block; opacity: 0.75; }
+pre.diff .skip { display: block; opacity: 0.5; }
+.proposal textarea { margin-top: 0.4rem; }
+.proposal footer button + button { margin-left: 0; }
