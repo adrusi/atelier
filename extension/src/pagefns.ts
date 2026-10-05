@@ -87,7 +87,17 @@ export function computed(selector: string, properties: string[] | null) {
  * where, under which conditions, and where they're used; and which selectors
  * other than :root re-declare them (nested theme scopes, which undo :root
  * overrides inside them). */
-export function tokens(filter: string | null, limit: number, usage: boolean, scope: string | null, verbose: boolean) {
+export function tokens(filter: string | null, limit: number, usage: boolean, scope: string | null, verbose: boolean, fetched: Fetched[] = []) {
+  // Inlined: page functions run as source text, without the module around them.
+  const parseFetched = (text: string): CSSStyleSheet | null => {
+    try {
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(text);
+      return sheet;
+    } catch {
+      return null;
+    }
+  };
   type Def = { selector: string; value: string; context?: string; sheet: string };
   const SHORTHANDS = [
     "background", "border", "border-top", "border-right", "border-bottom", "border-left", "border-block",
@@ -161,8 +171,13 @@ export function tokens(filter: string | null, limit: number, usage: boolean, sco
     try {
       visit(s.cssRules, "", name);
     } catch {
-      unreadable.push(name);
+      if (!fetched.some((x) => x.href === s.href)) unreadable.push(name);
     }
+  }
+  for (const x of fetched) {
+    const sheet = parseFetched(x.text);
+    if (sheet) visit(sheet.cssRules, x.media ? `@media ${x.media}` : "", `${x.href} (fetched: cross-origin)`);
+    else unreadable.push(x.href);
   }
   const names = [...defs.keys()].sort();
   // Compact by default: one string per definition, and stylesheets listed once.
@@ -224,7 +239,17 @@ export function tokens(filter: string | null, limit: number, usage: boolean, sco
 
 /** Style rules that match an element, with specificity and conditions, most
  * specific first; ties are listed latest first, as later rules win. */
-export function matchedRules(selector: string, property: string | null, limit: number) {
+export function matchedRules(selector: string, property: string | null, limit: number, fetched: Fetched[] = []) {
+  // Inlined: page functions run as source text, without the module around them.
+  const parseFetched = (text: string): CSSStyleSheet | null => {
+    try {
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(text);
+      return sheet;
+    } catch {
+      return null;
+    }
+  };
   const el = document.querySelector(selector);
   if (!el) return null;
 
@@ -296,6 +321,7 @@ export function matchedRules(selector: string, property: string | null, limit: n
 
   type Hit = { selector: string; specificity: number[]; declarations: string; context?: string; active: boolean; sheet: string; order: number };
   const hits: Hit[] = [];
+  const unreadable: string[] = [];
   let order = 0;
   // A nested rule's selector, made absolute: & is the parent; without &, it's a descendant.
   const resolve = (sel: string, parent: string | null) =>
@@ -363,7 +389,15 @@ export function matchedRules(selector: string, property: string | null, limit: n
           c = `@media ${r.media.mediaText}`;
           a = a && matchMedia(r.media.mediaText).matches;
         } else if (r.conditionText !== undefined) {
-          c = `@${(r.constructor?.name ?? "").replace(/^CSS|Rule$/g, "").toLowerCase()} ${r.conditionText}`;
+          const kind = (r.constructor?.name ?? "").replace(/^CSS|Rule$/g, "").toLowerCase();
+          c = `@${kind} ${r.conditionText}`;
+          if (kind === "supports") {
+            try {
+              a = a && CSS.supports(r.conditionText);
+            } catch {
+              // Leave it as active if the condition can't be evaluated.
+            }
+          }
         } else if (r.name !== undefined) c = `@layer ${r.name}`;
         visit(r.cssRules, [context, c].filter(Boolean).join(" "), a, sheet, parent);
       }
@@ -381,8 +415,16 @@ export function matchedRules(selector: string, property: string | null, limit: n
     try {
       visit(s.cssRules, "", true, name);
     } catch {
-      // Unreadable cross-origin sheet.
+      if (!fetched.some((x) => x.href === s.href)) unreadable.push(name);
     }
+  }
+  for (const x of fetched) {
+    const sheet = parseFetched(x.text);
+    if (!sheet) {
+      unreadable.push(x.href);
+      continue;
+    }
+    visit(sheet.cssRules, x.media ? `@media ${x.media}` : "", !x.media || matchMedia(x.media).matches, `${x.href} (fetched: cross-origin)`);
   }
   hits.sort((a, b) => {
     for (let i = 0; i < 3; i++) if (a.specificity[i] !== b.specificity[i]) return b.specificity[i] - a.specificity[i];
@@ -411,6 +453,7 @@ export function matchedRules(selector: string, property: string | null, limit: n
       : {}),
     total: hits.length,
     rules: hits.slice(0, limit).map(({ order: _, ...h }) => h),
+    ...(unreadable.length ? { unreadableSheets: unreadable, unreadableNote: "These stylesheets couldn't be read, so rules in them aren't listed." } : {}),
   };
 }
 
@@ -678,3 +721,21 @@ export function shapeScan(scope: string | null, limit: number) {
     ...(all.length > limit ? { note: `${all.length} groups in all; showing the largest. Narrow with scope.` } : {}),
   };
 }
+
+/** A stylesheet the page can't read through the CSSOM, fetched by the
+ * extension (whose host permissions aren't bound by CORS). */
+export type Fetched = { href: string; media: string; text: string };
+
+/** Stylesheets the page can't read (cross-origin without CORS headers). */
+export function unreadableSheets(): { href: string; media: string }[] {
+  const out: { href: string; media: string }[] = [];
+  for (const s of document.styleSheets) {
+    try {
+      void s.cssRules;
+    } catch {
+      if (s.href) out.push({ href: s.href, media: s.media.mediaText });
+    }
+  }
+  return out;
+}
+

@@ -159,6 +159,16 @@ try {
     assert.equal(nested.rules[0]?.selector, ":is(.note) a.button", JSON.stringify(nested.rules));
   });
 
+  await check("css_tokens and matched_rules read cross-origin stylesheets, and @supports is evaluated", async () => {
+    const t = await tool("css_tokens", { tab, filter: "--color-remote" });
+    assert.equal(t.tokens[0]?.name, "--color-remote", JSON.stringify(t));
+    assert.ok(t.sheets.some((s: string) => s.endsWith("(fetched: cross-origin)")), JSON.stringify(t.sheets));
+    const r = await tool("matched_rules", { tab, selector: ".remote", property: "letter-spacing" });
+    const rules = r.rules.map((x: any) => [x.declarations, x.active, x.context ?? null]);
+    assert.deepEqual(rules, [["letter-spacing: 3px", false, "@supports not (display: grid)"], ["letter-spacing: 2px", true, null]]);
+    assert.equal(r.computed, "2px");
+  });
+
   await check("contrast_scan finds exactly the two low-contrast lines, skipping the disabled button", async () => {
     // The faint line, and the title: accent blue inside the inverted header,
     // whose nested scope re-declares background and text but not the accent.
@@ -171,7 +181,7 @@ try {
   await check("computed_style and query report what's on the page", async () => {
     assert.equal((await tool("computed_style", { tab, selector: ".note", properties: ["font-weight"] }))["font-weight"], "600");
     const q = await tool("query", { tab, selector: "p" });
-    assert.equal(q.count, 2);
+    assert.equal(q.count, 3);
   });
 
   await check("screenshot returns an image of one element, with the background-tab note", async () => {

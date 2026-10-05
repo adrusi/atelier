@@ -143,6 +143,34 @@ async function afterLoad(tabId: number, params: any, ctx: ToolContext, slow: str
   return { ...describeTab(await browser.tabs.get(tabId), ctx), ...(warnings.length ? { warning: warnings.join(" ") } : {}) };
 }
 
+/** Cross-origin stylesheets fetched for the CSSOM tools, by URL. Small,
+ * since they're refetched when evicted. */
+const fetchedSheets = new Map<string, string>();
+
+/** Fetches the stylesheets a page can't read itself (cross-origin, no CORS),
+ * so css_tokens and matched_rules can see their rules. The extension's
+ * host permissions aren't bound by CORS. */
+async function fetchUnreadable(tabId: number): Promise<page.Fetched[]> {
+  const sheets = ((await call(tabId, page.unreadableSheets)) as { href: string; media: string }[]).slice(0, 20);
+  const out: page.Fetched[] = [];
+  for (const sh of sheets) {
+    let text = fetchedSheets.get(sh.href);
+    if (text === undefined) {
+      try {
+        const r = await fetch(sh.href, { credentials: "omit" });
+        text = r.ok ? await r.text() : "";
+      } catch {
+        text = "";
+      }
+      if (text.length > 4_000_000) text = "";
+      fetchedSheets.set(sh.href, text);
+      if (fetchedSheets.size > 40) fetchedSheets.delete(fetchedSheets.keys().next().value!);
+    }
+    if (text) out.push({ ...sh, text });
+  }
+  return out;
+}
+
 /** Forced states per agent tab, so they can be redone when styles change:
  * force_state clones rules when it's called, and a later save would
  * otherwise not show up in the forced state. */
@@ -318,6 +346,7 @@ const handlers: Record<string, Handler> = {
       param<boolean>(params, "usage", "boolean", true),
       param<string | null>(params, "scope", "string", null),
       param<boolean>(params, "verbose", "boolean", false),
+      await fetchUnreadable(tab.id!),
     )) as { total: number; shown: number; tokens: unknown[]; note?: string };
     // Big design systems define thousands of tokens; past the budget, show
     // fewer and say how to narrow it, rather than flooding the agent.
@@ -339,6 +368,7 @@ const handlers: Record<string, Handler> = {
       selector,
       param<string | null>(params, "property", "string", null),
       param<number>(params, "limit", "number", 30),
+      await fetchUnreadable(tab.id!),
     );
     if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\``);
     return r;

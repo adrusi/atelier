@@ -1,0 +1,6 @@
+/* Served from the fixture server's other origin, without CORS headers, so
+   the page can't read it through the CSSOM: css_tokens and matched_rules
+   have to fetch it. Its @supports rule never applies in Firefox. */
+:root { --color-remote: #445566; }
+.remote { letter-spacing: 2px; }
+@supports not (display: grid) { .remote { letter-spacing: 3px; } }
