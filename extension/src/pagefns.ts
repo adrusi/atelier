@@ -649,8 +649,28 @@ export async function waitForSelector(selector: string, timeoutMs: number) {
  * dispatches input and change events, so scripts listening for input (search
  * suggestions, filters) respond. */
 export function fill(selector: string, text: string, submit: boolean) {
-  const el = document.querySelector(selector) as HTMLInputElement | HTMLTextAreaElement | null;
-  if (!el) return null;
+  // Inputs inside open shadow roots count too: web components (MDN's search,
+  // say) keep theirs there, and setting the host's value does nothing.
+  const editable = (e: Element) => e instanceof HTMLInputElement || e instanceof HTMLTextAreaElement;
+  const deep = (root: ParentNode, sel: string): Element | null => {
+    const hit = root.querySelector(sel);
+    if (hit) return hit;
+    for (const e of root.querySelectorAll("*")) {
+      const inner = e.shadowRoot && deep(e.shadowRoot, sel);
+      if (inner) return inner;
+    }
+    return null;
+  };
+  let target = deep(document, selector);
+  if (!target) return null;
+  let host: string | undefined;
+  if (!editable(target)) {
+    const inner = target.shadowRoot && deep(target.shadowRoot, "input:not([type=hidden]), textarea");
+    if (!inner) return { error: `\`${selector}\` matches a <${target.tagName.toLowerCase()}>, which isn't a text field and has none in an open shadow root` };
+    host = target.tagName.toLowerCase();
+    target = inner;
+  }
+  const el = target as HTMLInputElement | HTMLTextAreaElement;
   el.focus();
   el.value = text;
   el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
@@ -661,7 +681,13 @@ export function fill(selector: string, text: string, submit: boolean) {
     }
     el.form?.requestSubmit();
   }
-  return { value: el.value, focused: document.activeElement === el };
+  const root = el.getRootNode() as Document | ShadowRoot;
+  return {
+    value: el.value,
+    focused: root.activeElement === el,
+    ...(host || root !== document ? { inShadowRootOf: host ?? (root as ShadowRoot).host.tagName.toLowerCase() } : {}),
+    ...(el.value !== text ? { warning: "The field didn't keep the text (the page may reset it, or limit what it accepts)." } : {}),
+  };
 }
 
 /** Visible elements still drawn as boxes (rounded, shadowed, framed, or
@@ -682,7 +708,20 @@ export function shapeScan(scope: string | null, limit: number) {
   type Group = { selector: string; count: number; features: Set<string>; example: string; control: boolean; round: boolean };
   const groups = new Map<string, Group>();
   let checked = 0;
-  for (const el of [root, ...root.querySelectorAll("*")]) {
+  // Every element, including those in open shadow roots (web components keep
+  // much of a page's frame there), with the host they're inside.
+  const elements: [Element, string][] = [];
+  const collect = (r: ParentNode, host: string) => {
+    for (const e of r.querySelectorAll("*")) {
+      elements.push([e, host]);
+      if (e.shadowRoot) collect(e.shadowRoot, `${host}${e.tagName.toLowerCase()} › `);
+    }
+  };
+  elements.push([root, ""]);
+  collect(root, "");
+  let shadowed = 0;
+  for (const [el, host] of elements) {
+    if (host) shadowed++;
     if (el.closest("[data-atelier-extra], style, script, head")) continue;
     const r = el.getBoundingClientRect();
     if (r.width < 12 || r.height < 12) continue;
@@ -693,13 +732,15 @@ export function shapeScan(scope: string | null, limit: number) {
     const radius = Math.max(...["borderTopLeftRadius", "borderTopRightRadius", "borderBottomLeftRadius", "borderBottomRightRadius"].map((p) => parseFloat((cs as any)[p]) || 0));
     if (radius > 0) features.push(`rounded ${Math.round(radius)}px`);
     if (cs.boxShadow !== "none") features.push("shadow");
-    const sides = ["Top", "Right", "Bottom", "Left"].filter((s) => parseFloat((cs as any)[`border${s}Width`]) > 0 && (cs as any)[`border${s}Style`] !== "none").length;
+    const sides = ["Top", "Right", "Bottom", "Left"].filter(
+      (s) => parseFloat((cs as any)[`border${s}Width`]) > 0 && (cs as any)[`border${s}Style`] !== "none" && !transparent((cs as any)[`border${s}Color`]),
+    ).length;
     if (sides >= 3) features.push("framed");
     const bg = cs.backgroundColor;
     if (!transparent(bg) && bg !== behind(el.parentElement) && r.height >= 24) features.push("filled");
     if (!features.length) continue;
     const classes = [...el.classList].filter((c) => !/\d{3,}|^[a-z]{1,3}-[a-zA-Z0-9]{5,}$/.test(c)).slice(0, 2);
-    const selector = el.tagName.toLowerCase() + (el.id && !/\d{3,}/.test(el.id) ? `#${el.id}` : "") + classes.map((c) => `.${c}`).join("");
+    const selector = host + el.tagName.toLowerCase() + (el.id && !/\d{3,}/.test(el.id) ? `#${el.id}` : "") + classes.map((c) => `.${c}`).join("");
     // Small and square with a radius of about half its size: round by nature (avatars, radios, dots).
     const round = radius >= Math.min(r.width, r.height) * 0.4 && Math.abs(r.width - r.height) < 4 && r.width <= 96;
     let g = groups.get(selector);
@@ -715,6 +756,7 @@ export function shapeScan(scope: string | null, limit: number) {
   const show = (gs: Group[]) => gs.slice(0, limit).map((g) => ({ selector: g.selector, count: g.count, features: [...g.features], ...(g.example ? { example: g.example } : {}) }));
   return {
     checked,
+    ...(shadowed ? { inShadowRoots: `${shadowed} elements were inside open shadow roots; their groups start with the host element (host › element). Closed shadow roots can't be seen.` } : {}),
     boxes: show(all.filter((g) => !g.control && !g.round)),
     controls: show(all.filter((g) => g.control && !g.round)),
     probablyRoundByNature: show(all.filter((g) => g.round)),

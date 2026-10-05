@@ -281,6 +281,11 @@ try {
     assert.ok(!r.boxes.some((g: any) => g.selector === "div.row"), "a flat row isn't a box");
     assert.ok(r.controls.some((g: any) => g.selector === "button"));
     assert.ok(r.probablyRoundByNature.some((g: any) => g.selector === "span.avatar"));
+    assert.ok(!r.controls.some((g: any) => g.selector === "button.ghost"), "a transparent border isn't a frame");
+    assert.ok(r.boxes.some((g: any) => g.selector === "x-widget › div.inner" && g.features.includes("rounded 6px")), JSON.stringify(r.boxes));
+    // type_text reaches a text field inside a web component's shadow root.
+    const typed = await tool("type_text", { tab: cards, selector: "x-widget", text: "grid" });
+    assert.deepEqual([typed.value, typed.inShadowRootOf], ["grid", "x-widget"]);
     await tool("tab_close", { tab: cards });
   });
 

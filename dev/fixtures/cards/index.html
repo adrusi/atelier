@@ -21,5 +21,18 @@
   <div class="row">A flat row</div>
   <button type="button">A button</button>
   <span class="avatar"></span>
+  <!-- A border that isn't visible is not a frame. -->
+  <button type="button" class="ghost" style="border: 1px solid transparent; border-radius: 0; background: transparent">Ghost</button>
+  <!-- A web component: a rounded box and a text field in an open shadow root. -->
+  <x-widget></x-widget>
+  <script>
+    customElements.define("x-widget", class extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: "open" }).innerHTML =
+          '<div class="inner" style="border-radius: 6px; background: #ffffff; padding: 8px">In a shadow root <input class="field"></div>';
+      }
+    });
+  </script>
 </body>
 </html>

@@ -311,7 +311,8 @@ const handlers: Record<string, Handler> = {
     const tab = await agentTab(params);
     const selector = param<string>(params, "selector", "string");
     const r = await call(tab.id!, page.fill, selector, param<string>(params, "text", "string"), param<boolean>(params, "submit", "boolean", false));
-    if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\``);
+    if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\`, in the page or its open shadow roots`);
+    if ((r as { error?: string }).error) throw new RpcError(PAGE_ERROR, (r as { error: string }).error);
     await new Promise((res) => setTimeout(res, 300)); // let the page react
     return r;
   },
