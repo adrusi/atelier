@@ -289,6 +289,16 @@ try {
     await tool("tab_close", { tab: cards });
   });
 
+  await check("eval explains top-level await, and tall elements are captured from the top", async () => {
+    await assert.rejects(tool("eval", { tab, expression: "await Promise.resolve(1)" }), /no top-level await here/);
+    assert.equal((await tool("eval", { tab, expression: "(async () => { return await Promise.resolve(2); })()" })).result, 2);
+    await tool("eval", { tab, expression: "const d = document.createElement('div'); d.id = 'tall'; d.style.height = '9000px'; document.body.append(d); 0" });
+    const shot = await rpc("tools/call", { name: "screenshot", arguments: { tab, selector: "#tall", scale: 0.1 } });
+    const text = shot.result.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join(" ");
+    assert.match(text, /is 9000px tall; captured its top 4000px/);
+    await tool("eval", { tab, expression: "document.getElementById('tall').remove(); 0" });
+  });
+
   await check("tab_navigate and tab_close", async () => {
     const r = await tool("tab_navigate", { tab, url: `http://127.0.0.1:${state.fixturesPort}/basic/` });
     assert.equal(r.title, "basic fixture");

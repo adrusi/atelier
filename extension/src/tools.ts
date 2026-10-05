@@ -106,10 +106,21 @@ async function run(tabId: number, code: string): Promise<unknown> {
   try {
     results = await us.execute({ target: { tabId }, js: [{ code }] });
   } catch (e) {
-    throw new RpcError(PAGE_ERROR, `couldn't run in tab ${tabId}: ${e instanceof Error ? e.message : e} (pages like about: and addons.mozilla.org can't be inspected)`);
+    const message = e instanceof Error ? e.message : String(e);
+    // A result that can't be passed back fails here too; say which it was.
+    if (/clon|serializ|structured/i.test(message)) {
+      throw new RpcError(PAGE_ERROR, `the result couldn't be passed back (${message}): return plain data, e.g. {...el.dataset} rather than el.dataset, or JSON.parse(JSON.stringify(x))`);
+    }
+    throw new RpcError(PAGE_ERROR, `couldn't run in tab ${tabId}: ${message}. Pages like about: and addons.mozilla.org can't be inspected; if this is an ordinary page, it may still be loading.`);
   }
   const r = results[0];
-  if (r?.error) throw new RpcError(PAGE_ERROR, `the page code threw: ${r.error.message ?? r.error}`);
+  if (r?.error) {
+    const message = String(r.error.message ?? r.error);
+    if (/await is only valid/i.test(message)) {
+      throw new RpcError(PAGE_ERROR, `${message}: there's no top-level await here. Wrap the code in an async function and await it as the last expression: (async () => { … return value; })()`);
+    }
+    throw new RpcError(PAGE_ERROR, `the page code threw: ${message}`);
+  }
   return r?.result;
 }
 
@@ -276,7 +287,14 @@ const handlers: Record<string, Handler> = {
     if (selector) {
       const r = (await call(tab.id!, page.rectOf, selector)) as typeof rect | null;
       if (!r) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\``);
-      if (r.width === 0 || r.height === 0) throw new RpcError(PAGE_ERROR, `\`${selector}\` matches an element with no size (hidden?)`);
+      if (r!.width === 0 || r!.height === 0) throw new RpcError(PAGE_ERROR, `\`${selector}\` matches an element with no size (hidden?)`);
+      // A very tall element (a long sidebar's contents) makes an unreadable
+      // strip, or fails to capture at all: take its top.
+      const maxHeight = param<number>(params, "maxHeight", "number", 4000);
+      if (r!.height > maxHeight) {
+        notes.push(`\`${selector}\` is ${Math.round(r!.height)}px tall; captured its top ${maxHeight}px (raise maxHeight, or pick a smaller element).`);
+        r!.height = maxHeight;
+      }
       rect = r;
     } else if (full) {
       const s = (await call(tab.id!, page.pageState)) as { width: number; height: number };
@@ -377,6 +395,8 @@ const handlers: Record<string, Handler> = {
 
   async "page/contrast"(params) {
     const tab = await agentTab(params);
+    // Colours mid-transition (just after a hover, or a colour-scheme switch) aren't the ones to judge.
+    await call(tab.id!, page.finishAnimations);
     return call(tab.id!, page.contrast, param<number>(params, "minRatio", "number", 4.5), param<number>(params, "limit", "number", 40));
   },
 
