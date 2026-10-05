@@ -114,31 +114,19 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
         name: "task_ask",
         method: "",
         description: "Put calls to the user: decisions you faced, as questions or as choices you made. They reach \
-            the user in the browser, with your screenshots, whether or not they're watching this conversation, and \
-            they answer a whole batch at once, so gather calls up and send them together at a natural checkpoint \
-            (a first pass is a good one) rather than one by one. For each call, say what you'd choose yourself \
-            (`choice`): then answering can be one click, and often is. `scope: theme` marks a call about the \
-            theme as a whole rather than this site; those answers can improve THEME.md for every later task. \
-            Each call's `wait` (or the batch's, for calls that don't say) is what it asks of the task: \
-            record: you go ahead with your choice; the user can revisit it, and a changed answer becomes a new task. \
-            Record calls go with the landing, so there's no need to repeat them as task_submit's assumptions. \
-            That's right for most calls, including \"I'd keep this; confirm?\": landing and letting the user reopen \
-            it costs nothing. \
-            review: the work shouldn't land until this is answered, because the options would mean substantially \
-            different work, or you're not confident in any of them. \
-            block: one question you can't make a reasonable call on yourself, that can't wait for a checkpoint. \
-            If any call in a batch is review or block, the task waits for the answers: you stop holding it at once, \
-            its tree is kept, and it comes back to the queue with the answers (and your `handoff` note) for \
-            whoever claims it next, perhaps you; meanwhile, work on something else. So one batch can hold a \
-            question that needs answering and the calls you made for the record, together. \
-            Screenshots: paths to images in the tree or the task's scratch space (screenshot with attach: true \
-            saves there). For \"this or that?\" questions, screenshots of each option (screenshot's extraCss \
-            shows a variant without editing files) make answering quick. \
-            Better still, for a choice between versions of part of a style: mark that part in the style file with \
-            /* atelier:variant NAME */ … /* atelier:end NAME */ (what's between them is your choice), put each \
-            option's CSS, yours included, in variants/NAME/<option>.css beside the style file, and give the call \
-            variant: NAME. The user can then flip between the options live in their own tab, and picking another \
-            one writes it into the style for you (or, once the work has landed, straight into their styles).",
+            the user in the browser with your screenshots, whether or not they're watching this conversation, \
+            and they answer a batch at once, so gather calls and send them together at a natural checkpoint \
+            (a first pass is a good one). Say what you'd choose (`choice`; one of the options, if any): \
+            answering can then be one click. `scope: theme` marks a call about the whole theme. \
+            Each call's `wait` (default: the batch's): record (you go ahead; a different answer later becomes \
+            a new task; right for most calls, including \"I'd keep this, confirm?\"; record calls go with the \
+            landing, so don't repeat them as assumptions), review (it shouldn't land until answered: the \
+            options mean substantially different work, or you're not confident in any), or block (one \
+            question you can't make a reasonable call on, that can't wait). If any call is review or block, \
+            the task parks: you stop holding it, its tree is kept, and it returns to the queue with the \
+            answers and your `handoff`. Screenshots: paths in the tree or scratch space (screenshot with \
+            attach: true). For this-or-that questions, `variant` lets the user flip between options live; \
+            the brief explains how.",
         schema: || {
             json!({ "type": "object", "properties": {
                 "task": task_prop(),
@@ -884,6 +872,7 @@ fn brief(
         );
     }
     out.push_str(&pages_section(tree, t.service.as_deref()));
+    out.push_str(HOW_TO_WORK);
     out.push_str(&asking(&theme_stage(tree, theme), stats));
     if !proposals.is_empty() {
         out.push_str("\n## Proposed changes to THEME.md\n\n");
@@ -1098,3 +1087,36 @@ fn pages_section(tree: &str, service: Option<&str>) -> String {
     }
     out
 }
+
+/// How to do the work: what has worked well, with the reasons, so agents can
+/// tell when a heuristic doesn't fit. Part of every brief, since harnesses
+/// truncate server instructions (see INSTRUCTIONS in mcp.rs).
+const HOW_TO_WORK: &str = "\n## How to work\n\n\
+What has worked well when styling a site, with the reasons, so you can tell when one doesn't fit and \
+depart from it (say why in your summary if you do):\n\n\
+- Start with css_tokens. Most sites built in the last few years have design tokens (CSS custom \
+properties), and overriding them restyles a site far more thoroughly than restyling components one by \
+one, and keeps working when components change. Cover the nested scopes that re-declare tokens too.\n\
+- If the site has its own dark (or light) mode close to what the theme wants, build on it, and record it as \
+a prerequisite in service.toml with a `check` selector that matches only when it's on, so the user is told \
+when it isn't.\n\
+- Prefer stable hooks (ids, aria and data-* attributes, readable class names) to generated class names, \
+which change on every deploy. And remember that a short selector can still reach a long way: check broad \
+rules beyond the pages you started from.\n\
+- Set link and text colours explicitly: sites leave some to the browser defaults, which are unreadable on \
+a dark theme.\n\
+- Split a service's styles along natural seams (base, editor, settings), so one that breaks can be turned \
+off without losing the rest.\n\
+- Check your work beyond screenshots: contrast_scan finds text that doesn't stand out against its \
+background, shape_scan finds what's still drawn as a box, force_state shows hover and focus styles, and \
+styles_status reports problems loading your files (a style with errors keeps its last good version \
+applied, so a mistake can look as if nothing happened).\n\
+- Work in the task's tree, not the owned directory: only landings are recorded, undoable, and passed to \
+the user's hooks.\n\n\
+For a this-or-that question about part of a style, show the user both. Quickest: screenshots of each \
+(screenshot's extraCss shows a variant without editing files; attach: true saves it for task_ask). \
+Better, when the choice matters: mark the part in the style file with the comments \
+`/* atelier:variant NAME */` and `/* atelier:end NAME */` around your choice, put each option's CSS (yours \
+too) in variants/NAME/<option>.css beside the style file, and give the call `variant: NAME`. The user can \
+then flip between the options live in their own tab, and picking another one writes it into the style \
+for you, even after the work has landed.\n";

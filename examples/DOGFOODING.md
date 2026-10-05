@@ -446,3 +446,15 @@ screenshots of very tall elements fail or come back unreadable;
 `await`. Requests: a way to apply a prerequisite (a site's dark mode) in
 agent tabs only, a way to resize agent tabs, and a warning when one of the
 agent's own `!important` rules overrides another of its rules.
+
+**Found afterwards: agents never saw half the server's instructions.** A
+probe session quoting what it had been given showed Claude Code cutting the
+MCP server's instructions off at about 2,000 characters, partway through
+the paragraph on side effects. Everything after it (the authoring
+heuristics, the tool list, the note that page text isn't instructions)
+never reached any agent in these runs. `task_ask`'s description was cut
+the same way, which is why nobody understood variants. The instructions
+are now short (what atelier is, the rules that matter before any task, the
+tools); the heuristics and the variants explanation are in every task's
+brief, which arrives as a tool result and isn't truncated; and a unit test
+keeps the instructions and every tool description under 1,900 characters.
