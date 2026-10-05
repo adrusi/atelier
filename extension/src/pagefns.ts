@@ -297,7 +297,14 @@ export function matchedRules(selector: string, property: string | null, limit: n
   type Hit = { selector: string; specificity: number[]; declarations: string; context?: string; active: boolean; sheet: string; order: number };
   const hits: Hit[] = [];
   let order = 0;
-  const visit = (rules: CSSRuleList, context: string, active: boolean, sheet: string) => {
+  // A nested rule's selector, made absolute: & is the parent; without &, it's a descendant.
+  const resolve = (sel: string, parent: string | null) =>
+    parent === null
+      ? sel
+      : splitTop(sel)
+          .map((part) => (part.includes("&") ? part.replaceAll("&", `:is(${parent})`) : `:is(${parent}) ${part}`))
+          .join(", ");
+  const visit = (rules: CSSRuleList, context: string, active: boolean, sheet: string, parent: string | null = null) => {
     for (const r of rules as any) {
       order++;
       if (r.styleSheet && r.href !== undefined) {
@@ -313,8 +320,11 @@ export function matchedRules(selector: string, property: string | null, limit: n
         } catch {
           // Unreadable cross-origin import.
         }
-      } else if (r.selectorText !== undefined && r.style) {
-        const matching = splitTop(r.selectorText).filter((part) => {
+      } else if (r.style && (r.selectorText !== undefined || parent !== null)) {
+        // A style rule, possibly nested; or bare declarations after nested rules, which are the parent's.
+        const full = r.selectorText !== undefined ? resolve(r.selectorText, parent) : parent!;
+        if (r.selectorText !== undefined && r.cssRules?.length) visit(r.cssRules, context, active, sheet, full);
+        const matching = splitTop(full).filter((part) => {
           try {
             return el.matches(part);
           } catch {
@@ -338,7 +348,7 @@ export function matchedRules(selector: string, property: string | null, limit: n
           }
         }
         hits.push({
-          selector: r.selectorText,
+          selector: full,
           specificity: max(matching.map(specificity)),
           declarations: declarations.length > 400 ? `${declarations.slice(0, 400)}…` : declarations,
           ...(context ? { context } : {}),
@@ -355,7 +365,7 @@ export function matchedRules(selector: string, property: string | null, limit: n
         } else if (r.conditionText !== undefined) {
           c = `@${(r.constructor?.name ?? "").replace(/^CSS|Rule$/g, "").toLowerCase()} ${r.conditionText}`;
         } else if (r.name !== undefined) c = `@layer ${r.name}`;
-        visit(r.cssRules, [context, c].filter(Boolean).join(" "), a, sheet);
+        visit(r.cssRules, [context, c].filter(Boolean).join(" "), a, sheet, parent);
       }
     }
   };

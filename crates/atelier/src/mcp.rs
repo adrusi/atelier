@@ -25,7 +25,11 @@ atelier keeps userstyles that make the websites a user visits match their deskto
 The styles live in an owned directory of plain files: themes/<theme>/THEME.md describes the look the user \
 wants, and services/<service>/ holds each site's styles (service.toml, notes.md, and <theme>/*.user.css \
 in UserCSS format: a ==UserStyle== metadata comment and @-moz-document sections).\n\n\
-Work arrives as tasks (task_list, task_claim), and questions for the user go through task_ask. A claimed task gives you a copy of the owned directory, its \
+Work arrives as tasks (task_list, task_claim), and questions for the user go through task_ask.\n\n\
+The tools, in case your harness lists only some at first: tasks (task_list, task_create, task_claim, \
+task_info, task_ask, task_submit, task_decline, task_release, theme_propose); tabs (tab_open, \
+tab_navigate, tab_reload, tab_list, tab_close); looking at pages (screenshot, query, computed_style, \
+matched_rules, css_tokens, contrast_scan, force_state, type_text, eval); and styles_status. A claimed task gives you a copy of the owned directory, its \
 tree, to edit with your file tools; task_submit checks your changes and lands them in the owned directory, \
 where the user's tabs pick them up, with a journal entry the user can undo. Work through tasks rather than \
 editing the owned directory directly: only landings are recorded, undoable, and passed to the user's hooks.\n\n\
@@ -131,7 +135,7 @@ const TOOLS: &[Tool] = &[
                 "settleAnimations": { "type": "boolean", "description": "Fast-forward CSS animations first. Default true." },
                 "scale": { "type": "number", "description": "Pixels per CSS pixel. Default 1; use 2–4 to inspect small elements." },
                 "returnImage": { "type": "boolean", "description": "With saveAs or attach: also return the image. Default false." },
-                "extraCss": { "type": "string", "description": "CSS added just for this capture, then removed: for showing a variant (\"this or that?\") without editing files. It beats the page's own CSS; against your styles, it needs higher specificity or !important." },
+                "extraCss": { "type": "string", "description": "CSS added just for this capture, then removed: for showing a variant (\"this or that?\") without editing files. It comes after the page's CSS and your styles, so it wins ties with both; a more specific rule still beats it." },
                 "attach": { "type": "boolean", "description": "Save the image for task_ask (outside the tree, so it won't land); the result gives its path. JPEG." },
                 "saveAs": { "type": "string", "description": "Also save the image at this path, relative to the task's tree (or the owned directory), e.g. services/example/roarke/previews/home.jpg. A .jpg name saves JPEG (smaller; preferred for previews)." }
             }, "required": ["tab"] })
@@ -460,7 +464,9 @@ impl Server {
             }
         }
         let tab = args.get("tab").and_then(Value::as_i64);
-        // attach: true saves next to the task's tree, for task_ask, where it won't land.
+        // attach: true saves next to the task's tree, for task_ask, where it won't land
+        // (as well as at saveAs, if that's given too).
+        let mut attach: Option<PathBuf> = None;
         if args.as_object_mut().and_then(|a| a.remove("attach")) == Some(json!(true)) {
             let Some(dir) = self
                 .task_for_tab(tab)
@@ -472,7 +478,10 @@ impl Server {
                 );
             };
             let n = std::fs::read_dir(&dir).map_or(0, |d| d.count()) + 1;
-            args["saveAs"] = json!(dir.join(format!("shot-{n}.jpg")).display().to_string());
+            attach = Some(dir.join(format!("shot-{n}")));
+            if args.get("saveAs").is_none() {
+                args["format"] = json!("jpeg");
+            }
         }
         let save_as = match args.as_object_mut().and_then(|a| a.remove("saveAs")) {
             Some(Value::String(p)) => match self.save_path(&p, tab) {
@@ -491,7 +500,7 @@ impl Server {
             .as_object_mut()
             .and_then(|a| a.remove("returnImage"))
             .and_then(|v| v.as_bool())
-            .unwrap_or(save_as.is_none());
+            .unwrap_or(save_as.is_none() && attach.is_none());
         let task = args.get("task").and_then(Value::as_str).map(str::to_string);
         match self.browser_call(tool.method, args) {
             Ok(mut result) => {
@@ -514,7 +523,15 @@ impl Server {
                         None => result["tab"]["styleFiles"] = json!(format!("task {task}'s tree")),
                     }
                 }
-                if let Some(path) = save_as {
+                let ext = if result["mimeType"] == json!("image/png") {
+                    "png"
+                } else {
+                    "jpg"
+                };
+                for path in save_as
+                    .into_iter()
+                    .chain(attach.map(|p| p.with_extension(ext)))
+                {
                     let note = match save_image(&result, &path) {
                         Ok(()) => format!("Saved to {}.", path.display()),
                         Err(e) => format!("Couldn't save to {}: {e}", path.display()),

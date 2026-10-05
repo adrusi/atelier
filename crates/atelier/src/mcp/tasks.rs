@@ -83,7 +83,8 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
             owned directory, where the user's tabs pick them up at once. The landing is recorded in the journal, \
             so the user can undo it, and may be committed by the user's own hook. `summary` becomes that history: \
             what changed and why, the way you'd write a commit message for a colleague. `assumptions` lists calls \
-            you made that the user might have made differently, so they can see them at a glance. \
+            you made that the user might have made differently and that you haven't already posted with \
+            task_ask (those go with the landing as they are; don't repeat them). \
             A submission can come back with problems instead: a file outside the task's service, a style that \
             doesn't load, or a file the user (or another task) changed while you worked. Those are information, \
             not failure: each says what to do, and you fix the tree and submit again.",
@@ -120,6 +121,7 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
             theme as a whole rather than this site; those answers can improve THEME.md for every later task. \
             Each call's `wait` (or the batch's, for calls that don't say) is what it asks of the task: \
             record: you go ahead with your choice; the user can revisit it, and a changed answer becomes a new task. \
+            Record calls go with the landing, so there's no need to repeat them as task_submit's assumptions. \
             That's right for most calls, including \"I'd keep this; confirm?\": landing and letting the user reopen \
             it costs nothing. \
             review: the work shouldn't land until this is answered, because the options would mean substantially \
@@ -163,8 +165,9 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
         description: "Propose a change to THEME.md, the user's own description of the look they want. You never \
             edit THEME.md yourself; the user sees your proposal as a diff in the browser and accepts it (perhaps \
             after editing it), or declines it with a note. Propose when something settles a question for the theme \
-            as a whole: an answer the user gave to a theme-level call, or a gap you keep running into, so the next \
-            agent doesn't have to ask again. Write it in THEME.md's own voice and place (it's the user's \
+            as a whole: a gap or contradiction you found, or an interpretation you settled on, so the next agent \
+            doesn't have to work it out again. It needn't wait for an answer: propose your interpretation as soon \
+            as you've settled on one, and the user confirms or corrects it. Write it in THEME.md's own voice and place (it's the user's \
             document, and reads as theirs), keep it short, and say in `why` what it comes from. Edits apply to \
             THEME.md as it is now: each `find` must match its current text exactly, once (if it doesn't, the \
             error includes the current text); an edit without `find` appends.",
@@ -825,10 +828,26 @@ fn brief(
                      format."
                 );
             } else {
+                let _ = writeln!(out, "- {}.", present.join(", "));
+            }
+            // Other themes' styles for this site: the best map of how it works.
+            let others: Vec<String> =
+                std::fs::read_dir(std::path::Path::new(tree).join("services").join(s))
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .filter(|e| e.path().is_dir())
+                    .filter_map(|e| e.file_name().to_str().map(str::to_string))
+                    .filter(|d| d != theme && d != "variants")
+                    .filter(|d| exists(&format!("services/{s}/{d}/")))
+                    .collect();
+            for other in others {
                 let _ = writeln!(
                     out,
-                    "- {} (the only files there so far).",
-                    present.join(", ")
+                    "- services/{s}/{other}/: this site's styles for another theme. They're a map of how the \
+                     site works (which tokens and scopes it has, which selectors are stable, its quirks), and \
+                     can save much of the discovery work. Their look is that theme's, though: don't carry its \
+                     design decisions over, and check what you reuse against the page."
                 );
             }
         }
@@ -903,8 +922,9 @@ fn brief(
          `description` (what the user should set, in their terms) and `check` (a CSS selector that matches \
          something on the page only when the setting is on). The check runs on each page the style applies to, \
          once it has loaded; if it matches nothing, the toolbar button shows a badge and the description.\n\
-         - services/<service>/notes.md: decisions and their reasons, for whoever works on this service next, \
-         independent of theme.\n\
+         - services/<service>/notes.md: for whoever works on this service next. Keep how the site works \
+         (its structure, tokens and quirks, true for every theme) apart from decisions about the look, which \
+         go under a heading for the theme (## {theme}).\n\
          - services/<service>/{theme}/previews/*.jpg: 2–3 screenshots of representative pages, at viewport \
          size and scale 1 (screenshot with saveAs and a .jpg name), named for what they show \
          (repo-home.jpg). They let the user judge the style without visiting the site.\n\
@@ -947,8 +967,10 @@ fn asking(stage: &str, stats: &atelier_proto::CallStats) -> String {
              Answers to questions about the theme improve THEME.md for every task after this one. So where \
              the theme leaves something open, or you'd be guessing at the user's taste, put it to them rather \
              than deciding quietly: gather calls, and at a natural checkpoint (a first pass, with screenshots) \
-             send them with task_ask, saying what you'd choose. When an answer settles something for the \
-             theme as a whole, propose it for THEME.md (theme_propose). Most can be for the record (you go ahead; a \
+             send them with task_ask, saying what you'd choose. Calls about the theme as a whole are the most \
+             valuable thing a session on a forming theme produces, because every later site benefits: post \
+             them even when nothing blocks you, and propose THEME.md wording (theme_propose) for the \
+             interpretations you settled on, so the user can confirm or correct them. Most can be for the record (you go ahead; a \
              different answer reopens it); keep review for the ones where the options would mean substantially \
              different work.\n",
         );

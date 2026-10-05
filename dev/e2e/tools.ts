@@ -21,7 +21,7 @@ fs.writeFileSync(path.join(owned, "atelier.toml"), 'theme = "e2e"\n');
 // A style for the fixture, so matched_rules and styles_status have something of ours to see.
 fs.writeFileSync(
   path.join(owned, "services/fixtures/e2e/tokens.user.css"),
-  `/* ==UserStyle==\n@name tokens fixture\n==/UserStyle== */\n@-moz-document url-prefix("http://127.0.0.1:") {\n  .note { font-weight: 600; }\n}\n`,
+  `/* ==UserStyle==\n@name tokens fixture\n==/UserStyle== */\n@-moz-document url-prefix("http://127.0.0.1:") {\n  .note { font-weight: 600; & a.button { letter-spacing: 1px; } }\n}\n`,
 );
 
 // One prerequisite the fixture meets, one it doesn't.
@@ -154,6 +154,9 @@ try {
     assert.equal(echo.inheritedFrom, "body");
     const note = await tool("matched_rules", { tab, selector: ".note" });
     assert.ok(note.rules.some((x: any) => x.sheet.startsWith("atelier: services/fixtures/e2e/tokens.user.css")));
+    // Nested rules are found too, with their selector made absolute.
+    const nested = await tool("matched_rules", { tab, selector: ".note a.button", property: "letter-spacing" });
+    assert.equal(nested.rules[0]?.selector, ":is(.note) a.button", JSON.stringify(nested.rules));
   });
 
   await check("contrast_scan finds exactly the two low-contrast lines, skipping the disabled button", async () => {
@@ -230,7 +233,7 @@ try {
     const ok = await tool("tab_navigate", { tab, url: fixture, waitFor: "#late" });
     assert.equal(ok.warning, undefined);
     const missing = await tool("tab_navigate", { tab, url: fixture, waitFor: "#never", waitForMs: 500 });
-    assert.match(missing.warning, /didn't appear/);
+    assert.match(missing.warning, /matched nothing within/);
   });
 
   await check("styles_status waits for a file just written, and counts per service", async () => {

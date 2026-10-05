@@ -160,10 +160,14 @@ class Shim {
   private keepLast() {
     const root = document.documentElement;
     const els = this.order.map((id) => this.elements.get(id)).filter((e): e is HTMLStyleElement => Boolean(e));
+    // CSS added for one screenshot (screenshot's extraCss) goes after ours, so it wins.
+    const extra = [...root.querySelectorAll(":scope > style[data-atelier-extra]")];
     let node = root.lastElementChild;
+    while (node && node.hasAttribute("data-atelier-extra")) node = node.previousElementSibling;
     for (let i = els.length - 1; i >= 0; i--) {
       if (node !== els[i]) {
         for (const el of els) root.append(el);
+        for (const el of extra) root.append(el);
         return;
       }
       node = node.previousElementSibling;

@@ -80,7 +80,10 @@ async function agentTab(params: any): Promise<browser.tabs.Tab> {
 
 /** Waits for a tab to finish loading. Navigations start asynchronously, so
  * this first gives the tab a moment to start loading if it hasn't. */
-async function settled(tabId: number, timeoutMs = 20_000) {
+/** Returns a warning if the page was still loading when the time ran out:
+ * some pages never finish (live updates, long polling), and that's no
+ * reason to fail the call. */
+async function settled(tabId: number, timeoutMs = 20_000): Promise<string | null> {
   const deadline = Date.now() + timeoutMs;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   await sleep(150);
@@ -88,11 +91,11 @@ async function settled(tabId: number, timeoutMs = 20_000) {
     const tab = await browser.tabs.get(tabId);
     if (tab.status === "complete") {
       await sleep(250); // let late layout and our shim settle
-      return;
+      return null;
     }
     await sleep(100);
   }
-  throw new RpcError(PAGE_ERROR, `the page in tab ${tabId} didn't finish loading within ${timeoutMs / 1000}s`);
+  return `The page was still loading after ${timeoutMs / 1000}s (some pages never finish, e.g. with live updates); carried on anyway. If something's missing, give it a moment, or use waitFor.`;
 }
 
 /** Runs code in the page's userScripts world and returns its completion value. */
@@ -123,12 +126,21 @@ const HIDDEN_NOTE =
   "This tab is in the background, where Firefox doesn't run animation frames: content drawn with requestAnimationFrame (canvases, some JS animations) may be missing or stale. CSS animations were fast-forwarded to their end state.";
 
 /** For pages that render after load (JavaScript apps): waits for the
- * `waitFor` selector, if given. */
-async function waitFor(tabId: number, params: any): Promise<object> {
+ * `waitFor` selector, if given. Returns a warning if it never matched. */
+async function waitFor(tabId: number, params: any): Promise<string | null> {
   const selector = param<string | null>(params, "waitFor", "string", null);
-  if (!selector) return {};
-  const found = await call(tabId, page.waitForSelector, selector, param<number>(params, "waitForMs", "number", 10_000));
-  return found ? {} : { warning: `\`${selector}\` didn't appear within the time allowed; the page may still be loading` };
+  if (!selector) return null;
+  const ms = param<number>(params, "waitForMs", "number", 10_000);
+  const found = await call(tabId, page.waitForSelector, selector, ms);
+  return found
+    ? null
+    : `\`${selector}\` matched nothing within ${ms / 1000}s: either the page renders it later, or it doesn't match this page (try query).`;
+}
+
+/** A tab's description after loading, with any warnings about the load. */
+async function afterLoad(tabId: number, params: any, ctx: ToolContext, slow: string | null) {
+  const warnings = [slow, await waitFor(tabId, params)].filter(Boolean);
+  return { ...describeTab(await browser.tabs.get(tabId), ctx), ...(warnings.length ? { warning: warnings.join(" ") } : {}) };
 }
 
 /** Forced states per agent tab, so they can be redone when styles change:
@@ -171,8 +183,7 @@ const handlers: Record<string, Handler> = {
       }
     }
     await browser.tabs.update(tab.id!, { url });
-    await settled(tab.id!);
-    return { ...describeTab(await browser.tabs.get(tab.id!), ctx), ...(await waitFor(tab.id!, params)) };
+    return afterLoad(tab.id!, params, ctx, await settled(tab.id!));
   },
 
   async "tab/bind"(params, ctx) {
@@ -191,15 +202,13 @@ const handlers: Record<string, Handler> = {
     const tab = await agentTab(params);
     const url = param<string>(params, "url", "string");
     await browser.tabs.update(tab.id!, { url });
-    await settled(tab.id!);
-    return { ...describeTab(await browser.tabs.get(tab.id!), ctx), ...(await waitFor(tab.id!, params)) };
+    return afterLoad(tab.id!, params, ctx, await settled(tab.id!));
   },
 
   async "tab/reload"(params, ctx) {
     const tab = await agentTab(params);
     await browser.tabs.reload(tab.id!);
-    await settled(tab.id!);
-    return describeTab(await browser.tabs.get(tab.id!), ctx);
+    return afterLoad(tab.id!, {}, ctx, await settled(tab.id!));
   },
 
   async "tab/list"(_params, ctx) {
