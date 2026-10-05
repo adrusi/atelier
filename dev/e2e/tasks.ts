@@ -105,6 +105,7 @@ try {
     const brief = await tool("task_claim");
     assert.match(brief, /The user asked: make the plain page teal/);
     assert.match(brief, /themes\/e2e\/THEME\.md/);
+    assert.match(brief, /There's no list of this site's representative pages yet/);
     tree = brief.match(/The task's tree is (\S+): /)![1];
     assert.ok(fs.existsSync(path.join(tree, STYLE)));
   });

@@ -883,6 +883,7 @@ fn brief(
              THEME.md with theme_propose (unless a proposal below already covers it).\n",
         );
     }
+    out.push_str(&pages_section(tree, t.service.as_deref()));
     out.push_str(&asking(&theme_stage(tree, theme), stats));
     if !proposals.is_empty() {
         out.push_str("\n## Proposed changes to THEME.md\n\n");
@@ -921,7 +922,9 @@ fn brief(
          styles cover, for the user), and `[[prerequisites]]` for site settings a style depends on: \
          `description` (what the user should set, in their terms) and `check` (a CSS selector that matches \
          something on the page only when the setting is on). The check runs on each page the style applies to, \
-         once it has loaded; if it matches nothing, the toolbar button shows a badge and the description.\n\
+         once it has loaded; if it matches nothing, the toolbar button shows a badge and the description. \
+         Also `[[pages]]`, the site's representative pages: `url`, `what` it shows, and `states` worth \
+         checking on it.\n\
          - services/<service>/notes.md: for whoever works on this service next. Keep how the site works \
          (its structure, tokens and quirks, true for every theme) apart from decisions about the look, which \
          go under a heading for the theme (## {theme}).\n\
@@ -1029,6 +1032,69 @@ fn batch_text(b: &atelier_proto::Batch) -> String {
             None => {}
         }
         out.push('\n');
+    }
+    out
+}
+
+/// The representative pages a service lists in service.toml (`[[pages]]`):
+/// url, what it shows, and states worth checking on it.
+fn service_pages(tree: &str, service: &str) -> Vec<(String, String, Vec<String>)> {
+    let path = std::path::Path::new(tree).join(format!("services/{service}/service.toml"));
+    let Some(table) = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|t| t.parse::<toml::Table>().ok())
+    else {
+        return Vec::new();
+    };
+    table
+        .get("pages")
+        .and_then(|p| p.as_array())
+        .into_iter()
+        .flatten()
+        .filter_map(|p| {
+            let url = p.get("url")?.as_str()?.to_string();
+            let what = p
+                .get("what")
+                .and_then(|w| w.as_str())
+                .unwrap_or("")
+                .to_string();
+            let states = p
+                .get("states")
+                .and_then(|s| s.as_array())
+                .into_iter()
+                .flatten()
+                .filter_map(|s| s.as_str().map(str::to_string))
+                .collect();
+            Some((url, what, states))
+        })
+        .collect()
+}
+
+/// The brief's section on which pages to check.
+fn pages_section(tree: &str, service: Option<&str>) -> String {
+    let mut out = String::from("\n## Pages to check\n\n");
+    let pages = service.map(|s| service_pages(tree, s)).unwrap_or_default();
+    if pages.is_empty() {
+        out.push_str(
+            "There's no list of this site's representative pages yet. As you work, add one to service.toml \
+             ([[pages]] with url, what, and states worth checking, such as a menu open or a focused input), \
+             covering the kinds of page and state the styles reach, including ones you couldn't see (logged-in \
+             pages, say). It's how the next agent knows what to check, and what health checks will look at.\n",
+        );
+    } else {
+        out.push_str(
+            "service.toml lists these as the site's representative pages. Check your styles on each, in the \
+             states given; where you can't (a logged-in page in a logged-out browser, say), say so in your \
+             summary rather than leaving it to be assumed. Add pages you find that the list is missing.\n\n",
+        );
+        for (url, what, states) in pages {
+            let states = if states.is_empty() {
+                String::new()
+            } else {
+                format!(" (states: {})", states.join(", "))
+            };
+            let _ = writeln!(out, "- {what}: {url}{states}");
+        }
     }
     out
 }

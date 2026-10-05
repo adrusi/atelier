@@ -48,6 +48,21 @@ struct ServiceConfig {
     prerequisites: Vec<PrerequisiteConfig>,
     /// Keep Dark Reader off pages these styles apply to (SPEC §6.5). Default true.
     dark_reader_lock: Option<bool>,
+    /// Representative pages and states of the site, for checking styles
+    /// against (SPEC §5.2). Read by briefs; checked here only for shape.
+    pages: Vec<PageConfig>,
+}
+
+/// One representative page: where it is, what it shows, and the states
+/// worth looking at on it (a menu open, a focused input, logged in).
+/// All optional, so a sloppy entry can't cost the service its settings.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(default)]
+#[allow(dead_code)]
+struct PageConfig {
+    url: Option<String>,
+    what: Option<String>,
+    states: Vec<String>,
 }
 /// A prerequisite: just a description, or a table with an optional check.
 #[derive(Debug, Clone, Deserialize)]
@@ -80,6 +95,7 @@ const SERVICE_CONFIG_KEYS: &[&str] = &[
     "summary",
     "prerequisites",
     "dark_reader_lock",
+    "pages",
 ];
 
 pub fn load(dir: &Path, vars: &BTreeMap<String, String>) -> Bundle {
@@ -649,6 +665,25 @@ mod tests {
                       }\n";
         let style = usercss::parse(source).unwrap();
         assert!(lint_remote_urls(&style, source).is_empty());
+    }
+
+    #[test]
+    fn representative_pages_are_known_and_forgiving() {
+        let d = fixture();
+        write(
+            d.path(),
+            "services/github/service.toml",
+            "[[pages]]\nurl = \"https://github.com/rust-lang/rust\"\nwhat = \"repo home\"\nstates = [\"Code menu open\"]\n\n[[pages]]\nwhat = \"no url yet\"\n",
+        );
+        let bundle = load(d.path(), &BTreeMap::new());
+        assert!(
+            !bundle
+                .diagnostics
+                .iter()
+                .any(|d| d.path.as_deref() == Some("services/github/service.toml")),
+            "{:?}",
+            bundle.diagnostics
+        );
     }
 
     #[test]
