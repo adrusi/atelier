@@ -53,3 +53,33 @@
   standard scheme (keywords mauve, functions/types blue, constants peach,
   strings green, comments overlay2).
 - The cargo-crate logo is left as it is (site imagery, recognisable).
+
+## tiled
+
+The tiled styles start from roarke's colour work (same token overrides,
+syntax mapping and status colours) and change the shapes:
+
+- Panes: header and footer (mantle) meet the main column (base) at a 1px
+  muted rule. On crate pages the README and sidebar are split by a vertical
+  rule that runs up to the tabs' rule; the 5px rule above the download
+  stats is a hairline closing both panes.
+- No boxes: the home page lists, search/user/category result rows,
+  version and dependency rows and the category panel lose background,
+  radius and shadow, and the gaps between them; they're rows between
+  rules, surface0 on hover. Crate and page headers are plain text aligned
+  with the column (padding removed).
+- Buttons, the sort/"Display as" triggers, the search field and the
+  GitHub account chip are 1px outlined rectangles. The search submit is
+  the one filled control (lavender). `.button--red` keeps red as outline
+  and text.
+- Badges become text: keywords drop their pill; the versions page's
+  release-track disc ("1.x") is text in its status colour (fg-dim for
+  ordinary releases), its width kept so the column lines up.
+- Alerts are a 2px status-coloured left edge with no tint; toasts are
+  surface0 with a surface1 border and a status-coloured left edge.
+- Metadata in the theme's monospace, fg-dim: versions and download counts
+  in home lists and result rows, the dependency ranges, the release track.
+  Not the big totals (home page, crate download stats): wide mono numerals
+  looked heavy there.
+- The home page's cloud and box icons beside the totals repeat their
+  labels and are hidden.

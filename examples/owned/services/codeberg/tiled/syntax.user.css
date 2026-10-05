@@ -1,0 +1,41 @@
+/* ==UserStyle==
+@name           Codeberg syntax (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Codeberg's syntax highlighting (Chroma) in Catppuccin Mocha's mapping
+==/UserStyle== */
+
+/* Chroma's colours are literals in @layer forgejo-theme, so any unlayered
+   rule wins. Scoped like tokens.user.css. */
+
+@-moz-document domain("codeberg.org") {
+  @media (prefers-color-scheme: dark) {
+    html:root:is([data-theme$="-auto"], [data-theme$="-dark"]) .chroma {
+      .c, .c1, .ch, .cm, .cs, .go, .gp { color: #9399b2; }
+      .cp { color: #f5c2e7; }
+      .cpf { color: #a6e3a1; }
+      .k, .kd, .kn, .kp, .kr, .ow, .sa { color: #cba6f7; }
+      .kc, .no, .m, .mb, .mf, .mh, .mi, .mo, .il, .nd { color: #fab387; }
+      .kt, .nc, .ne, .na { color: #f9e2af; }
+      .n, .nn, .nx, .nv { color: #cdd6f4; }
+      .nb, .bp { color: #f38ba8; }
+      .nf, .fm, .gh { color: #89b4fa; }
+      .ni, .ss { color: #f2cdcd; }
+      .nl { color: #74c7ec; }
+      .nt { color: #cba6f7; }
+      .vc, .vg, .vi { color: #eba0ac; }
+      .o { color: #89dceb; }
+      .p { color: #9399b2; }
+      .s, .s1, .s2, .sb, .sd, .sh, .sx, .dl, .gu { color: #a6e3a1; }
+      .se, .sc, .si, .sr { color: #f5c2e7; }
+      .gd { color: #f38ba8; background-color: #f38ba826; }
+      .gi { color: #a6e3a1; background-color: #a6e3a126; }
+      .ge { color: #cdd6f4; font-style: italic; }
+      .gs { color: #cdd6f4; font-weight: 600; }
+      .gr, .gt { color: #f38ba8; }
+      .w { color: #6c7086; }
+      /* Dim punctuation is lost on a changed word's highlight */
+      :is(.added-code, .removed-code) .p { color: #bac2de; }
+    }
+  }
+}

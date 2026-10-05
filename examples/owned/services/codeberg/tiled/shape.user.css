@@ -1,0 +1,306 @@
+/* ==UserStyle==
+@name           Codeberg shape (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Flattens Codeberg's (Forgejo's) boxes, pills and filled controls into panes, rules and outlines
+==/UserStyle== */
+
+/* Scoped like tokens.user.css. Forgejo's own rules are partly layered and
+   partly unlayered; Fomantic UI's component rules in index.css are
+   unlayered and fairly specific (.ui.basic.button:hover is 0,3,0), so the
+   scope's 0,1,1 plus the nested selector usually wins, and !important is
+   kept to the few blanket rules (radius, shadows) that have to beat
+   everything. Only Fomantic/Forgejo class names are used, not Tailwind
+   utility classes, which change between releases. */
+
+@-moz-document domain("codeberg.org") {
+  @media (prefers-color-scheme: dark) {
+    html:root:is([data-theme$="-auto"], [data-theme$="-dark"]) {
+
+      /* Square, flat. Avatars, radios, spinners and colour dots are round
+         by nature and keep their radius. */
+      & *:not(.avatar, img.ui.avatar, .ui.avatar, input[type="radio"], .color-icon, .is-loading, .ui.loader),
+      & *:not(.is-loading, .ui.loader, .ui.radio.checkbox label, .ui.radio.checkbox .box)::before,
+      & *:not(.is-loading, .ui.loader, .ui.radio.checkbox label, .ui.radio.checkbox .box)::after {
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+      }
+
+      /* ---- Panes: header, footer ---- */
+      #navbar { border-bottom: 1px solid #45475a; }
+      #navbar svg { filter: none; }
+      .page-footer { border-top: 1px solid #45475a; }
+      /* The repo/org header (name, buttons, tabs) is a recessed pane, edge
+         to edge, meeting the page at one rule: its own, rather than the
+         tab bar's divider, which stops short of the edges. */
+      .secondary-nav {
+        /* its background is --color-secondary-nav-bg, set !important by
+           Forgejo */
+        border-bottom: 1px solid #45475a;
+        .ui.tabs.divider { display: none; }
+        overflow-menu.ui.menu { border-bottom-color: transparent; }
+      }
+      /* Codeberg's Terms of Use announcement, above the navbar: its own
+         pane */
+      #tou-announcement { border-bottom: 1px solid #45475a; }
+
+      /* ---- No cards ----
+         Fomantic segments are Forgejo's boxes: they become the page, with
+         their header as a recessed strip between rules. */
+      .ui.segment,
+      .ui.segments,
+      .ui.attached.segment,
+      .ui.segments > .segment,
+      .ui.card, .ui.cards > .card,
+      .ui.table {
+        background: transparent;
+        border-color: transparent;
+      }
+      .ui.segments > .segment + .segment { border-top: 1px solid #45475a; }
+      /* Issue and PR comments: a header strip and the body between rules,
+         no box, no speech-bubble arrow. A linked (:target) comment gets the
+         focused-window edge. */
+      .repository .comment-list .comment .comment-container,
+      .comment .comment-container {
+        border: none;
+        border-top: 1px solid #45475a;
+        /* the timeline's line runs behind comments */
+        background: #1e1e2e;
+        > .ui.attached.segment { background: #1e1e2e; }
+      }
+      .comment:target .comment-container {
+        border-color: #45475a !important;
+        box-shadow: inset 2px 0 #b4befe !important;
+      }
+      .comment-header::before, .comment-header::after { content: none; }
+      /* Issue cards (pinned issues, project board columns) become rows */
+      .issue-card {
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid #45475a;
+        &:hover { background: #313244; }
+      }
+      .ui.attached.header,
+      .ui.top.attached.header,
+      .ui.table > thead > tr > th {
+        background: #181825;
+        border-color: #45475a;
+        border-left: none;
+        border-right: none;
+      }
+      /* A box's body under its header keeps a rule beneath, where the
+         next thing could otherwise run into it */
+      .ui.attached.segment:not(.top):last-child,
+      .ui.bottom.attached.segment {
+        border-left: none;
+        border-right: none;
+        border-top: none;
+        border-bottom: 1px solid #45475a;
+      }
+      .ui.attached:not(.message) + .ui.attached.segment:not(.top) { border-top: none; }
+      .ui.table > tbody > tr > td,
+      .ui.table > tr > td { border-color: #45475a; }
+
+      /* ---- Lists are rows ---- */
+      .ui.table:not(.unstackable) > tbody > tr:hover > td,
+      #repo-files-table > tbody > tr:hover > td,
+      .flex-list > .flex-item:hover,
+      .issue.list > .item:hover,
+      .ui.list > .item:hover {
+        background: #313244;
+      }
+      .flex-list > .flex-item { border-color: #45475a; }
+      /* Every row's title is a link: text colour, visited dimmed, rather
+         than a column of lavender (Forgejo's .text.primary is !important) */
+      .flex-list > .flex-item .flex-item-title > a {
+        color: #cdd6f4 !important;
+        &:visited { color: #9399b2 !important; }
+        &:hover { color: #b4befe !important; }
+      }
+
+      /* ---- Controls: outlined, not filled ---- */
+      .ui.button,
+      .ui.buttons .button,
+      .ui.basic.button,
+      .ui.basic.buttons .button {
+        background: transparent;
+        border: 1px solid #6c7086;
+        color: #cdd6f4;
+        &:hover, &:focus { background: #313244; color: #cdd6f4; }
+        &:focus-visible { outline: 1px solid #b4befe; outline-offset: -1px; }
+      }
+      /* Button groups share their edges */
+      .ui.buttons > .button + .button,
+      .ui.labeled.button > .label { margin-left: -1px; }
+      .ui.labeled.button > .label,
+      .ui.labeled.button > .ui.label {
+        background: transparent;
+        border: 1px solid #6c7086;
+        color: #9399b2;
+        font-family: var(--fonts-monospace);
+      }
+      /* The one primary action in a view is filled */
+      .ui.primary.button,
+      .ui.primary.buttons .button {
+        background: #b4befe;
+        border-color: #b4befe;
+        color: #1e1e2e;
+        &:hover, &:focus { background: #c6cdfe; border-color: #c6cdfe; color: #1e1e2e; }
+      }
+      /* The clone panel's HTTPS/SSH switch marks the current protocol as
+         "primary"; it's a toggle, not an action: lavender text */
+      .clone-panel .ui.primary.button {
+        background: transparent;
+        border-color: #6c7086;
+        color: #b4befe;
+        &:hover, &:focus { background: #313244; color: #b4befe; }
+      }
+      /* Status-coloured buttons (delete, close) are outlined in their colour */
+      .ui.red.button, .ui.red.buttons .button {
+        background: transparent;
+        border-color: #f38ba8;
+        color: #f38ba8;
+        &:hover, &:focus { background: #f38ba81f; color: #f38ba8; }
+      }
+      .ui.green.button, .ui.green.buttons .button {
+        background: transparent;
+        border-color: #a6e3a1;
+        color: #a6e3a1;
+        &:hover, &:focus { background: #a6e3a11f; color: #a6e3a1; }
+      }
+      .ui.secondary.button, .ui.secondary.buttons .button {
+        background: transparent;
+        color: #cdd6f4;
+        &:hover, &:focus { background: #313244; }
+      }
+
+      /* Inputs: recessed, outlined */
+      input:not([type="checkbox"], [type="radio"], [type="submit"], [type="button"], [type="range"]),
+      textarea, select, .ui.selection.dropdown {
+        border-color: #6c7086;
+      }
+
+      /* ---- Badges become text ----
+         Fomantic labels (counts, topics, the issue/PR state badges) lose
+         their pill. Repository issue labels set their colours inline and
+         keep them: they're the repo's categories. */
+      .ui.label:not([style*="background"]) {
+        background: transparent;
+        border-color: transparent;
+        color: #9399b2;
+        padding-left: 0.25em;
+        padding-right: 0.25em;
+      }
+      /* Counts beside tabs and buttons read as terminal metadata */
+      .ui.menu .item > .ui.label:not([style*="background"]),
+      .ui.small.label:not([style*="background"]) {
+        font-family: var(--fonts-monospace);
+        font-weight: 400;
+      }
+      /* Status labels: their colour as text */
+      .ui.label:not([style*="background"]):is(.red) { color: #f38ba8; }
+      .ui.label:not([style*="background"]):is(.orange) { color: #fab387; }
+      .ui.label:not([style*="background"]):is(.yellow) { color: #f9e2af; }
+      .ui.label:not([style*="background"]):is(.green, .olive) { color: #a6e3a1; }
+      .ui.label:not([style*="background"]):is(.teal) { color: #94e2d5; }
+      .ui.label:not([style*="background"]):is(.blue, .primary) { color: #b4befe; }
+      .ui.label:not([style*="background"]):is(.purple, .violet) { color: #cba6f7; }
+      .ui.label:not([style*="background"]):is(.pink) { color: #f5c2e7; }
+      .ui.label:not([style*="background"]):is(.brown) { color: #f2cdcd; }
+      .ui.basic.label:not([style*="background"]) { border-color: transparent; }
+
+      /* Topics are links: lavender text, bracketed so they don't run
+         together */
+      .repo-topic.ui.label {
+        color: #b4befe;
+        padding: 0;
+        margin-right: 0.6em;
+        &::before { content: "#"; color: #9399b2; }
+        &:hover { background: transparent; text-decoration: underline; }
+      }
+
+      /* ---- Tabs: text, the current one underlined in lavender ---- */
+      .ui.secondary.pointing.menu .active.item,
+      .ui.secondary.pointing.menu .active.item:hover {
+        border-bottom-color: #b4befe;
+      }
+      /* The underline is a pseudo-element rather than an inset shadow:
+         Firefox antialiases an inset shadow's hole on boxes at fractional
+         positions, which leaves a faint frame round the item. */
+      .ui.secondary.menu:not(.pointing) > .item.active:not(.dropdown),
+      .switch > .item.active,
+      .ui.pagination.menu .active.item {
+        position: relative;
+        &::after {
+          content: "";
+          display: block;
+          position: absolute;
+          inset: auto 0 0 0;
+          height: 2px;
+          background: #b4befe;
+        }
+      }
+      .ui.secondary.menu:not(.pointing) > .item.active:not(.dropdown),
+      .ui.secondary.menu:not(.pointing) > .active.item:not(.dropdown):hover {
+        background: transparent;
+      }
+      /* In a dropdown, the current choice is a row: the focused-window
+         edge */
+      .ui.dropdown .menu > .item:is(.active, .selected) {
+        background: transparent;
+        box-shadow: inset 2px 0 #b4befe !important;
+        &:hover { background: #45475a; }
+      }
+      .ui.dropdown .menu > .item:hover { background: #45475a; }
+      /* Forgejo's .switch (Open/Closed/All, Labels/Milestones, the
+         editor's Write/Preview) is a segmented tray: text, current one
+         underlined */
+      .switch {
+        background: transparent;
+        border-color: transparent;
+        > .item { background: transparent; }
+        > .item:hover { background: #313244; }
+        > .item.active { background: transparent; outline: none; }
+      }
+      /* Pagination: page numbers as text, the current one underlined */
+      .ui.pagination.menu {
+        background: transparent;
+        border-color: transparent;
+        .item { background: transparent; }
+        .item::before { display: none; }
+        .item:not(.disabled):hover { background: #313244; }
+        .active.item { background: transparent; color: #cdd6f4; }
+      }
+      .ui.tabular.menu .active.item {
+        background: transparent;
+        border-color: transparent;
+        border-bottom: 2px solid #b4befe;
+      }
+
+      /* ---- Menus, dialogs, popovers: on top, square, bordered ---- */
+      .ui.dropdown .menu,
+      .ui.menu .dropdown.item .menu,
+      .ui.popup,
+      .tippy-box,
+      .ui.modal,
+      details.dropdown > .content {
+        background: #313244;
+        border: 1px solid #45475a;
+      }
+      .tippy-box[data-theme="tooltip"] { background: #313244; color: #cdd6f4; }
+      .tippy-box .tippy-svg-arrow { fill: #313244; }
+
+      /* ---- Messages: a pane with a coloured left edge ---- */
+      .ui.message {
+        border: none;
+        border-left: 2px solid currentColor;
+      }
+
+      ::selection {
+        background: #353749;
+        color: #cdd6f4;
+      }
+    }
+  }
+}

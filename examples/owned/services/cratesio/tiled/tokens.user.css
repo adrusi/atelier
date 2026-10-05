@@ -1,0 +1,65 @@
+/* ==UserStyle==
+@name           crates.io tokens (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Retunes crates.io's dark mode colour tokens and type to Catppuccin Mocha
+==/UserStyle== */
+
+/* crates.io (SvelteKit) compiles its colours with lightningcss into
+   var(--lightningcss-light, x) var(--lightningcss-dark, y) pairs, switched
+   by data-color-scheme on <html> (set from the colour scheme menu, or from
+   the system's preference when it's on "system"). Only the dark side is
+   restyled here: everything is scoped to html[data-color-scheme="dark"].
+
+   A handful of tokens on :root cover the main colours; most component
+   colours are hard-coded and handled in components.user.css. The site's
+   own rules sit in @layer global or are unlayered Svelte component rules
+   (0,2,0 or so), so html:root[...] (0,2,1) beats both. */
+
+@-moz-document domain("crates.io") {
+  html:root[data-color-scheme="dark"] {
+    /* Panes: the header and footer (the body's background) are mantle,
+       the main column is base. */
+    --header-bg-color: #181825;
+    --main-bg: #1e1e2e;
+    --main-bg-dark: #181825;
+    --main-shadow-color: transparent;
+
+    /* Text */
+    --main-color: #cdd6f4;
+    --main-color-light: #9399b2;
+    --grey600: #6c7086;
+    --grey700: #6c7086;
+
+    /* Rules */
+    --gray-border: #6c7086;
+
+    /* Accent: crates.io's green links and yellow highlights become lavender.
+       Hover goes to body text so links still respond. */
+    --link-color: #b4befe;
+    --link-hover-color: #cdd6f4;
+    --yellow500: #b4befe;
+    --yellow700: #cdd6f4;
+    --yellow900: color-mix(in srgb, #f9e2af 14%, #1e1e2e);
+    /* Only used for text shadows and drop shadows: none in this theme. */
+    --green900: transparent;
+
+    /* Type: Fira Sans and Fira Mono become the desktop's condensed Noto. */
+    --font-heading: "Noto Sans", sans-serif;
+    --font-body: "Noto Sans", sans-serif;
+    --font-monospace: "Noto Sans Mono", monospace;
+  }
+
+  html:root[data-color-scheme="dark"] body {
+    font-stretch: condensed;
+    color: #cdd6f4;
+  }
+  html:root[data-color-scheme="dark"] :is(code, pre, kbd, samp) {
+    font-stretch: condensed;
+  }
+
+  html:root[data-color-scheme="dark"] ::selection {
+    background-color: #353749;
+    color: #cdd6f4;
+  }
+}

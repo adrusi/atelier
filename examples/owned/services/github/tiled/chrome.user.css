@@ -1,0 +1,289 @@
+/* ==UserStyle==
+@name           GitHub chrome (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    GitHub's header, badges, framed lists, code blocks and inputs, for the tiled theme
+==/UserStyle== */
+
+/* Everything here is scoped like tokens.user.css: GitHub's plain "dark"
+   theme while the desktop prefers dark. Component rules are nested under
+   the theme selector (CSS nesting), which also lifts their specificity
+   above GitHub's. CSS-module classes (<Name>-module__<element>__<hash>,
+   prc-<Component>-<element>-<hash>) are matched on their prefix, never on
+   the hash. */
+
+@-moz-document domain("github.com") {
+  @media (prefers-color-scheme: dark) {
+    /* The logged-out header is a Primer Brand ("marketing") component. It
+       reads --brand-* tokens, which Primer Brand declares in
+       @layer primer-brand on [data-color-mode="dark"] (the header itself)
+       and on :root for fonts. Unlayered declarations beat layered ones
+       whatever their specificity, so these only need to land on the same
+       elements. */
+    html:root:is([data-color-mode="auto"], [data-color-mode="dark"])[data-dark-theme="dark"] {
+      --brand-fontStack-sansSerif: "Noto Sans", sans-serif;
+      font-stretch: condensed;
+      --brand-fontStack-sansSerifAlt: "Noto Sans", sans-serif;
+      --brand-fontStack-system: "Noto Sans", sans-serif;
+      --brand-fontStack-monospace: "Noto Sans Mono", monospace;
+      --brand-borderRadius-small: 0;
+      --brand-borderRadius-medium: 0;
+      --brand-borderRadius-large: 0;
+      --brand-borderRadius-xlarge: 0;
+      --brand-borderRadius-full: 0;
+    }
+
+    html:root:is([data-color-mode="auto"], [data-color-mode="dark"])[data-dark-theme="dark"] [data-color-mode="dark"] {
+      --brand-color-canvas-default: #181825;
+      --brand-color-canvas-subtle: #181825;
+      --brand-color-canvas-muted: #181825;
+      --brand-color-canvas-inset: #11111b;
+      --brand-color-canvas-overlay: #313244;
+      --brand-color-canvas-invert: #cdd6f4;
+      --brand-color-text-default: #cdd6f4;
+      --brand-color-text-muted: #9399b2;
+      --brand-color-text-onEmphasis: #1e1e2e;
+      --brand-color-text-emphasized: #b4befe;
+      --brand-color-text-link-rest: #b4befe;
+      --brand-color-text-link-pressed: #b4befe;
+      --brand-color-border-default: #6c7086;
+      --brand-color-border-muted: #45475a;
+      --brand-color-border-subtle: #45475a;
+      --brand-color-focus: #b4befe;
+      --brand-color-accent-primary: #b4befe;
+      --brand-color-accent-secondary: #f9e2af;
+    }
+
+    html:root:is([data-color-mode="auto"], [data-color-mode="dark"])[data-dark-theme="dark"] {
+
+      /* Headers (logged-out marketing header and the signed-in AppHeader)
+         are a pane: mantle, meeting the page at a 1px rule. */
+      :is(header.HeaderMktg, header.AppHeader, .AppHeader-globalBar) {
+        background-color: #181825;
+        box-shadow: none;
+      }
+      :is(header.HeaderMktg, header.AppHeader) {
+        border-bottom: 1px solid #6c7086;
+      }
+      header.HeaderMktg :is(a, button):is([class*="Button"], .HeaderMenu-link--sign-up) {
+        border-radius: 0;
+      }
+
+      /* Round by nature, put back after tokens.user.css squared every
+         radius: user avatars, radio buttons, notification dots. Org and
+         repository avatars are rounded squares on GitHub and become
+         squares. */
+      :is(.avatar-user, .avatar-circle, .circle, .FormControl-radio,
+          input[type="radio"], [class*="prc-Radio-Radio-"],
+          [class*="prc-Avatar-Avatar-"]:not([data-square]),
+          .AppHeader-logo) {
+        border-radius: 50%;
+      }
+      [class*="prc-Button-ButtonBase-"][data-notification-indicator]::before,
+      [class*="prc-Button-ButtonBase-"][data-notification-indicator] [class*="prc-Button-LeadingVisual-"]::before,
+      .mail-status.unread {
+        border-radius: 50%;
+      }
+
+      /* Badges become text. Labels ("Public", "Latest", "Draft") and
+         counters lose their outline and fill; counters, being numbers,
+         take the monospace face in fg-dim. Issue labels keep their colour
+         (it tells them apart), as text, not as a filled pill. */
+      :is(.Label, .label, [class*="prc-Label-Label-"]):not(.IssueLabel, [class*="prc-IssueLabel-"]) {
+        border-color: transparent;
+        background: none;
+        padding-left: 0;
+        padding-right: 0;
+        margin-left: 4px;
+      }
+      :is(.Label, .label, [class*="prc-Label-Label-"]):not(.IssueLabel, [class*="prc-IssueLabel-"]):not([class*="--success"], [class*="--attention"], [class*="--danger"], [class*="--severe"], [class*="--done"], [class*="--accent"], [data-variant="success"], [data-variant="attention"], [data-variant="danger"], [data-variant="severe"], [data-variant="done"], [data-variant="accent"]) {
+        color: #9399b2;
+      }
+      :is(.Counter, [class*="prc-CounterLabel-CounterLabel-"], .Button-label + .Counter) {
+        background: none;
+        border-color: transparent;
+        color: #9399b2;
+        font-family: "Noto Sans Mono", monospace;
+        font-stretch: condensed;
+        padding-left: 0;
+        padding-right: 0;
+        margin-left: 6px;
+      }
+      [class*="prc-Button-ButtonBase-"][data-variant="primary"] :is(.Counter, [class*="prc-CounterLabel-CounterLabel-"]) {
+        color: inherit;
+      }
+
+      /* Issue labels: a dot in the label's own colour, then the name in
+         fg-dim. Labels are colour-coded by each repository, so the colour
+         stays (as the dot) and the pill goes. GitHub puts the colour on
+         the element as --label-r/g/b. */
+      :is(.IssueLabel, [class*="prc-Token-IssueLabel-"], [class*="prc-IssueLabel-IssueLabel-"]) {
+        background: none !important;
+        border-color: transparent !important;
+        color: #9399b2 !important;
+        padding-left: 0;
+        padding-right: 0;
+        margin-right: 10px !important;
+        gap: 5px;
+        display: inline-flex;
+        align-items: center;
+      }
+      :is(.IssueLabel, [class*="prc-Token-IssueLabel-"], [class*="prc-IssueLabel-IssueLabel-"])::before {
+        content: "";
+        flex: none;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: rgb(var(--label-r), var(--label-g), var(--label-b));
+      }
+      :is(.IssueLabel, [class*="prc-Token-IssueLabel-"], [class*="prc-IssueLabel-IssueLabel-"]):is(a, [data-cursor-is-interactive="true"]):hover {
+        color: #cdd6f4 !important;
+      }
+
+      /* GitHub marks unread items in lists with a 3px accent bar on the
+         left. Lavender at the left edge means "current row" in the theme,
+         so unread is a 2px bar in fg-dim instead. */
+      [class*="UnreadBorder-module__unreadBorder__"]::before {
+        width: 2px;
+        background-color: #9399b2;
+      }
+
+      /* Pinned issues are a strip of cards; they become plain blocks. */
+      li[class*="PinnedIssuesStrip-module__container__"] {
+        border-color: transparent;
+        background: none;
+      }
+      li[class*="PinnedIssuesStrip-module__container__"]:hover {
+        background-color: #313244;
+      }
+
+      /* Topic tags (repository sidebar, search results) are links: lavender
+         text, no pill. */
+      :is(.topic-tag, [class*="prc-TopicTag-TopicTag-"]) {
+        background: none;
+        border-color: transparent;
+        color: #b4befe;
+        padding-left: 0;
+        padding-right: 0;
+        margin-right: 10px;
+      }
+      :is(.topic-tag, [class*="prc-TopicTag-TopicTag-"]):hover {
+        text-decoration: underline;
+      }
+
+      /* State badges (Open, Closed, Merged, Draft) become a status-coloured
+         word with its icon. GitHub draws them as a pastel fill with
+         --fgColor-onEmphasis text; taking the fill away and using the
+         fill's colour for the text keeps the status colour. */
+      :is(.State, [class*="prc-StateLabel-StateLabel-"]) {
+        color: var(--state-color, #9399b2) !important;
+        background: none !important;
+        border: 0;
+        box-shadow: none;
+        padding-left: 0;
+        padding-right: 0;
+      }
+      :is(.State--open, [class*="prc-StateLabel-StateLabel-"]:is([data-status="issueOpened"], [data-status="pullOpened"])) { --state-color: #a6e3a1; }
+      :is(.State--merged, [class*="prc-StateLabel-StateLabel-"]:is([data-status="pullMerged"], [data-status="issueClosed"])) { --state-color: #cba6f7; }
+      :is(.State--closed, [class*="prc-StateLabel-StateLabel-"]:is([data-status="pullClosed"], [data-status="issueClosedNotPlanned"])) { --state-color: #f38ba8; }
+      :is(.State--draft, [class*="prc-StateLabel-StateLabel-"][data-status="draft"]) { --state-color: #9399b2; }
+      .State--closed:has(.octicon-issue-closed) { --state-color: #cba6f7; }
+
+      /* Framed lists. The repository's file list and README, and the
+         React list views (issues, pull requests), are boxes; they become
+         rows between rules: no side borders, no fill. The hooks are the
+         table's aria-labelledby, the latest-commit header's module name,
+         the README's article and the list view's module name. */
+      :is(div:has(> [class*="LatestCommit-module__Box__"]),
+          table[aria-labelledby="folders-and-files"],
+          div:has(> div > article.markdown-body[itemprop="text"]),
+          [class*="SharedListContainer-module__listContainer__"]) {
+        border-left-width: 0 !important;
+        border-right-width: 0 !important;
+        background-color: transparent !important;
+      }
+      /* Rails tab bars (a pull request's Conversation / Commits / Files
+         changed) draw the current tab as a raised box joined to the rule
+         below; it becomes text underlined in lavender, like UnderlineNav. */
+      .tabnav-tab {
+        border: 0 !important;
+        border-bottom: 2px solid transparent !important;
+        background: none !important;
+      }
+      .tabnav-tab:is(.selected, [aria-current]:not([aria-current="false"])) {
+        border-bottom-color: #b4befe !important;
+        color: #cdd6f4;
+        font-weight: 600;
+      }
+      .tabnav-tab:hover:not(.selected) {
+        border-bottom-color: #6c7086 !important;
+      }
+
+      /* Comments (the issue body and timeline comments, React and Rails)
+         are boxes with a tinted header; they become sections under a 1px
+         rule, header and body on the page background. */
+      :is([class*="IssueBody-module__commentBorder__"],
+          [class*="TimelineRowBorder-module__major__"],
+          .timeline-comment) {
+        border-width: 1px 0 0 0 !important;
+        background: none !important;
+      }
+      :is([data-testid="comment-header"],
+          [class*="IssueBodyHeader-module__IssueBodyHeaderContainer__"],
+          .timeline-comment-header) {
+        background: none !important;
+        border-bottom-width: 0 !important;
+      }
+      .timeline-comment::before, .timeline-comment::after { display: none; }
+
+      .react-directory-row:hover > td {
+        background-color: #313244;
+      }
+
+      /* Rails-era boxes (issue lists, settings, many older pages): no fill,
+         and the header loses its tray. The outline stays, as the rule
+         around a pane: removing it would leave the rows unanchored. */
+      .Box { background-color: transparent; }
+      .Box-header { background-color: transparent; }
+      .Box-row--focus-gray.navigation-focus,
+      .Box-row.navigation-focus {
+        background-color: #313244;
+        box-shadow: inset 2px 0 0 #b4befe;
+      }
+
+      /* Code blocks and inputs are recessed (crust). Primer draws inputs on
+         --bgColor-default and blocks on --bgColor-muted, which are also the
+         page and the sidebars, so these are per component. The wrapper that
+         carries a block's copy button is as wide as the text column while
+         the <pre> can be narrower, so both are recessed. */
+      .markdown-body :is(pre, .snippet-clipboard-content, .highlight) {
+        background-color: #11111b;
+      }
+      .markdown-body :not(pre) > code {
+        background-color: #11111b;
+      }
+      :is(.form-control, .form-select, .FormControl-input, .FormControl-select,
+          .FormControl-textarea, .input-contrast,
+          [class*="prc-components-TextInputBaseWrapper-"]):not([disabled], [data-disabled]) {
+        background-color: #11111b;
+      }
+
+      /* Callouts (> [!NOTE]) are boxes: they keep their coloured left rule,
+         which carries the kind, and lose the rest. */
+      .markdown-alert {
+        background: none;
+      }
+
+      /* The profile's activity overview is drawn with literal SVG fills
+         (GitHub green, white points); it follows the contribution graph,
+         which tokens.user.css makes lavender. */
+      .js-highlight-blob { fill: #8d94c8; stroke: #b4befe; }
+      .activity-overview-point { fill: #1e1e2e; }
+
+      ::selection {
+        background: #353749;
+        color: #cdd6f4;
+      }
+    }
+  }
+}

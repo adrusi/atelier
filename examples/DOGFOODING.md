@@ -358,3 +358,60 @@ invent questions.
 - Claude Code itself nudges headless sessions with "the user hasn't heard
   from you in a while", which contradicts the work prompt's "nobody is
   watching". Not atelier's, but confusing for the agent.
+
+## An ambitious theme: tiled on GitHub, crates.io and Codeberg (2026-10-05)
+
+Three headless sessions in parallel, one site each, with `tiled` active: a
+structural brief (no cards, square corners, panes meeting at rules, lists as
+rows, outlined controls, badges as text). All three landed in 65–86
+minutes, each a clear departure from the site's own design that still reads
+as the site (`services/*/tiled/previews/`). Each reused the site's roarke
+styles and notes, found by globbing, as a map of the site's mechanics: "half
+the session's discovery work". Each put every call on the record; none used
+review, variants or `theme_propose`, though the theme is forming.
+
+**What the interviews said (the most useful part):**
+
+- **Coverage, not fragility, is the risk of a structural brief.** "Robust
+  over complete" guards against selectors breaking on the next deploy; the
+  agents' real risk ran the other way: broad rules (`box-shadow: none`,
+  transparent segments) reaching pages and states nobody looked at, focus
+  rings among them, and CSS written blind for components never seen
+  (alerts, toasts, logged-in pages). Summaries didn't say what wasn't
+  checked. Two asked for a **coverage map** per service (representative
+  pages and states, with URLs; agents visit or explicitly skip each, and the
+  landing reports coverage); one for a **structure scan** like
+  `contrast_scan`, listing what still looks like a card ("a structural brief
+  is mostly a long list of things that must be absent, which is exactly what
+  screenshots are bad at showing").
+- **Why no questions, despite a forming theme:** nobody was watching
+  (headless), so landing felt better than parking; `theme_propose` was a
+  deferred tool, read as "after the user answers", so proposing their own
+  interpretation seemed presumptuous; variants cost files and markers for
+  small questions. One: "I settled more theme-level questions quietly than I
+  asked about." They suggest saying plainly that theme-scope calls are the
+  most valuable output of a forming theme, letting `theme_propose` mean
+  "here's my interpretation, confirm or correct", and making variants as
+  cheap as `extraCss` (CSS per option, rendered by the tool).
+- **Calls listed twice** (all three): `task_ask`'s record calls and
+  `task_submit`'s `assumptions` have nearly the same definition, and nothing
+  said record calls go with the landing.
+- **Other themes' styles:** point briefs at them, framed as a map of the
+  site's selectors and quirks whose look doesn't carry over; and split
+  `notes.md` into site mechanics (shared) and per-theme decisions (roarke's
+  "keep pills" sat under a plain "Decisions" heading).
+- Tool problems: `matched_rules` didn't list atelier's own rules in one
+  session; `extraCss` lost to the agent's own styles; `saveAs` with
+  `attach` saved only the attach copy; `tab_navigate`'s `waitFor` timeout
+  message didn't say whether the selector was missing or the page slow.
+
+**Theme gaps they found** (for the owner): inputs (the colour table says
+crust, Shape says outlined on the page background); one rule colour for both
+pane edges and dense row dividers; spacing changes so rules meet vs "layout
+stays"; status badges as text vs filled pastels; whether code blocks and
+diff files are panes or cards; what "the one primary action in a view" means
+with none or several; focus indicators (no shadows removes most sites' focus
+rings); small metadata glyphs vs decorative icons; callouts (all used a
+status-coloured left edge); user-chosen colours like repo labels; monospace
+metadata (which, and at what size); "maybe in brackets"; card header strips;
+sites' own left-edge markers vs the lavender current-row edge.

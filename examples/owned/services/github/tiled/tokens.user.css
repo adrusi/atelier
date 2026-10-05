@@ -1,0 +1,347 @@
+/* ==UserStyle==
+@name           GitHub tokens (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Retunes GitHub's dark theme (Primer design tokens) to the tiled theme: Catppuccin Mocha, square, flat, outlined controls
+==/UserStyle== */
+
+/* GitHub's UI is built on Primer, which defines ~960 colour tokens per theme
+   as CSS custom properties. The dark theme's are on
+     [data-color-mode][data-color-mode="auto"][data-dark-theme="dark"]
+   inside @media (prefers-color-scheme: dark) (specificity 0,3,0), and on
+     [data-color-mode="dark"][data-dark-theme="dark"]
+   for users who pick Dark explicitly. Most component tokens (button-*,
+   control-*, diffBlob-*, ...) are var() aliases of the ~80 semantic ones
+   (bgColor-*, fgColor-*, borderColor-*), so overriding those carries
+   through; the component tokens that have literal values are overridden
+   below too.
+
+   The selector only matches GitHub's plain "dark" theme while the desktop
+   prefers dark: Light, Dark dimmed and the high-contrast themes are left
+   alone. html:root[...][...] is 0,3,1 and beats GitHub's 0,3,0 regardless
+   of load order.
+
+   Some parts of the page carry their own theme scope: the logged-out header
+   is <header data-color-mode="dark" data-dark-theme="dark">, where GitHub's
+   0,2,0 rule declares every token again with its original value. The
+   second selector re-applies the overrides inside those scopes. */
+
+@-moz-document domain("github.com") {
+  @media (prefers-color-scheme: dark) {
+    html:root:is([data-color-mode="auto"], [data-color-mode="dark"])[data-dark-theme="dark"],
+    html:root:is([data-color-mode="auto"], [data-color-mode="dark"])[data-dark-theme="dark"] [data-color-mode="dark"][data-dark-theme="dark"] {
+      color-scheme: dark;
+
+      /* Surfaces. Primer's "muted" background is used both for recessed
+         regions (sidebars, box headers) and for cards; chrome.user.css takes
+         it off the cards. */
+      --bgColor-default: #1e1e2e;
+      --bgColor-muted: #181825;
+      --bgColor-inset: #11111b;
+      --bgColor-emphasis: #45475a;
+      --bgColor-disabled: #1e1e2e;
+      --bgColor-black: #11111b;
+      --bgColor-white: #cdd6f4;
+      --bgColor-inverse: #cdd6f4;
+      --bgColor-neutral-muted: #0000;
+      --bgColor-neutral-emphasis: #6c7086;
+      --bgColor-transparent: #0000;
+      --page-header-bgColor: #1e1e2e;
+      --card-bgColor: #1e1e2e;
+      --overlay-bgColor: #313244;
+      --overlay-borderColor: #45475a;
+      --overlay-backdrop-bgColor: #11111b99;
+      --menu-bgColor-active: #313244;
+      --sideNav-bgColor-selected: #313244;
+      --selectMenu-bgColor-active: #313244;
+      --selectMenu-borderColor: #45475a;
+      --timelineBadge-bgColor: #1e1e2e;
+      --skeletonLoader-bgColor: #313244;
+      --avatar-bgColor: #cdd6f41a;
+      --avatar-borderColor: #0000;
+      --avatarStack-fade-bgColor-default: #45475a;
+      --avatarStack-fade-bgColor-muted: #313244;
+      --header-bgColor: #181825;
+      --header-borderColor-divider: #6c7086;
+      --header-fgColor-default: #9399b2;
+      --header-fgColor-logo: #cdd6f4;
+      --headerSearch-bgColor: #11111b;
+      --headerSearch-borderColor: #6c7086;
+      --highlight-neutral-bgColor: #f9e2af40;
+      --selection-bgColor: #353749;
+      /* Tooltips draw fgColor-onEmphasis on bgColor-emphasis. onEmphasis is
+         dark here (text on the pastel status colours), so tooltips get their
+         own pair. */
+      --tooltip-bgColor: #313244;
+      --tooltip-fgColor: #cdd6f4;
+
+      /* Text */
+      --fgColor-default: #cdd6f4;
+      --fgColor-muted: #9399b2;
+      --fgColor-neutral: #9399b2;
+      --fgColor-disabled: #6c7086;
+      --fgColor-onEmphasis: #1e1e2e;
+      --fgColor-onInverse: #1e1e2e;
+      --fgColor-white: #cdd6f4;
+      --fgColor-black: #11111b;
+
+      /* Links, and Primer's "accent" family. Primer uses accent for links,
+         informational states and focus alike; in the theme all of those are
+         the accent, lavender. */
+      --fgColor-accent: #b4befe;
+      --fgColor-link: #b4befe;
+      --bgColor-accent-muted: #b4befe1a;
+      --bgColor-accent-emphasis: #b4befe;
+      --borderColor-accent-muted: #b4befe66;
+      --borderColor-accent-emphasis: #b4befe;
+      --focus-outline-color: #b4befe;
+      --underlineNav-borderColor-active: #b4befe;
+      --underlineNav-borderColor-hover: #6c7086;
+      --reactionButton-selected-bgColor-rest: #0000;
+      --reactionButton-selected-bgColor-hover: #313244;
+      --reactionButton-selected-fgColor-rest: #b4befe;
+      --reactionButton-selected-fgColor-hover: #b4befe;
+
+      /* Status stays semantic: success green, attention yellow, severe peach,
+         danger red, done (merged, completed) mauve, sponsors pink. */
+      --fgColor-success: #a6e3a1;
+      --bgColor-success-emphasis: #a6e3a1;
+      --bgColor-success-muted: #a6e3a11f;
+      --borderColor-success-emphasis: #a6e3a1;
+      --borderColor-success-muted: #a6e3a166;
+      --fgColor-attention: #f9e2af;
+      --bgColor-attention-emphasis: #f9e2af;
+      --bgColor-attention-muted: #f9e2af1f;
+      --borderColor-attention-emphasis: #f9e2af;
+      --borderColor-attention-muted: #f9e2af66;
+      --fgColor-severe: #fab387;
+      --bgColor-severe-emphasis: #fab387;
+      --bgColor-severe-muted: #fab3871f;
+      --borderColor-severe-emphasis: #fab387;
+      --borderColor-severe-muted: #fab38766;
+      --fgColor-danger: #f38ba8;
+      --bgColor-danger-emphasis: #f38ba8;
+      --bgColor-danger-muted: #f38ba81f;
+      --borderColor-danger-emphasis: #f38ba8;
+      --borderColor-danger-muted: #f38ba866;
+      --fgColor-done: #cba6f7;
+      --bgColor-done-emphasis: #cba6f7;
+      --bgColor-done-muted: #cba6f71f;
+      --borderColor-done-emphasis: #cba6f7;
+      --borderColor-done-muted: #cba6f766;
+      --fgColor-sponsors: #f5c2e7;
+      --bgColor-sponsors-emphasis: #f5c2e7;
+      --bgColor-sponsors-muted: #f5c2e71f;
+      --borderColor-sponsors-emphasis: #f5c2e7;
+      --borderColor-sponsors-muted: #f5c2e766;
+
+      /* Rules. The theme's rule colour is muted (overlay0); Primer's
+         "default" border draws pane edges, box outlines and controls, its
+         "muted" one the dividers between rows inside a list, which would be
+         loud at overlay0 on every row, so those are surface1. */
+      --borderColor-default: #6c7086;
+      --borderColor-muted: #45475a;
+      --borderColor-emphasis: #6c7086;
+      --borderColor-disabled: #45475a;
+      --borderColor-translucent: #6c7086;
+      --borderColor-neutral-muted: #45475a;
+
+      /* Controls are outlined on the page background; hover is the surface.
+         The one primary button (GitHub's green "Code", "New issue") is the
+         accent with dark text. */
+      --control-bgColor-rest: #0000;
+      --control-bgColor-hover: #313244;
+      --control-bgColor-active: #45475a;
+      --control-bgColor-disabled: #0000;
+      --control-bgColor-selected: #313244;
+      --control-borderColor-rest: #6c7086;
+      --control-borderColor-emphasis: #9399b2;
+      --control-borderColor-disabled: #45475a;
+      --control-borderColor-selected: #b4befe;
+      --control-fgColor-rest: #cdd6f4;
+      --control-fgColor-placeholder: #9399b2;
+      --control-fgColor-disabled: #6c7086;
+      --control-transparent-bgColor-rest: #0000;
+      --control-transparent-bgColor-hover: #313244;
+      --control-transparent-bgColor-active: #45475a;
+      --control-transparent-bgColor-selected: #313244;
+      --control-checked-bgColor-rest: #b4befe;
+      --control-checked-bgColor-hover: #c6cdfe;
+      --control-checked-bgColor-active: #c6cdfe;
+      --control-checked-borderColor-rest: #b4befe;
+      --control-checked-fgColor-rest: #1e1e2e;
+      --control-checked-fgColor-disabled: #11111b;
+      --control-danger-bgColor-active: #f38ba866;
+      --control-danger-fgColor-hover: #f38ba8;
+      --controlKnob-bgColor-rest: #1e1e2e;
+      --controlKnob-borderColor-rest: #6c7086;
+      --controlKnob-bgColor-checked: #1e1e2e;
+      --controlTrack-bgColor-rest: #11111b;
+      --controlTrack-bgColor-hover: #313244;
+      --controlTrack-bgColor-active: #45475a;
+      --controlTrack-borderColor-rest: #6c7086;
+      --button-default-bgColor-rest: #0000;
+      --button-default-borderColor-rest: #6c7086;
+      --button-default-shadow-resting: none;
+      --button-primary-bgColor-rest: #b4befe;
+      --button-primary-bgColor-hover: #c6cdfe;
+      --button-primary-bgColor-active: #c6cdfe;
+      --button-primary-bgColor-disabled: #b4befe66;
+      --button-primary-borderColor-rest: #b4befe;
+      --button-primary-borderColor-hover: #c6cdfe;
+      --button-primary-borderColor-disabled: #0000;
+      --button-primary-fgColor-rest: #1e1e2e;
+      --button-primary-iconColor-rest: #1e1e2e;
+      --button-primary-fgColor-disabled: #1e1e2e99;
+      --button-primary-shadow-selected: none;
+      --buttonCounter-primary-bgColor-rest: #0000;
+      --buttonKeybindingHint-primary-bgColor-rest: #0000;
+      --buttonKeybindingHint-primary-borderColor-rest: #1e1e2e66;
+      --button-danger-bgColor-rest: #0000;
+      --button-danger-fgColor-rest: #f38ba8;
+      --button-danger-iconColor-rest: #f38ba8;
+      --button-danger-fgColor-hover: #1e1e2e;
+      --button-danger-fgColor-active: #1e1e2e;
+      --button-danger-iconColor-hover: #1e1e2e;
+      --button-danger-bgColor-hover: #f38ba8;
+      --button-danger-borderColor-rest: #6c7086;
+      --button-danger-fgColor-disabled: #f38ba880;
+      --buttonCounter-danger-bgColor-rest: #0000;
+      --buttonCounter-danger-fgColor-hover: #1e1e2e;
+      --button-outline-fgColor-rest: #b4befe;
+      --button-outline-fgColor-hover: #b4befe;
+      --button-outline-fgColor-active: #1e1e2e;
+      --button-outline-fgColor-disabled: #b4befe80;
+      --button-outline-bgColor-rest: #0000;
+      --button-outline-bgColor-hover: #313244;
+      --button-outline-bgColor-active: #b4befe;
+      --buttonCounter-outline-bgColor-rest: #0000;
+      --buttonCounter-outline-bgColor-hover: #0000;
+      --buttonCounter-outline-fgColor-rest: #b4befe;
+      --buttonCounter-outline-fgColor-hover: #b4befe;
+      --button-invisible-bgColor-hover: #313244;
+      --button-invisible-bgColor-active: #45475a;
+      --button-inactive-bgColor: #0000;
+      --button-inactive-fgColor: #6c7086;
+      --button-star-iconColor: #f9e2af;
+      --buttonCounter-default-bgColor-rest: #0000;
+      --buttonKeybindingHint-default-bgColor-rest: #0000;
+      --buttonKeybindingHint-default-borderColor-rest: #45475a;
+      --buttonKeybindingHint-inactive-bgColor: #0000;
+      --counter-borderColor: #0000;
+      --counter-bgColor-muted: #0000;
+      --counter-bgColor-emphasis: #0000;
+
+      /* Labels and badges are text (see chrome.user.css); their tokens drop
+         the fill. */
+      --label-borderColor: #0000;
+
+      /* Diffs */
+      --diffBlob-additionNum-bgColor: #a6e3a14d;
+      --diffBlob-additionWord-bgColor: #a6e3a138;
+      --diffBlob-deletionNum-bgColor: #f38ba84d;
+      --diffBlob-deletionWord-bgColor: #f38ba838;
+      --diffBlob-hunkNum-bgColor-rest: #313244;
+
+      /* Contribution graph: GitHub's green here is brand colour, not status,
+         so it's the accent, lavender mixed into mantle in quarters. */
+      --contribution-default-bgColor-0: #181825;
+      --contribution-default-bgColor-1: #3f425b;
+      --contribution-default-bgColor-2: #666b92;
+      --contribution-default-bgColor-3: #8d94c8;
+      --contribution-default-bgColor-4: #b4befe;
+      --contribution-default-borderColor-0: #cdd6f40d;
+
+      /* Syntax highlighting: Catppuccin Mocha's standard mapping */
+      --prettylights-syntax-comment: #9399b2;
+      --prettylights-syntax-constant: #fab387;
+      --prettylights-syntax-constantOtherReferenceLink: #89b4fa;
+      --prettylights-syntax-entity: #89b4fa;
+      --prettylights-syntax-entityTag: #cba6f7;
+      --prettylights-syntax-keyword: #cba6f7;
+      --prettylights-syntax-string: #a6e3a1;
+      --prettylights-syntax-stringRegexp: #f5c2e7;
+      --prettylights-syntax-variable: #eba0ac;
+      --prettylights-syntax-storageModifierImport: #cdd6f4;
+      --prettylights-syntax-bracketHighlighterAngle: #9399b2;
+      --prettylights-syntax-bracketHighlighterUnmatched: #f38ba8;
+      --prettylights-syntax-carriageReturn-bg: #f38ba8;
+      --prettylights-syntax-carriageReturn-text: #1e1e2e;
+      --prettylights-syntax-markup-bold: #cdd6f4;
+      --prettylights-syntax-markup-italic: #cdd6f4;
+      --prettylights-syntax-markup-heading: #89b4fa;
+      --prettylights-syntax-markup-list: #f9e2af;
+      --prettylights-syntax-markup-changed-bg: #fab3871f;
+      --prettylights-syntax-markup-changed-text: #fab387;
+      --prettylights-syntax-markup-deleted-bg: #f38ba81f;
+      --prettylights-syntax-markup-deleted-text: #f38ba8;
+      --prettylights-syntax-markup-inserted-bg: #a6e3a11f;
+      --prettylights-syntax-markup-inserted-text: #a6e3a1;
+      --prettylights-syntax-markup-ignored-bg: #45475a;
+      --prettylights-syntax-markup-ignored-text: #cdd6f4;
+      --prettylights-syntax-metaDiffRange: #cba6f7;
+      --prettylights-syntax-sublimeLinterGutterMark: #45475a;
+      --codeMirror-syntax-fgColor-comment: #9399b2;
+      --codeMirror-syntax-fgColor-constant: #fab387;
+      --codeMirror-syntax-fgColor-entity: #89b4fa;
+      --codeMirror-syntax-fgColor-keyword: #cba6f7;
+      --codeMirror-syntax-fgColor-storage: #cba6f7;
+      --codeMirror-syntax-fgColor-string: #a6e3a1;
+      --codeMirror-syntax-fgColor-support: #fab387;
+      --codeMirror-syntax-fgColor-variable: #eba0ac;
+
+      /* Terminal colours (Actions logs): Catppuccin's ANSI palette */
+      --ansi-black: #45475a;
+      --ansi-blackBright: #585b70;
+      --ansi-red: #f38ba8;
+      --ansi-redBright: #f38ba8;
+      --ansi-green: #a6e3a1;
+      --ansi-greenBright: #a6e3a1;
+      --ansi-yellow: #f9e2af;
+      --ansi-yellowBright: #f9e2af;
+      --ansi-blue: #89b4fa;
+      --ansi-blueBright: #89b4fa;
+      --ansi-magenta: #f5c2e7;
+      --ansi-magentaBright: #f5c2e7;
+      --ansi-cyan: #94e2d5;
+      --ansi-cyanBright: #94e2d5;
+      --ansi-white: #bac2de;
+      --ansi-whiteBright: #a6adc8;
+      --ansi-gray: #6c7086;
+
+      /* Flat: no shadows. Floating things (menus, dialogs) are outlined in
+         surface1 instead, drawn as a spread-only shadow so nothing moves. */
+      --shadow-inset: none;
+      --shadow-resting-xsmall: none;
+      --shadow-resting-small: none;
+      --shadow-resting-medium: none;
+      --shadow-floating-small: 0 0 0 1px #45475a;
+      --shadow-floating-medium: 0 0 0 1px #45475a;
+      --shadow-floating-large: 0 0 0 1px #45475a;
+      --shadow-floating-xlarge: 0 0 0 1px #45475a;
+      --shadow-floating-legacy: 0 0 0 1px #45475a;
+      --avatar-shadow: none;
+    }
+  }
+
+  /* Shape and type are theme-independent tokens on :root. Scoped to the
+     same condition so the light theme is left alone. Every radius is 0,
+     "full" included, which squares labels, topic tags, state badges and
+     counters; the few things that are round by nature (avatars, radio
+     buttons, notification dots) are put back in chrome.user.css. */
+  @media (prefers-color-scheme: dark) {
+    html:root:is([data-color-mode="auto"], [data-color-mode="dark"])[data-dark-theme="dark"] {
+      --borderRadius-small: 0;
+      --borderRadius-medium: 0;
+      --borderRadius-default: 0;
+      --borderRadius-large: 0;
+      --borderRadius-full: 0;
+      --overlay-borderRadius: 0;
+      --fontStack-sansSerif: "Noto Sans", sans-serif;
+      font-stretch: condensed;
+      --fontStack-sansSerifDisplay: "Noto Sans", sans-serif;
+      --fontStack-system: "Noto Sans", sans-serif;
+      --fontStack-monospace: "Noto Sans Mono", monospace;
+    }
+  }
+}

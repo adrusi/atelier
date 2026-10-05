@@ -1,0 +1,86 @@
+/* ==UserStyle==
+@name           Codeberg front page (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    The logged-out landing page at codeberg.org/, flat, in Catppuccin Mocha
+==/UserStyle== */
+
+/* The landing page (homepage.css) is a marketing page with literal colours
+   rather than Forgejo's tokens: a near-black #030c12 page, mountain and
+   circuit artwork, a teal box, teal stats and big yellow buttons. Logged
+   in, / is the dashboard, which the other files cover. */
+
+@-moz-document regexp("https://codeberg\\.org/(\\?.*)?") {
+  @media (prefers-color-scheme: dark) {
+    html:root:is([data-theme$="-auto"], [data-theme$="-dark"]) {
+      div.full.height,
+      main header,
+      main section#home-section-about .home-section-about-box-container,
+      main section#home-section-support {
+        background-color: #1e1e2e;
+        color: #cdd6f4;
+      }
+      /* The artwork is drawn on its own near-black, which shows as
+         rectangles on any theme surface, and is decorative. The site drops
+         it on narrow screens; here it's dropped at every width. */
+      main header,
+      main section#home-section-about .home-section-about-box-container {
+        background-image: none !important;
+      }
+      /* The about box is pulled up over the header by a negative margin;
+         this leaves room for it where the mountains were */
+      main header .header-row { padding-bottom: 10em; }
+
+      /* A blurred halo behind the logo, to lift it off the artwork */
+      main header .header-logo svg { display: none; }
+      main header .header-title > div > p a:is(:hover, :focus) { color: #b4befe; }
+      main header .header-social-links a { color: #9399b2; }
+      main header .header-social-links a:is(:hover, :focus) { color: #b4befe; }
+
+      /* The teal box is no box: its three columns sit on the page between
+         two rules */
+      main section#home-section-about {
+        color: #cdd6f4;
+        p a { color: #b4befe; }
+      }
+      main section#home-section-about .home-section-about-box-container .home-section-about-box {
+        background: transparent;
+        border: none;
+        border-top: 1px solid #45475a;
+        border-bottom: 1px solid #45475a;
+        div h3 { color: #cdd6f4; }
+      }
+
+      /* Stats under the box: labels secondary, figures in the text colour
+         and the monospace face, as counts */
+      main section#home-section-about .home-section-about-container div {
+        color: #9399b2;
+        p { color: #cdd6f4; font-family: "Noto Sans Mono", monospace; font-stretch: condensed; }
+      }
+      main section#home-section-about .home-section-about-container img { filter: none; }
+
+      main section#home-section-support hr { color: #45475a; }
+
+      /* Yellow buttons: "Register now." is the page's one primary action
+         (lavender fill); the three support buttons are outlined. */
+      main a.button,
+      main section#home-section-about .home-section-about-box-container .home-section-about-box div.home-section-about-register-button-container a {
+        background-color: transparent;
+        border: 1px solid #6c7086;
+        color: #cdd6f4;
+        svg { filter: none; color: #b4befe; fill: currentColor; }
+        &:is(:hover, :focus) {
+          background-color: #313244;
+          color: #cdd6f4;
+          svg { filter: none; }
+        }
+      }
+      main section#home-section-about .home-section-about-box-container .home-section-about-box div.home-section-about-register-button-container a {
+        background-color: #b4befe;
+        border-color: #b4befe;
+        color: #1e1e2e;
+        &:is(:hover, :focus) { background-color: #c6cdfe; color: #1e1e2e; }
+      }
+    }
+  }
+}

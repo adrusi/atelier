@@ -1,0 +1,69 @@
+/* ==UserStyle==
+@name           crates.io READMEs (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Crate READMEs on crates.io: code blocks, tables, alerts and Catppuccin Mocha syntax highlighting
+==/UserStyle== */
+
+/* READMEs render inside .wrapper (a Svelte component). Code is highlighted
+   by Shiki with the github-light/github-dark themes, as inline
+   style="color:light-dark(#light, #dark)" on each span, so the dark colours
+   are matched by substring and overridden with !important (the only way
+   past an inline style). The list covers github-dark's palette. */
+
+@-moz-document domain("crates.io") {
+  html:root[data-color-scheme="dark"] .wrapper pre {
+    background-color: #11111b;
+    border-radius: 0;
+  }
+  html:root[data-color-scheme="dark"] .wrapper :is(p, li, td, th, h1, h2, h3, h4) code {
+    background-color: #11111b;
+    border-radius: 0;
+  }
+  html:root[data-color-scheme="dark"] .wrapper kbd {
+    background-color: transparent;
+    border: 1px solid #6c7086;
+    box-shadow: none;
+    border-radius: 0;
+  }
+  html:root[data-color-scheme="dark"] .wrapper table :is(th, td) {
+    border-color: #6c7086;
+    background-color: transparent;
+  }
+  html:root[data-color-scheme="dark"] .wrapper hr {
+    background-color: #6c7086;
+    border-color: #6c7086;
+    height: 1px;
+  }
+  html:root[data-color-scheme="dark"] .wrapper :is(h1, h2) {
+    border-bottom-color: #6c7086;
+  }
+  html:root[data-color-scheme="dark"] .wrapper blockquote {
+    color: #9399b2;
+    border-left-color: #6c7086;
+  }
+  html:root[data-color-scheme="dark"] .wrapper a:visited {
+    color: #cba6f7;
+  }
+
+  /* GitHub-style alerts ([!NOTE] and so on) */
+  html:root[data-color-scheme="dark"] .wrapper .markdown-alert {
+    --fg-color-note: #89b4fa;
+    --fg-color-tip: #a6e3a1;
+    --fg-color-important: #cba6f7;
+    --fg-color-warning: #f9e2af;
+    --fg-color-caution: #f38ba8;
+  }
+
+  /* Syntax highlighting: github-dark to Catppuccin Mocha. */
+  html:root[data-color-scheme="dark"] .wrapper pre span[style*="#E1E4E8" i] { color: #cdd6f4 !important; } /* plain text, punctuation */
+  html:root[data-color-scheme="dark"] .wrapper pre span[style*="#F97583" i] { color: #cba6f7 !important; } /* keywords, operators */
+  html:root[data-color-scheme="dark"] .wrapper pre span[style*="#B392F0" i] { color: #89b4fa !important; } /* functions, types */
+  html:root[data-color-scheme="dark"] .wrapper pre span[style*="#79B8FF" i] { color: #fab387 !important; } /* constants, numbers */
+  html:root[data-color-scheme="dark"] .wrapper pre span[style*="#9ECBFF" i] { color: #a6e3a1 !important; } /* strings */
+  html:root[data-color-scheme="dark"] .wrapper pre span[style*="#6A737D" i] { color: #9399b2 !important; } /* comments */
+  html:root[data-color-scheme="dark"] .wrapper pre span[style*="#FFAB70" i] { color: #eba0ac !important; } /* parameters, variables */
+  html:root[data-color-scheme="dark"] .wrapper pre span[style*="#85E89D" i] { color: #94e2d5 !important; } /* tags */
+  html:root[data-color-scheme="dark"] .wrapper pre span[style*="#DBEDFF" i] { color: #f5c2e7 !important; } /* regexps */
+  html:root[data-color-scheme="dark"] .wrapper pre span[style*="#FDAEB7" i] { color: #f38ba8 !important; } /* invalid, deleted */
+}
