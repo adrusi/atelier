@@ -191,7 +191,12 @@ impl Store {
     fn expire(&self, task: &mut Task, now: u64) -> Result<bool> {
         if task.state == TaskState::Claimed && task.lease.as_ref().is_some_and(|l| l.expires < now)
         {
-            task.state = TaskState::Queued;
+            // A task held while the user answers parks if the hold runs out.
+            task.state = if self.awaits_answers(&task.id)? {
+                TaskState::Waiting
+            } else {
+                TaskState::Queued
+            };
             task.lease = None;
             task.updated = now;
             return Ok(true);

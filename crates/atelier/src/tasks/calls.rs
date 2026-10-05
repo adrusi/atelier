@@ -114,8 +114,20 @@ impl Store {
         };
         self.save_batch(&batch)?;
         if batch.wait != Wait::Record {
-            task.state = TaskState::Waiting;
-            task.lease = None;
+            match p.hold_ms {
+                // Held: still the session's, until the answers come or the hold ends.
+                Some(hold) if hold > 0 => {
+                    task.state = TaskState::Claimed;
+                    task.lease = Some(atelier_proto::Lease {
+                        session: p.session.clone(),
+                        expires: now + hold.min(super::LEASE_MS),
+                    });
+                }
+                _ => {
+                    task.state = TaskState::Waiting;
+                    task.lease = None;
+                }
+            }
             task.updated = now;
             self.save(&task)?;
         } else if task.state == TaskState::Queued {
@@ -180,6 +192,27 @@ impl Store {
             })
             .unwrap_or(0)
             + 1
+    }
+
+    /// Parks a task this session holds that has a batch waiting for answers.
+    pub fn park(&self, id: &str, session: &str, now: u64) -> Result<Task> {
+        let mut task = self.held(id, session, now)?;
+        if !self.awaits_answers(id)? {
+            return Err(format!("task {id} has no calls waiting for answers"));
+        }
+        task.state = TaskState::Waiting;
+        task.lease = None;
+        task.updated = now;
+        self.save(&task)?;
+        Ok(task)
+    }
+
+    /// Whether a task has a batch still waiting for answers before it can land.
+    pub(super) fn awaits_answers(&self, task: &str) -> Result<bool> {
+        Ok(self
+            .batches(true, Some(task))?
+            .iter()
+            .any(|b| b.wait != Wait::Record))
     }
 
     /// Batches, newest first: all, or only those still waiting for an
@@ -437,6 +470,7 @@ mod tests {
                     wait: Wait::Record,
                     summary: None,
                     calls: vec![ask, call("Kept the pill shapes", Some("teal"))],
+                    hold_ms: None,
                 },
                 2000,
             )
@@ -463,6 +497,7 @@ mod tests {
                     wait: Wait::Review,
                     summary: Some("first pass".into()),
                     calls: vec![c, call("Hide the banner?", None)],
+                    hold_ms: None,
                 },
                 2000,
             )
@@ -525,6 +560,7 @@ mod tests {
                     wait: Wait::Record,
                     summary: None,
                     calls: vec![call("Header accent", Some("teal"))],
+                    hold_ms: None,
                 },
                 1500,
             )
@@ -564,6 +600,63 @@ mod tests {
     }
 
     #[test]
+    fn a_held_review_stays_claimed_and_parks_when_the_hold_runs_out() {
+        let e = env();
+        create(&e, Some("site"));
+        let t = e.store.claim(None, "s1", 1000).unwrap().unwrap();
+        let mut c = call("Raised or recessed?", Some("teal"));
+        c.wait = Some(Wait::Review);
+        let (task, batch) = e
+            .store
+            .post(
+                CallPostParams {
+                    task: t.id.clone(),
+                    session: "s1".into(),
+                    wait: Wait::Record,
+                    summary: None,
+                    calls: vec![c],
+                    hold_ms: Some(60_000),
+                },
+                2000,
+            )
+            .unwrap();
+        assert_eq!(task.state, TaskState::Claimed);
+        // Answered within the hold: the session still has it, nothing requeued.
+        let (_, requeued, _) = e
+            .store
+            .answer(
+                CallAnswerParams {
+                    batch: batch.id,
+                    answers: vec![],
+                },
+                None,
+                3000,
+            )
+            .unwrap();
+        assert!(requeued.is_none());
+        assert_eq!(e.store.get(&t.id).unwrap().state, TaskState::Claimed);
+
+        // Another held review, unanswered past the hold: it waits, not queued.
+        let mut c = call("Again?", None);
+        c.wait = Some(Wait::Review);
+        e.store
+            .post(
+                CallPostParams {
+                    task: t.id.clone(),
+                    session: "s1".into(),
+                    wait: Wait::Record,
+                    summary: None,
+                    calls: vec![c],
+                    hold_ms: Some(1000),
+                },
+                4000,
+            )
+            .unwrap();
+        let later = e.store.list(None, 6000).unwrap();
+        assert_eq!(later[0].state, TaskState::Waiting);
+    }
+
+    #[test]
     fn a_choice_with_reasons_is_trimmed_to_its_option() {
         let mut c = call("q", Some("mauve: it matches the header"));
         normalise_choice(&mut c);
@@ -585,6 +678,7 @@ mod tests {
                 wait: Wait::Block,
                 summary: None,
                 calls: vec![c],
+                hold_ms: None,
             },
             2000,
         );

@@ -18,6 +18,8 @@ use std::time::{Duration, Instant};
 const HEARTBEAT_EVERY: Duration = Duration::from_secs(60);
 /// The longest `task_claim` waits for work.
 const MAX_WAIT_SECS: u64 = 300;
+/// The longest task_ask holds a task while the user answers (a lease's length).
+const MAX_HOLD_SECS: u64 = 600;
 
 fn task_prop() -> Value {
     json!({ "type": "string", "description": "The task's id. Optional while you hold just one task." })
@@ -135,6 +137,7 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
                 "task": task_prop(),
                 "wait": { "type": "string", "enum": ["record", "review", "block"], "description": "For calls that don't give their own. Default record." },
                 "summary": { "type": "string", "description": "A line to go with the batch, e.g. what state the work is in." },
+                "waitForAnswers": { "type": "integer", "description": "With review or block, when the user may be around to answer soon: keep the task, and wait this many seconds (up to 600) for the answers, which then come back to you here. If they don't come in time, the task waits for them as usual. Not useful in a session nobody is watching." },
                 "handoff": { "type": "string", "description": "With review or block: a note for whoever picks the task up after the answers (perhaps you): what's done, what's left." },
                 "calls": { "type": "array", "items": { "type": "object", "properties": {
                     "question": { "type": "string" },
@@ -229,7 +232,8 @@ fn presence() -> &'static str {
         _ => {
             "I started this session (or asked for it), so I may be here, but don't count on it. Put questions \
              about the work to me with task_ask: they reach me in the browser with your screenshots, whether \
-             or not I'm watching this conversation, and they stay with the task. Each task's brief says how \
+             or not I'm watching this conversation, and they stay with the task. When you need an answer \
+             before going on, task_ask can wait a few minutes for me (waitForAnswers) before parking the task. Each task's brief says how \
              readily to ask. Quick things about the session itself you can just ask here."
         }
     }
@@ -521,6 +525,11 @@ impl Server {
             .tree_of(&id)
             .ok_or_else(|| format!("you don't hold task {id}"))?;
         let wait = args.get("wait").and_then(Value::as_str).unwrap_or("record");
+        let hold = args
+            .get("waitForAnswers")
+            .and_then(Value::as_u64)
+            .filter(|s| *s > 0)
+            .map(|s| s.min(MAX_HOLD_SECS));
         let calls: Vec<Value> = args
             .get("calls")
             .and_then(Value::as_array)
@@ -557,8 +566,18 @@ impl Server {
             .collect();
         let batch: Batch = parse(self.daemon_call(
             atelier_proto::call_method::POST,
-            json!({ "task": id, "session": self.session, "wait": wait, "summary": args.get("summary"), "calls": calls }),
+            json!({ "task": id, "session": self.session, "wait": wait, "summary": args.get("summary"), "calls": calls, "holdMs": hold.map(|s| (s + 30) * 1000) }),
         )?)?;
+        if batch.wait != Wait::Record
+            && let Some(secs) = hold
+        {
+            return self.await_answers(
+                &id,
+                &batch.id,
+                secs,
+                args.get("handoff").and_then(Value::as_str),
+            );
+        }
         if batch.wait != Wait::Record
             && let Some(h) = args.get("handoff").and_then(Value::as_str)
         {
@@ -583,6 +602,57 @@ impl Server {
                 )
             }
         })
+    }
+
+    /// Holds a task while the user answers a batch, for up to `secs`. If
+    /// they do, the answers come back here and the session carries on;
+    /// if not, the task parks as it would have at once.
+    fn await_answers(
+        &mut self,
+        task: &str,
+        batch: &str,
+        secs: u64,
+        handoff: Option<&str>,
+    ) -> Result<String, String> {
+        let deadline = Instant::now() + Duration::from_secs(secs);
+        loop {
+            let batches: Vec<atelier_proto::Batch> = parse(self.daemon_call(
+                atelier_proto::call_method::LIST,
+                json!({ "open": false, "task": task }),
+            )?)?;
+            if let Some(b) = batches
+                .iter()
+                .find(|b| b.id == batch && b.answered.is_some())
+            {
+                // Answered: renew the lease (the hold set it short), and go on.
+                self.daemon_call(
+                    tm::HEARTBEAT,
+                    json!({ "id": task, "session": self.session }),
+                )?;
+                self.last_heartbeat = Some(Instant::now());
+                return Ok(format!(
+                    "The user answered. You still hold task {task}; carry on with their answers.\n{}",
+                    batch_text(b)
+                ));
+            }
+            if Instant::now() >= deadline {
+                break;
+            }
+            std::thread::sleep(Duration::from_secs(2));
+        }
+        self.daemon_call(
+            atelier_proto::call_method::PARK,
+            json!({ "task": task, "session": self.session }),
+        )?;
+        if let Some(h) = handoff {
+            self.daemon_call(tm::NOTE, json!({ "id": task, "handoff": h }))?;
+        }
+        self.held.remove(task);
+        Ok(format!(
+            "No answer within {secs}s, so task {task} now waits for the user: nothing has landed, you don't hold \
+             it any more, and its tree is kept. It comes back to the queue with the answers, for whoever claims it \
+             next (perhaps you). Meanwhile, task_list for other work."
+        ))
     }
 
     fn theme_propose(&mut self, args: &Value) -> Result<String, String> {
@@ -777,45 +847,7 @@ fn brief(
     if !batches.is_empty() {
         out.push_str("\n## Calls put to the user\n");
         for b in batches.iter().rev() {
-            let wait = match b.wait {
-                atelier_proto::Wait::Record => "for the record",
-                atelier_proto::Wait::Review => "for review",
-                atelier_proto::Wait::Block => "blocking",
-            };
-            let status = if b.answered.is_some() {
-                "answered"
-            } else {
-                "not answered yet"
-            };
-            let _ = writeln!(out, "\n{} ({wait}, {status}):", b.id);
-            for c in &b.calls {
-                let _ = write!(out, "- {}", c.question);
-                if c.wait.is_some_and(|w| w != b.wait) {
-                    let _ = write!(out, " (for the record)");
-                }
-                if let Some(choice) = &c.choice {
-                    let _ = write!(out, " [your call: {choice}]");
-                }
-                match &c.answer {
-                    Some(a) if a.kept => {
-                        let _ = write!(out, " → kept");
-                    }
-                    Some(a) => {
-                        if let Some(ch) = a
-                            .choice
-                            .as_ref()
-                            .filter(|ch| Some(*ch) != c.choice.as_ref())
-                        {
-                            let _ = write!(out, " → the user chose: {ch}");
-                        }
-                        if let Some(n) = &a.note {
-                            let _ = write!(out, " → the user said: {n}");
-                        }
-                    }
-                    None => {}
-                }
-                out.push('\n');
-            }
+            out.push_str(&batch_text(b));
         }
         out.push_str(
             "\nIf an answer settles something that will matter beyond this task, record it so nobody asks \
@@ -918,6 +950,51 @@ fn asking(stage: &str, stats: &atelier_proto::CallStats) -> String {
             "\nSo far on this theme, the user kept {} of the {} calls they answered that came with a choice.",
             stats.kept, stats.answered
         );
+    }
+    out
+}
+
+/// A batch of calls, with answers if it has them, as briefs show it.
+fn batch_text(b: &atelier_proto::Batch) -> String {
+    let mut out = String::new();
+    let wait = match b.wait {
+        atelier_proto::Wait::Record => "for the record",
+        atelier_proto::Wait::Review => "for review",
+        atelier_proto::Wait::Block => "blocking",
+    };
+    let status = if b.answered.is_some() {
+        "answered"
+    } else {
+        "not answered yet"
+    };
+    let _ = writeln!(out, "\n{} ({wait}, {status}):", b.id);
+    for c in &b.calls {
+        let _ = write!(out, "- {}", c.question);
+        if c.wait.is_some_and(|w| w != b.wait) {
+            let _ = write!(out, " (for the record)");
+        }
+        if let Some(choice) = &c.choice {
+            let _ = write!(out, " [your call: {choice}]");
+        }
+        match &c.answer {
+            Some(a) if a.kept => {
+                let _ = write!(out, " → kept");
+            }
+            Some(a) => {
+                if let Some(ch) = a
+                    .choice
+                    .as_ref()
+                    .filter(|ch| Some(*ch) != c.choice.as_ref())
+                {
+                    let _ = write!(out, " → the user chose: {ch}");
+                }
+                if let Some(n) = &a.note {
+                    let _ = write!(out, " → the user said: {n}");
+                }
+            }
+            None => {}
+        }
+        out.push('\n');
     }
     out
 }

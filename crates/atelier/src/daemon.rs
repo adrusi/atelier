@@ -1188,6 +1188,18 @@ fn call_call(
             changed(&batch);
             Ok(json!(batch))
         }
+        cm::PARK => {
+            let s = |k: &str| {
+                params
+                    .get(k)
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            };
+            let task = store.park(&s("task"), &s("session"), now).map_err(failed)?;
+            announce(&task);
+            Ok(json!(task))
+        }
         cm::LIST => {
             let open = params.get("open").and_then(Value::as_bool).unwrap_or(true);
             let task = params.get("task").and_then(Value::as_str);

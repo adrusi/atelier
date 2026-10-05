@@ -321,6 +321,9 @@ pub mod call_method {
     pub const ATTACHMENT: &str = "call/attachment";
     /// Notification from the daemon: a [`Batch`] was posted or answered.
     pub const CHANGED: &str = "call/changed";
+    /// `{ "task": …, "session": … }` → [`Task`]: parks a task the session
+    /// holds that has a batch waiting for answers (when a hold runs out).
+    pub const PARK: &str = "call/park";
     /// `{ "theme": … }` → [`CallStats`]: how often the user kept agents' calls.
     pub const STATS: &str = "call/stats";
     /// `{ "stage"?: "forming" | "settled" }` → `{ "theme": …, "stage": … }`:
@@ -673,6 +676,12 @@ pub struct CallPostParams {
     /// Calls with `attachments` as paths to copy in (from the task's
     /// directory); `answer` is ignored.
     pub calls: Vec<Call>,
+    /// For a batch that waits: keep the task claimed for up to this long,
+    /// because the user may answer soon, instead of parking it at once. If
+    /// the hold runs out unanswered, the task parks then.
+    #[serde(default)]
+    #[ts(optional)]
+    pub hold_ms: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

@@ -125,6 +125,26 @@ try {
     assert.match(brief, /## Handoff from whoever worked on this before\n\nStyles done; previews still to take\./);
   });
 
+  await check("a review can hold the task while the user answers, and the answer comes straight back", async () => {
+    const asked = tool("task_ask", {
+      calls: [{ question: "Softer or brighter text?", options: ["softer", "brighter"], choice: "softer", wait: "review" }],
+      waitForAnswers: 30,
+    });
+    // The user answers while the agent waits.
+    let id = "";
+    for (let i = 0; i < 40 && !id; i++) {
+      await new Promise((r) => setTimeout(r, 250));
+      id = atelier("calls").match(/^(\S+-q\d+)\s+review/m)?.[1] ?? "";
+    }
+    assert.ok(id, "the batch was posted");
+    assert.match(atelier("task", "list"), /claimed\s+revise/, "still claimed while held");
+    atelier("answer", id, JSON.stringify([{ choice: "brighter" }]));
+    const out = await asked;
+    assert.match(out, /^The user answered\. You still hold task/);
+    assert.match(out, /Softer or brighter text\? \[your call: softer\] → the user chose: brighter/);
+    assert.match(await tool("task_info"), /^# Task/);
+  });
+
   await check("a theme-level answer becomes a THEME.md proposal, which lands only when accepted", async () => {
     const out = await tool("theme_propose", {
       summary: "Headings stay in the text colour",
