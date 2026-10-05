@@ -1,0 +1,68 @@
+/* ==UserStyle==
+@name           MDN home (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    MDN's home page: plain blocks instead of cards, the contributions list as rows
+==/UserStyle== */
+
+/* The home page's selectors are readable BEM classes in the light DOM
+   (.featured-articles__article etc.), stable across MDN's deploys so far.
+   Its two dark bands (.homepage--dark: the hero, the contributor spotlight)
+   are mantle panes edge to edge, which the theme allows as they are. */
+
+@-moz-document domain("developer.mozilla.org") {
+  /* The mandala beside the hero is background art. */
+  html .homepage-header__mandala {
+    display: none;
+  }
+
+  /* Featured articles and latest news: a grid of plain blocks. Their frames
+     go; the text lines up with the section headings; the grid's gap keeps
+     them apart. */
+  html :is(.featured-articles__article, .latest-news__item) {
+    border: none;
+    border-radius: 0;
+    padding-inline: 0;
+  }
+  html .latest-news__date {
+    color: var(--tl-dim);
+    font-family: var(--tl-mono);
+  }
+
+  /* Recent contributions: rows between rules, with no frame around the
+     list. The hovered row gets the surface colour. */
+  html .recent-contributions {
+    border: none;
+    border-block: 1px solid var(--tl-rule);
+    border-radius: 0;
+  }
+  html .recent-contributions > li {
+    border-top-color: var(--tl-rule);
+    border-radius: 0;
+  }
+  html .recent-contributions > li:hover {
+    background-color: var(--tl-surface);
+  }
+  html .recent-contributions__date {
+    color: var(--tl-dim);
+    font-family: var(--tl-mono);
+  }
+
+  /* Contributor spotlight: the name is set on a slab of the text colour;
+     here it's a link in its own weight and case, with no slab. */
+  html .homepage-contributor-spotlight__name {
+    background-color: transparent;
+    color: var(--tl-accent);
+    padding-inline: 0;
+  }
+
+  /* Buttons in the light DOM ("Get involved"): square. The primary one is
+     the region's one filled action, in lavender. */
+  html .button {
+    border-radius: 0;
+  }
+  html .button[data-variant="primary"] {
+    background-color: var(--tl-accent);
+    color: var(--tl-on-accent);
+  }
+}

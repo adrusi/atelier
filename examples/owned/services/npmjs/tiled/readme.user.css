@@ -1,0 +1,95 @@
+/* ==UserStyle==
+@name           npm READMEs (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Package READMEs on npm: links, code blocks, tables and Catppuccin Mocha syntax highlighting
+==/UserStyle== */
+
+/* The README is div#readme, GitHub-flavoured markdown highlighted with
+   GitHub's .pl-* classes. npm's own dark rules for it are
+   [data-color-mode='dark'] ._6d9832ac .pl-k and so on, some !important,
+   so these are too. */
+
+@-moz-document domain("npmjs.com") {
+  html[data-color-mode="dark"] #readme {
+    color: #cdd6f4 !important;
+  }
+  html[data-color-mode="dark"] #readme :is(p, li, td, th, blockquote, strong) {
+    color: inherit !important;
+  }
+  html[data-color-mode="dark"] #readme :is(h1, h2, h3, h4, h5, h6) {
+    color: #cdd6f4 !important;
+    border-bottom-color: #6c7086 !important;
+  }
+  html[data-color-mode="dark"] #readme a:not(.anchor, .heading-link) {
+    color: #b4befe !important;
+  }
+  html[data-color-mode="dark"] #readme a:not(.anchor, .heading-link):visited {
+    color: #cba6f7 !important;
+  }
+
+  /* Code blocks are panes: square, framed, crust. */
+  html[data-color-mode="dark"] #readme pre {
+    background-color: #11111b !important;
+    border: 1px solid #45475a !important;
+    color: #cdd6f4 !important;
+  }
+  html[data-color-mode="dark"] #readme code {
+    background-color: #11111b !important;
+    color: #cdd6f4 !important;
+  }
+  html[data-color-mode="dark"] #readme pre code {
+    background-color: transparent !important;
+  }
+  /* A heading that is all code (# `react`) reads as a heading. */
+  html[data-color-mode="dark"] #readme :is(h1, h2, h3, h4) code {
+    background-color: transparent !important;
+  }
+
+  html[data-color-mode="dark"] #readme :is(table, td, th) {
+    border-color: #6c7086 !important;
+    background-color: transparent !important;
+  }
+  html[data-color-mode="dark"] #readme hr {
+    background-color: #6c7086 !important;
+    border-color: #6c7086 !important;
+    height: 1px;
+  }
+  html[data-color-mode="dark"] #readme blockquote {
+    color: #9399b2 !important;
+    border-left: 2px solid #6c7086 !important;
+    background-color: transparent !important;
+  }
+  html[data-color-mode="dark"] #readme kbd {
+    background-color: transparent !important;
+    border: 1px solid #6c7086 !important;
+    color: #cdd6f4 !important;
+  }
+
+  /* GitHub-style alerts: a 2px left edge in the status colour. */
+  html[data-color-mode="dark"] #readme .markdown-alert {
+    background-color: transparent !important;
+    border-left-width: 2px !important;
+  }
+  html[data-color-mode="dark"] #readme .markdown-alert-note { border-left-color: #89b4fa !important; }
+  html[data-color-mode="dark"] #readme .markdown-alert-tip { border-left-color: #a6e3a1 !important; }
+  html[data-color-mode="dark"] #readme .markdown-alert-important { border-left-color: #cba6f7 !important; }
+  html[data-color-mode="dark"] #readme .markdown-alert-warning { border-left-color: #f9e2af !important; }
+  html[data-color-mode="dark"] #readme .markdown-alert-caution { border-left-color: #f38ba8 !important; }
+
+  /* Syntax highlighting: GitHub's .pl-* classes to Catppuccin Mocha. */
+  html[data-color-mode="dark"] #readme :is(.pl-k, .pl-s .pl-v) { color: #cba6f7 !important; } /* keywords */
+  html[data-color-mode="dark"] #readme :is(.pl-s, .pl-pds, .pl-s .pl-pse .pl-s1, .pl-sr .pl-sra) { color: #a6e3a1 !important; } /* strings */
+  html[data-color-mode="dark"] #readme :is(.pl-sr, .pl-sr .pl-cce, .pl-sr .pl-sre) { color: #f5c2e7 !important; } /* regexps */
+  html[data-color-mode="dark"] #readme :is(.pl-c, .pl-c span) { color: #9399b2 !important; } /* comments */
+  html[data-color-mode="dark"] #readme .pl-c1 { color: #fab387 !important; } /* constants, numbers */
+  html[data-color-mode="dark"] #readme :is(.pl-en, .pl-e) { color: #89b4fa !important; } /* functions */
+  html[data-color-mode="dark"] #readme .pl-v { color: #f9e2af !important; } /* classes, types */
+  html[data-color-mode="dark"] #readme :is(.pl-smi, .pl-s1, .pl-smw) { color: #cdd6f4 !important; } /* identifiers */
+  html[data-color-mode="dark"] #readme .pl-kos { color: #9399b2 !important; } /* punctuation */
+  html[data-color-mode="dark"] #readme .pl-ent { color: #89b4fa !important; } /* tags */
+  html[data-color-mode="dark"] #readme .pl-ii { color: #f38ba8 !important; } /* invalid */
+  html[data-color-mode="dark"] #readme .pl-mi1 { color: #a6e3a1 !important; } /* diff inserted */
+  html[data-color-mode="dark"] #readme .pl-md { color: #f38ba8 !important; } /* diff deleted */
+  html[data-color-mode="dark"] #readme .pl-mh { color: #89b4fa !important; } /* markup headings */
+}

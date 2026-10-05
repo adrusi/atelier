@@ -1,0 +1,33 @@
+description = "pkg.go.dev, the Go package documentation site"
+summary = "pkg.go.dev in its dark scheme: the site header and menus, the home page, search results, package pages (header, outline, README, documentation with declarations, examples and deprecated items, the details column), the versions and imported-by tabs, the jump-to and shortcuts dialogs, the footer and the cookie notice. An explicit Light choice from the footer's theme toggle is left alone."
+
+[[prerequisites]]
+description = "Leave pkg.go.dev's theme (the Theme Toggle in the footer) on auto, with the desktop set to dark, or pick dark. The style doesn't restyle the light theme."
+check = "html:not([data-theme=\"light\"])"
+
+[[pages]]
+url = "https://pkg.go.dev/net/http"
+what = "Standard library package: header, outline, overview, index, declarations, examples, deprecated items, details column"
+states = ["scrolled down (compact sticky header)", "an example opened (Run/Format/Share)", "jump-to dialog open (press f, type a name)", "header menu hovered (Docs)"]
+
+[[pages]]
+url = "https://pkg.go.dev/github.com/spf13/cobra"
+what = "Third-party module with a README (collapsed, then expanded) and links in the details column"
+states = ["README expanded"]
+
+[[pages]]
+url = "https://pkg.go.dev/search?q=yaml"
+what = "Package search results, including a vulnerability chip"
+states = ["row hovered", "Symbols tab"]
+
+[[pages]]
+url = "https://pkg.go.dev/"
+what = "Home page: search, tips carousel, FAQ band in the footer"
+
+[[pages]]
+url = "https://pkg.go.dev/github.com/spf13/cobra?tab=versions"
+what = "Versions tab (timeline)"
+
+[[pages]]
+url = "https://pkg.go.dev/github.com/spf13/cobra?tab=importedby"
+what = "Imported-by tab (collapsible groups)"

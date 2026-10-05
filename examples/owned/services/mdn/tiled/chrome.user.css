@@ -1,0 +1,145 @@
+/* ==UserStyle==
+@name           MDN chrome (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    MDN's page chrome as panes: header, sidebars, menus, footer, focus
+==/UserStyle== */
+
+/* Colours come from the --tl-* tokens in tokens.user.css, which are
+   light-dark() pairs, so MDN's Light setting gets its own colours back.
+   Shapes (radius, rules, no fills) apply in both. Layout and order are
+   MDN's; only padding and margins move, so rules meet. */
+
+@-moz-document domain("developer.mozilla.org") {
+  /* ---- Header: one mantle strip, split from the page by rules -------- */
+
+  html .navigation {
+    background-color: var(--tl-deep);
+  }
+  html .breadcrumbs-bar {
+    background-color: var(--tl-deep);
+    border-color: var(--tl-rule);
+  }
+  html .page-layout__banner {
+    border-bottom-color: var(--tl-rule);
+  }
+
+  /* Top-level menus (HTML, CSS, ...). MDN tints each trigger in its
+     section's colour (blue, orange, purple, green) on hover and while open.
+     Here they're all alike: surface0 on hover, and the open one surface0
+     with lavender text, joined to its panel, which sits on top as surface0
+     with a surface1 border. */
+  html .menu .menu__tab {
+    --menu-tab-background: var(--tl-surface);
+    --menu-tab-text: var(--tl-fg);
+  }
+  html .menu__tab-button {
+    border-radius: 0;
+  }
+  html .menu__tab-button[aria-expanded="true"] {
+    color: var(--tl-accent);
+  }
+  html .menu__panel {
+    background-color: var(--tl-surface);
+    border: 1px solid var(--tl-surface-2);
+    border-radius: 0;
+    box-shadow: none;
+  }
+  html .menu__panel-content a:hover {
+    color: var(--tl-accent);
+  }
+
+  /* The Theme, language and user menus are components whose popovers are
+     drawn in --color-background-primary (mantle) with the hovered and
+     selected entries in --color-background-secondary. They sit on top:
+     surface0 with a surface1 border, surface1 for the hovered entry. */
+  html :is(mdn-color-theme, mdn-language-switcher, mdn-user-menu) {
+    --color-background-primary: var(--tl-surface);
+    --color-background-secondary: var(--tl-surface-2);
+    --color-border-primary: var(--tl-surface-2);
+  }
+
+  /* Search dialog (a shadow root; reached through tokens on its host). It
+     sits on top: surface0, with a surface1 border. The keyboard-selected
+     result is surface1, with MDN's 2px edge (lavender, via --color-blue-50).
+     Every result title is a link, so they're in the text colour, dimmed
+     once visited. Its 0.5rem corners are hard-coded. */
+  html mdn-search-modal {
+    --color-background-primary: var(--tl-surface);
+    --color-border-primary: var(--tl-surface-2);
+    --color-background-blue: var(--tl-surface-2);
+    --color-link-normal: var(--tl-fg);
+    --color-link-visited: var(--tl-dim);
+  }
+
+  /* The search results page (/search?q=) is one component too. Its result
+     titles are all links: text colour, dimmed once visited, lavender on
+     hover (MDN underlines them). Its search field's 2rem pill corners and
+     its buttons' 0.25rem corners are hard-coded. */
+  html mdn-site-search {
+    --color-link-normal: var(--tl-fg);
+    --color-link-visited: var(--tl-dim);
+  }
+
+  /* ---- Sidebars: panes divided from the article by rules ------------- */
+
+  /* The left sidebar and the TOC are sticky, viewport-high columns, so a
+     rule on their inner edge runs the height of the window, like a split
+     between tiled windows. */
+  html .layout__left-sidebar {
+    border-right: 1px solid var(--tl-rule);
+  }
+  html .layout__right-sidebar {
+    border-left: 1px solid var(--tl-rule);
+  }
+
+  /* Sidebar entries: the current page gets the lavender edge (via the
+     --color-area-* tokens) and lavender text. The links are inline-block,
+     only as wide as their text, so a hover fill would look like a pill:
+     hover is lavender text (with MDN's underline) instead. */
+  html .left-sidebar a:hover {
+    color: var(--tl-accent);
+  }
+  html .left-sidebar em > a {
+    color: var(--tl-accent);
+  }
+
+  /* TOC: MDN draws a 2px grey rail beside every entry and puts the current
+     one in the area colour. The rail goes to the muted rule colour at 1px,
+     so only the current entry carries a 2px (lavender) edge. */
+  html .reference-toc a {
+    box-shadow: -1px 0 0 var(--tl-rule);
+  }
+  html .reference-toc a[aria-current="true"] {
+    box-shadow: -2px 0 0 var(--tl-accent);
+    color: var(--tl-accent);
+  }
+  html .reference-toc a:hover {
+    color: var(--tl-accent);
+  }
+
+  /* ---- Footer: a mantle pane under a rule ---------------------------- */
+
+  html .footer {
+    background-color: var(--tl-deep);
+    border-top-color: var(--tl-rule);
+  }
+  html .footer__mozilla {
+    border-top-color: var(--tl-rule);
+  }
+
+  /* ---- Controls ------------------------------------------------------ */
+
+  /* Light-DOM controls take the page font (the UA default is the system
+     font); controls inside web components already read --font-family-text. */
+  :is(input, button, select, textarea) {
+    font-family: inherit;
+    font-stretch: inherit;
+  }
+
+  /* Focus: a 1px lavender outline, the focused-window mark. */
+  html :focus-visible {
+    outline: 1px solid var(--tl-accent);
+    outline-offset: 1px;
+  }
+}

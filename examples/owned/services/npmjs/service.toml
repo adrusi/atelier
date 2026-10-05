@@ -1,0 +1,36 @@
+description = "npm, the JavaScript package registry"
+summary = "npmjs.com in its dark colour mode: the site notice, header and search, the logged-out home page, search results with the sort menu, package pages (README with syntax highlighting, the Code tab's file viewer, dependencies, versions, the sidebar), and the footer. Logged-in pages (account menu, settings, org pages) weren't seen. The light mode is left alone."
+
+[[prerequisites]]
+description = "Set npm's colour mode to Dark (or System, with the desktop set to dark) with the moon/sun button at the left of the header. npm defaults to Light, and the style restyles only the dark mode."
+check = "html[data-color-mode=\"dark\"]"
+
+[[pages]]
+url = "https://www.npmjs.com/package/react"
+what = "Package page, README tab: tabs, README with code block and syntax highlighting, sidebar (install command, stats, buttons), provenance, footer"
+
+[[pages]]
+url = "https://www.npmjs.com/package/react?activeTab=versions"
+what = "Package page, Versions tab: tag and version history tables"
+
+[[pages]]
+url = "https://www.npmjs.com/package/express?activeTab=code"
+what = "Package page, Code tab: file list and file viewer"
+states = ["a file opened (click index.js)"]
+
+[[pages]]
+url = "https://www.npmjs.com/package/express?activeTab=dependencies"
+what = "Package page, Dependencies tab"
+
+[[pages]]
+url = "https://www.npmjs.com/search?q=markdown"
+what = "Search results: rows with keywords and metadata"
+states = ["Sort by menu open", "a result title focused"]
+
+[[pages]]
+url = "https://www.npmjs.com/"
+what = "Home page (logged out): hero with sign-up actions"
+
+[[pages]]
+url = "https://www.npmjs.com/settings"
+what = "Account settings and the avatar menu in the header (logged in; not seen yet)"

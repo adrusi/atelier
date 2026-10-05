@@ -1,0 +1,32 @@
+/* ==UserStyle==
+@name           npm Code tab (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    The package Code tab's file viewer in Catppuccin Mocha
+==/UserStyle== */
+
+/* The Code tab (#tabpanel-explore) shows files with react-syntax-highlighter
+   and its Atom One Dark theme, written as inline style="color: rgb(...)" on
+   each span, in both of npm's colour modes. The colours are matched by
+   substring and overridden with !important (the only way past an inline
+   style). The list covers Atom One Dark's palette. */
+
+@-moz-document domain("npmjs.com") {
+  html[data-color-mode="dark"] #tabpanel-explore pre {
+    background: #11111b !important;
+    color: #cdd6f4 !important;
+  }
+  html[data-color-mode="dark"] #tabpanel-explore pre .linenumber {
+    color: #6c7086 !important;
+  }
+
+  html[data-color-mode="dark"] #tabpanel-explore pre span[style*="rgb(171, 178, 191)"] { color: #cdd6f4 !important; } /* plain text */
+  html[data-color-mode="dark"] #tabpanel-explore pre span[style*="rgb(92, 99, 112)"] { color: #9399b2 !important; } /* comments */
+  html[data-color-mode="dark"] #tabpanel-explore pre span[style*="rgb(198, 120, 221)"] { color: #cba6f7 !important; } /* keywords */
+  html[data-color-mode="dark"] #tabpanel-explore pre span[style*="rgb(152, 195, 121)"] { color: #a6e3a1 !important; } /* strings */
+  html[data-color-mode="dark"] #tabpanel-explore pre span[style*="rgb(209, 154, 102)"] { color: #fab387 !important; } /* numbers, attributes */
+  html[data-color-mode="dark"] #tabpanel-explore pre span[style*="rgb(230, 192, 123)"] { color: #f9e2af !important; } /* built-ins, classes */
+  html[data-color-mode="dark"] #tabpanel-explore pre span[style*="rgb(97, 174, 238)"] { color: #89b4fa !important; } /* functions, titles */
+  html[data-color-mode="dark"] #tabpanel-explore pre span[style*="rgb(224, 108, 117)"] { color: #f38ba8 !important; } /* tags, deletions */
+  html[data-color-mode="dark"] #tabpanel-explore pre span[style*="rgb(86, 182, 194)"] { color: #94e2d5 !important; } /* literals, types */
+}

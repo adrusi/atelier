@@ -1,0 +1,414 @@
+/* ==UserStyle==
+@name           pkg.go.dev shapes (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Panes, rules and square outlined controls for pkg.go.dev
+==/UserStyle== */
+
+/* Class names on pkg.go.dev are hand-written BEM (go-Header, go-Main-nav,
+   Documentation-*, UnitMeta-*), stable across deploys. Same scope as
+   tokens.user.css: html:root:not([data-theme="light"]) in front of
+   everything. */
+
+@-moz-document domain("pkg.go.dev") {
+  html:root:not([data-theme="light"]) {
+
+    /* ---- Panes ------------------------------------------------------ */
+
+    /* Site header: a mantle strip closed by a rule. */
+    & .go-Header {
+      background-color: #181825;
+      border-bottom: 1px solid #6c7086;
+      box-shadow: none;
+    }
+    & .go-Header-menuItem a:link,
+    & .go-Header-menuItem a:visited {
+      color: #cdd6f4;
+    }
+    & .go-Header-menuItem--active a:link,
+    & .go-Header-menuItem--active a:visited {
+      border-bottom-color: #b4befe;
+    }
+    /* Dropdown menus: on top of the page, so surface with a border. */
+    & .go-Header-submenu {
+      background-color: #313244;
+      border: 1px solid #45475a;
+      border-radius: 0;
+      box-shadow: none;
+    }
+
+    /* Package header (sticky) and the site footer. */
+    & .go-Main-header {
+      border-bottom-color: #6c7086;
+    }
+
+    /* Below 112rem the details aside is a full-width band under the
+       header (in the site's accented grey, which the tokens make crust):
+       a mantle region between rules. At 112rem and up it's the right
+       column, and the outline is the left one: each meets the article at
+       a vertical rule that runs from the header's rule down to the
+       footer. The aside's top margin becomes padding so its rule reaches
+       the header. */
+    & .go-Main-aside {
+      background-color: #181825;
+      border-bottom-color: #6c7086;
+    }
+    @media screen and (width >= 80rem) {
+      &[data-layout="responsive"] .go-Main-nav {
+        border-right: 1px solid #6c7086;
+        padding-right: var(--gutter);
+      }
+    }
+    @media screen and (width >= 112rem) {
+      &[data-layout="responsive"] .go-Main-aside {
+        background-color: transparent;
+        border-left: 1px solid #6c7086;
+        margin-top: 0;
+        padding: var(--gap) var(--gutter) 0;
+      }
+    }
+    & .go-Footer {
+      background-color: #181825;
+      border-top: 1px solid #6c7086;
+      color: #cdd6f4;
+    }
+    /* The home page's FAQ band, at the top of the footer, used the
+       accented grey (crust, via the tokens): one mantle pane with the
+       rest of the footer, split from it by a rule. */
+    & .go-Footer .Questions {
+      background-color: #181825;
+      border-bottom: 1px solid #6c7086;
+    }
+    & .go-Footer-link,
+    & .go-Footer-listItem a,
+    & .go-Footer-listItem .go-Button--text {
+      color: #9399b2;
+    }
+    & .go-Footer-link--primary {
+      color: #cdd6f4;
+    }
+
+    /* The cookie notice is a pane along the bottom edge. */
+    & .Cookie-notice {
+      background-color: #181825;
+      border-top: 1px solid #6c7086;
+    }
+
+    /* Header metadata: the version and counts in the theme's monospace,
+       their labels ("Version:", "Imports:") staying sans. */
+    & :is([data-test-id="UnitHeader-version"], [data-test-id="UnitHeader-imports"], [data-test-id="UnitHeader-importedby"]) > a {
+      font-family: "Noto Sans Mono", monospace;
+      & .go-textSubtle {
+        font-family: "Noto Sans", sans-serif;
+      }
+    }
+
+    /* ---- Home page --------------------------------------------------- */
+
+    /* The gopher-at-a-computer hero is decorative: it goes. The search
+       button is the page's one primary action. */
+    & .Homepage-logo {
+      display: none;
+    }
+    & .Homepage-search .go-Button {
+      background-color: #b4befe;
+      border-color: #b4befe;
+      color: #1e1e2e;
+      &:hover {
+        background-color: #cdd6f4;
+        border-color: #cdd6f4;
+      }
+    }
+    & :is(.go-Carousel-prevSlide, .go-Carousel-nextSlide):hover {
+      background-color: #313244;
+    }
+
+    /* ---- Search results ---------------------------------------------- */
+
+    /* Rows: titles in body text (every title is a link), dimmed once
+       visited; the hovered row gets the surface colour, its padding
+       pulled into the margin so text stays aligned with the column. */
+    & .SearchSnippet {
+      margin-inline: -0.75rem;
+      padding: 0.5rem 0.75rem;
+      &:hover {
+        background-color: #313244;
+      }
+    }
+    & .SearchSnippet-headerContainer h2 a {
+      color: #cdd6f4;
+      &:visited { color: #9399b2; }
+      &:hover { color: #b4befe; }
+    }
+    & .SearchSnippet-header-path {
+      color: #9399b2;
+    }
+    /* Counts, versions and dates as terminal-style metadata. */
+    & .SearchSnippet-infoLabel strong {
+      font-family: "Noto Sans Mono", monospace;
+      font-weight: 500;
+    }
+
+    /* The index is a list whose every entry is a link: entries in body
+       text, dimmed once visited, lavender on hover. */
+    & .Documentation-indexList a {
+      color: #cdd6f4;
+      &:visited { color: #9399b2; }
+      &:hover { color: #b4befe; }
+    }
+
+    /* "added in go1.1" beside each declaration. */
+    & .Documentation-sinceVersionVersion {
+      font-family: "Noto Sans Mono", monospace;
+    }
+
+    /* Versions tab: tags and dates as metadata. The timeline's dots stay
+       (small round things). */
+    & .Version-tag a {
+      font-family: "Noto Sans Mono", monospace;
+    }
+    & .Version-commitTime {
+      color: #9399b2;
+      font-family: "Noto Sans Mono", monospace;
+    }
+
+    /* ---- Outline (left nav) ----------------------------------------- */
+
+    /* Section headings lose their grey bar; the current entry gets the
+       lavender left edge, the way the window manager marks focus. */
+    & .go-Tree a[aria-level="1"][aria-expanded="true"],
+    & .go-Tree a[aria-level="1"][aria-selected="true"] {
+      background-color: transparent;
+      color: #cdd6f4;
+    }
+    & .go-Tree a:hover {
+      background-color: #313244;
+    }
+    & .go-Tree a[aria-selected="true"] {
+      box-shadow: inset 2px 0 0 #b4befe;
+      color: #cdd6f4;
+    }
+    & .go-Tree a[aria-selected="true"]:not([aria-expanded])::before {
+      display: none;
+    }
+    & .go-Tree a[aria-level="4"] {
+      border-left-color: transparent;
+    }
+    & .go-Tree a[aria-selected="true"][aria-level="4"] {
+      border-left-color: #b4befe;
+      box-shadow: none;
+    }
+
+    /* ---- Controls ---------------------------------------------------- */
+
+    & .go-Button,
+    & .go-Button--inverted {
+      background-color: transparent;
+      border: 1px solid #6c7086;
+      border-radius: 0;
+      color: #cdd6f4;
+      filter: none;
+    }
+    & .go-Button:hover {
+      background-color: #313244;
+      box-shadow: none;
+      filter: none;
+    }
+    & .go-Button--inline,
+    & .go-Button--text {
+      border-color: transparent;
+    }
+    & .go-Button--inline:hover,
+    & .go-Button--text:hover {
+      background-color: transparent;
+    }
+    /* Example playground buttons aren't go-Buttons. Run is the example's
+       primary action. */
+    & :is(.Documentation-exampleShareButton, .Documentation-exampleFormatButton) {
+      background-color: transparent;
+      border: 1px solid #6c7086;
+      border-radius: 0;
+      color: #cdd6f4;
+      &:hover { background-color: #313244; }
+    }
+    & .Documentation-exampleRunButton {
+      border-radius: 0;
+    }
+    & .Documentation-exampleOutputLabel {
+      color: #9399b2;
+    }
+    & .Documentation-exampleError {
+      color: #f38ba8;
+    }
+    & .go-Button--accented,
+    & .Cookie-notice .go-Button,
+    & .Documentation-exampleRunButton {
+      background-color: #b4befe;
+      border-color: #b4befe;
+      color: #1e1e2e;
+    }
+    & .go-Button--accented:hover,
+    & .Cookie-notice .go-Button:hover,
+    & .Documentation-exampleRunButton:hover {
+      background-color: #cdd6f4;
+      border-color: #cdd6f4;
+    }
+
+    /* Inputs are recessed (crust) as well as outlined, so they don't read
+       as buttons. The header search sits on mantle. */
+    & :is(.go-Input, .go-Select, select, .UnitOutline-jumpToInput, .go-SearchForm-form input) {
+      background-color: #11111b;
+      border: 1px solid #6c7086;
+      border-radius: 0;
+      color: #cdd6f4;
+    }
+    & .go-SearchForm-form button {
+      background-color: transparent;
+      border: 1px solid #6c7086;
+      border-radius: 0;
+    }
+    & .go-ShortcutKey::after {
+      background-color: transparent;
+      border-radius: 0;
+      color: #9399b2;
+      font-family: "Noto Sans Mono", monospace;
+      font-stretch: condensed;
+    }
+
+    & :focus-visible {
+      outline: 1px solid #b4befe;
+      outline-offset: 0;
+    }
+
+    /* ---- Icons ------------------------------------------------------- */
+
+    /* The site's icons are grey SVGs recoloured with filter chains (white
+       in the dark scheme, turquoise for "accented" ones and icons in
+       links). These chains turn black into fg and lavender (worked out
+       by search against a canvas). !important because the header menu
+       has a hover rule at (0,7,1). */
+    & img.go-Icon {
+      filter: brightness(0) invert(74%) sepia(38%) saturate(186%) hue-rotate(188deg) brightness(110%) contrast(91%) !important;
+    }
+    & :is(.go-Icon--accented, a img.go-Icon, .go-Clipboard img.go-Icon) {
+      filter: brightness(0) invert(67%) sepia(15%) saturate(1414%) hue-rotate(197deg) brightness(109%) contrast(115%) !important;
+    }
+
+    /* ---- Badges -------------------------------------------------------- */
+
+    /* "package", "standard library", "module" and the like: short text. */
+    & .go-Chip {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      color: #9399b2;
+      padding: 0 0.25rem;
+    }
+    /* Vulnerability IDs (GO-2020-0036) keep their warning as red text. */
+    & :is(.go-Chip--alert, .go-Chip--vuln) {
+      color: #f38ba8;
+    }
+    /* "Latest" is a status: a square rectangle of its colour. */
+    & .DetailsHeader-badge,
+    & .go-Chip.DetailsHeader-span--latest {
+      border-radius: 0;
+    }
+    & .go-Chip.DetailsHeader-span--latest {
+      background: #a6e3a1;
+      color: #1e1e2e;
+      padding: 0 0.375rem;
+    }
+    & .Documentation-deprecatedTag {
+      background-color: #f9e2af;
+      border-radius: 0;
+      color: #1e1e2e;
+    }
+
+    /* Toggletips (the "?" beside "Valid go.mod file" and the like). */
+    & .UnitMetaDetails-toggletipBubble,
+    & .UnitMeta-details details p {
+      background-color: #313244;
+      border: 1px solid #45475a;
+      border-radius: 0;
+      box-shadow: none;
+      color: #cdd6f4;
+    }
+
+    /* ---- Callouts ------------------------------------------------------ */
+
+    & .go-Message {
+      background-color: transparent;
+      border-left: 2px solid #9399b2;
+      color: #cdd6f4;
+    }
+    & .go-Message--warning { border-left-color: #f9e2af; }
+    & .go-Message--alert { border-left-color: #f38ba8; }
+
+    /* ---- Code ---------------------------------------------------------- */
+
+    /* Code blocks are panes: a square crust frame. */
+    & pre,
+    & textarea.code {
+      background-color: #11111b;
+      border: 1px solid #6c7086;
+      border-radius: 0;
+      color: #cdd6f4;
+    }
+    /* "View Source" sat in a tab on top of each declaration; it becomes a
+       plain right-aligned link above the frame. */
+    & .Documentation-declarationLink {
+      background-color: transparent;
+      border: 0;
+      border-radius: 0;
+    }
+    & .Documentation .Documentation-declarationLink + pre {
+      border-top: 1px solid #6c7086;
+      border-radius: 0;
+    }
+
+    /* ---- READMEs ------------------------------------------------------- */
+
+    /* The collapsed README fades out through a gradient mask: a plain cut
+       instead, with "Expand" below it. */
+    & .UnitReadme-content {
+      mask-image: none;
+    }
+    & :is(code, .skip-to-content-link) {
+      border-radius: 0;
+    }
+    & .Overview-readmeContent kbd {
+      background-color: transparent;
+      border: 1px solid #6c7086;
+      border-radius: 0;
+      box-shadow: none;
+      color: #cdd6f4;
+      font-family: "Noto Sans Mono", monospace;
+      font-stretch: condensed;
+    }
+
+    /* Dialogs (jump to identifier, keyboard shortcuts). */
+    & .go-Modal {
+      background-color: #313244;
+      border: 1px solid #45475a;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    /* Jump-to results: rows in body text with the kind dimmed; the
+       keyboard-selected row gets the lavender edge (and surface1, since
+       the dialog itself is surface0). */
+    & .JumpDialog a {
+      border-left: 2px solid transparent;
+      color: #cdd6f4;
+      & i { color: #9399b2; }
+      &:hover { background-color: #45475a; }
+    }
+    & .JumpDialog .JumpDialog-active {
+      background-color: #45475a;
+      border-left-color: #b4befe;
+      color: #cdd6f4;
+    }
+    & .go-Modal::backdrop {
+      background-color: rgb(17 17 27 / 0.6);
+    }
+  }
+}

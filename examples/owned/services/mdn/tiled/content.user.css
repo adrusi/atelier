@@ -1,0 +1,178 @@
+/* ==UserStyle==
+@name           MDN content (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Article bodies on MDN: code panes, callouts, tables, the Baseline banner, the article footer
+==/UserStyle== */
+
+/* Code examples, live-sample results, interactive examples and the compat
+   table are web components with open shadow roots. Their internals can't be
+   selected, but tokens set on the host inherit into them: the corner radii
+   they read are zeroed in tokens.user.css, and --color-background-secondary
+   (crust) is their code background.
+
+   Not reachable at all (no tokens, no ::part()):
+   - the syntax colours inside <mdn-code-example> (MDN's own Prism palette,
+     hard-coded), and the 0.25rem corners of code examples and of the
+     compat table's frame;
+   - the CodeMirror editor in <interactive-example> (One Dark);
+   - everything inside live-sample and interactive-example iframes, which are
+     separate documents on <hash>.mdnplay.dev. */
+
+@-moz-document domain("developer.mozilla.org") {
+  /* ---- Code -------------------------------------------------------- */
+
+  /* Inline code: a crust fill with square corners (it's a recessed
+     token, not a pill). */
+  html .content-section :is(code, kbd) {
+    background-color: var(--tl-deeper);
+    border-radius: 0;
+  }
+  /* The page title's code (display in "display CSS property") would be a
+     dark slab at heading size; it reads as a title, in the heading font. */
+  html .reference-layout .reference-layout__header h1 code:first-of-type {
+    background-color: transparent;
+    padding: 0;
+  }
+
+  /* Code blocks outside components (the formal syntax, a few older pages):
+     crust panes with a square 1px frame. */
+  html .content-section pre:not(.code-example pre) {
+    background-color: var(--tl-deeper);
+    border: 1px solid var(--tl-rule);
+    border-radius: 0;
+  }
+  html .content-section pre code {
+    background-color: transparent;
+  }
+  /* The formal syntax's footer ("This syntax reflects...") is part of the
+     same pane: one frame, a rule between. */
+  html .content-section pre.css-formal-syntax ~ footer {
+    border-color: var(--tl-rule);
+    border-radius: 0;
+  }
+
+  /* Good and bad examples: no green or red tint; the tick or cross MDN
+     already draws says which. */
+  html .content-section pre:is(.example-good, .example-bad) {
+    background-color: var(--tl-deeper);
+  }
+
+  /* ---- Callouts ----------------------------------------------------- */
+
+  /* Notecards lose their box and tint and keep a 2px left edge in their
+     kind's colour (MDN's --accent-color, from the --color-text-* tokens:
+     lavender notes, red warnings, green tips). The glyph inside stays. */
+  html .content-section :is(.notecard, .callout) {
+    background-color: transparent;
+    border-radius: 0;
+  }
+  html .content-section .notecard.warning {
+    --accent-color: var(--tl-yellow);
+  }
+
+  /* ---- Tables ------------------------------------------------------- */
+
+  /* Tables are drawn with rules only: no zebra fills, a mantle strip for
+     the header row. */
+  html .content-section table tr {
+    background-color: transparent;
+  }
+  html .content-section table thead tr {
+    background-color: var(--tl-deep);
+  }
+  html .content-section table :is(td, th) {
+    border-color: var(--tl-rule);
+  }
+
+  /* ---- Badges ------------------------------------------------------- */
+
+  /* "Optional", "Read only", "Secure context": pills become short text. */
+  html .badge.inline:is(.optional, .readonly, .secure) {
+    border: none;
+    border-radius: 0;
+    padding-inline: 0.25em;
+    color: var(--tl-dim);
+  }
+
+  /* ---- Baseline banner ---------------------------------------------- */
+
+  /* A callout: no box, a 2px edge in the status colour (green for widely
+     available, lavender for newly available, dim for limited, red for
+     being removed). The status itself is a square badge of that colour
+     with dark text, since its colour is the point. Browser engines lose
+     their pill trays. The doubled class outranks MDN's per-status rules
+     (.baseline-indicator.high); the status rules below come later at the
+     same specificity. */
+  html .baseline-indicator.baseline-indicator {
+    --tl-status: var(--tl-dim);
+    --baseline-bg: transparent;
+    --baseline-bg-secondary: transparent;
+    --baseline-border: var(--tl-rule);
+    --baseline-note: transparent;
+    --baseline-check: var(--tl-dim);
+    --baseline-cross: var(--tl-peach);
+    --baseline-pill-bg: var(--tl-status);
+    border: none;
+    border-left: 2px solid var(--tl-status);
+    border-radius: 0;
+  }
+  html .baseline-indicator.high {
+    --tl-status: var(--tl-green);
+    --baseline-check: var(--tl-green);
+  }
+  html .baseline-indicator.low {
+    --tl-status: var(--tl-accent);
+    --baseline-check: var(--tl-accent);
+  }
+  html .baseline-indicator.removing {
+    --baseline-check: var(--tl-dim);
+    --baseline-cross: var(--tl-dim);
+    --tl-status: var(--tl-red);
+  }
+  html .baseline-indicator summary .pill {
+    color: var(--tl-on-accent);
+    border-radius: 0;
+  }
+  html .baseline-indicator summary .engine {
+    border-radius: 0;
+    padding-inline: 0.25rem;
+  }
+  html .baseline-indicator summary:hover {
+    background-color: var(--tl-surface);
+  }
+  /* Expanded: the "* Some parts..." note loses its tinted box; inline code
+     keeps the crust fill it has elsewhere. */
+  html .baseline-indicator .extra .asterisk-note {
+    border-radius: 0;
+    padding-left: 0;
+  }
+  html .baseline-indicator .extra > p code {
+    background-color: var(--tl-deeper);
+  }
+
+  /* ---- Article footer ----------------------------------------------- */
+
+  /* "Help improve MDN": a card with an illustration. The card goes (a rule
+     above it closes the article), and so does the illustration, which only
+     decorates the heading. */
+  html .content-section.article-footer {
+    background-color: transparent;
+    border: none;
+    border-top: 1px solid var(--tl-rule);
+    border-radius: 0;
+    padding-inline: 0;
+  }
+  html .article-footer__svg-container {
+    display: none;
+  }
+
+  /* MDN gives content images a white backdrop (--color-white) so that
+     transparent diagrams drawn for white stay readable. tokens.user.css maps
+     --color-white to the text colour for components; for images it's put
+     back, since the theme doesn't recolour diagrams. Corners square. */
+  html .content-section img {
+    --color-white: #fff;
+    border-radius: 0;
+  }
+}

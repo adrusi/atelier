@@ -415,3 +415,34 @@ rings); small metadata glyphs vs decorative icons; callouts (all used a
 status-coloured left edge); user-chosen colours like repo labels; monospace
 metadata (which, and at what size); "maybe in brackets"; card header strips;
 sites' own left-edge markers vs the lavender current-row edge.
+
+## tiled, second run: MDN, npmjs.com and pkg.go.dev (2026-10-05)
+
+The same setup after the first run's fixes (THEME.md with the owner's
+answers, `shape_scan`, `[[pages]]`, the reworded guidance). Three sessions
+in parallel, 18–23 minutes each (the first run's 65–86 minutes were mostly
+network trouble). The difference in behaviour is what the fixes were for:
+
+- **Every agent asked, and every agent proposed.** Each posted calls for
+  the record, including theme-level ones, and proposed THEME.md wording
+  for the interpretations it settled on: build on a site's own dark mode
+  (npm); neutral callouts in lavender, and one syntax palette per page when
+  only some code can be reached (MDN); visited mauve only for links that
+  leave the page (pkg.go.dev). None duplicated its calls as assumptions.
+- **Coverage was reported.** All three wrote `[[pages]]` lists into
+  `service.toml` and said what they hadn't seen (logged-in pages, narrow
+  layouts, tabs not opened). All three used `shape_scan`.
+- Still no variants: one agent saw `task_ask`'s description cut off midway
+  through the explanation of variants (the harness appears to truncate long
+  descriptions), and used screenshots with `extraCss` instead.
+
+**Tool problems they reported:** long tool descriptions truncated;
+`matched_rules` returns nothing, silently, for cross-origin stylesheets
+(npm), and marks `@supports` rules active whether or not the condition
+holds (MDN); `shape_scan` counts transparent borders as frames and doesn't
+look inside shadow roots; `type_text` doesn't reach inputs in shadow roots;
+screenshots of very tall elements fail or come back unreadable;
+`contrast_scan` measured mid-transition; `eval` doesn't allow top-level
+`await`. Requests: a way to apply a prerequisite (a site's dark mode) in
+agent tabs only, a way to resize agent tabs, and a warning when one of the
+agent's own `!important` rules overrides another of its rules.

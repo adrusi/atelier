@@ -1,0 +1,129 @@
+/* ==UserStyle==
+@name           npm tokens (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Retunes npm's dark mode colour tokens and type to Catppuccin Mocha
+==/UserStyle== */
+
+/* npm's dark mode is [data-color-mode="dark"] on <html>, set from
+   localStorage "npm-color-mode" (the moon button in the header cycles
+   light / dark / system). It redefines a Primer-style token set
+   (--color-fg-*, --color-bg-*, --color-border-*) plus legacy "wombat"
+   colours, and some 700 [data-color-mode='dark'] rules on hashed CSS-module
+   classes, many !important but almost all written with those tokens. So
+   retuning the tokens does most of the colour work; only the dark mode is
+   restyled. html[data-color-mode="dark"] (0,1,1) beats the site's
+   [data-color-mode='dark'] (0,1,0). */
+
+@-moz-document domain("npmjs.com") {
+  html[data-color-mode="dark"] {
+    --color-fg-default: #cdd6f4;
+    --color-fg-muted: #9399b2;
+    --color-fg-subtle: #9399b2;
+    --color-fg-on-emphasis: #1e1e2e;
+    --color-fg-brand: #b4befe;
+    --color-fg-accent: #b4befe;
+    --color-fg-success: #a6e3a1;
+    --color-fg-attention: #f9e2af;
+    --color-fg-danger: #f38ba8;
+
+    --color-bg-default: #1e1e2e;
+    --color-bg-subtle: #181825;
+    --color-bg-inset: #11111b;
+    --color-bg-emphasis: #b4befe;
+    --color-bg-accent: #1e1e2e;
+    --color-bg-success: #1e1e2e;
+    --color-bg-attention: #1e1e2e;
+    --color-bg-danger: #1e1e2e;
+    --color-bg-overlay: #313244;
+
+    --color-border-default: #6c7086;
+    --color-border-muted: #45475a;
+    --color-border-strong: #6c7086;
+    --color-border-accent: #b4befe;
+    --color-border-accent-emphasis: #b4befe;
+    --color-accent-emphasis: #b4befe;
+    --color-accent-subtle: #1e1e2e;
+    --color-border-success: #a6e3a1;
+    --color-border-success-emphasis: #a6e3a1;
+    --color-border-attention: #f9e2af;
+    --color-border-danger: #f38ba8;
+
+    --color-shadow-large: none;
+
+    --header-color: #cdd6f4;
+    --bg-dark: #b4befe;
+    --npmRed: #b4befe;
+    --npmLightRed: #b4befe;
+    --bg: #1e1e2e;
+    --background-color: #1e1e2e;
+    --copy-color: #cdd6f4;
+    --code-bg: #11111b;
+    --code-box-radius: 0;
+    --code: "Noto Sans Mono", monospace;
+
+    --overlay-backdrop: rgb(17 17 27 / 0.7);
+    --overlay-backdrop-heavy: rgb(17 17 27 / 0.85);
+
+    /* Legacy colours: the package tabs and a few accents use these as
+       categories, so they map to distinct Mocha colours. */
+    --wombat-red: #f38ba8;
+    --wombat-red-hover: #f38ba8;
+    --wombat-yellow: #f9e2af;
+    --wombat-violet: #cba6f7;
+    --wombat-purple: #f5c2e7;
+    --wombat-green: #a6e3a1;
+    --wombat-teal: #94e2d5;
+    --wombat-bg-red: transparent;
+
+    /* Syntax: Catppuccin Mocha's standard mapping. */
+    --color-syntax-string: #a6e3a1;
+    --color-syntax-constant: #fab387;
+    --color-syntax-symbol: #f2cdcd;
+    --color-syntax-variable: #cdd6f4;
+    --color-syntax-keyword: #cba6f7;
+    --color-syntax-support: #f9e2af;
+    --color-syntax-function: #89b4fa;
+
+    background-color: #1e1e2e;
+  }
+
+  html[data-color-mode="dark"] body {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+  }
+
+  /* Type: Source Sans Pro, Poppins (header, buttons) and Fira Mono become
+     the desktop's condensed Noto. npm sets fonts per class, so the sans is
+     applied to everything except code and the few things npm sets in its
+     monospace on purpose (Tachyons' .code: version numbers). */
+  html[data-color-mode="dark"] body,
+  html[data-color-mode="dark"] body :not(code, pre, kbd, samp, tt, .code, code *, pre *, svg, svg *) {
+    font-family: "Noto Sans", sans-serif;
+    font-stretch: condensed;
+    letter-spacing: normal;
+  }
+  html[data-color-mode="dark"] :is(code, pre, kbd, samp, tt, .code),
+  html[data-color-mode="dark"] :is(code, pre) * {
+    font-family: "Noto Sans Mono", monospace !important;
+    font-stretch: condensed;
+  }
+
+  html[data-color-mode="dark"] ::selection {
+    background-color: #353749;
+    color: #cdd6f4;
+  }
+
+  /* No shadows, square corners: broad, by the theme's rule. Avatars are
+     images and keep their (near-square) inline radius; focus is redrawn
+     below since some of npm's focus rings are box-shadows. */
+  html[data-color-mode="dark"] body *:not(img, input[type="radio"]) {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  html[data-color-mode="dark"] :focus-visible {
+    outline: 1px solid #b4befe !important;
+    outline-offset: 1px;
+  }
+}

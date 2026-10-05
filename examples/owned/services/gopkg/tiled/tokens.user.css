@@ -1,0 +1,89 @@
+/* ==UserStyle==
+@name           pkg.go.dev tokens (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Retunes pkg.go.dev's dark colour tokens and type to Catppuccin Mocha
+==/UserStyle== */
+
+/* pkg.go.dev's dark scheme comes from tokens on :root, switched either by
+   data-theme="dark" on <html> (the footer's theme toggle) or, with no
+   data-theme, by prefers-color-scheme. Everything here is scoped to
+   html:root:not([data-theme="light"]) (0,2,1), which beats both of the
+   site's dark definitions ([data-theme="dark"] 0,1,0 and
+   :root:not([data-theme="light"]) 0,2,0), and leaves an explicit light
+   choice alone. */
+
+@-moz-document domain("pkg.go.dev") {
+  html:root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    /* Surfaces */
+    --color-background: #1e1e2e;
+    --color-background-accented: #11111b;     /* pre, example textareas */
+    --color-background-highlighted: #313244;  /* :target declaration */
+    --color-background-highlighted-link: transparent;
+    --color-background-info: transparent;
+    --color-background-warning: transparent;
+    --color-background-alert: transparent;
+    --color-background-inverted: #313244;     /* footer, copy tooltip */
+    --color-input: #11111b;
+    --color-input-text: #cdd6f4;
+
+    /* Text and rules */
+    --color-text: #cdd6f4;
+    --color-text-subtle: #9399b2;
+    --color-text-inverted: #cdd6f4;
+    --color-border: #6c7086;
+
+    /* Accent: the turquoise brand becomes lavender. */
+    --color-brand-primary: #b4befe;
+    --color-text-link: #b4befe;
+    --color-bright-text-link: #b4befe;
+    --turq-med: #b4befe;
+    --turq-dark: #b4befe;
+
+    /* Buttons: outlined on the page; see shape.user.css. */
+    --color-button: transparent;
+    --color-button-text: #cdd6f4;
+    --color-button-inverted: transparent;
+    --color-button-inverted-text: #cdd6f4;
+    --color-button-accented: #b4befe;
+    --color-button-accented-text: #1e1e2e;
+    --color-button-disabled: transparent;
+    --color-button-text-disabled: #6c7086;
+    --color-button-inverted-text-disabled: #6c7086;
+
+    --color-code-comment: #9399b2;
+
+    --border-radius: 0;
+    --box-shadow: none;
+    --focus-box-shadow: none;
+  }
+
+  html:root:not([data-theme="light"]) body {
+    font-family: "Noto Sans", sans-serif;
+    font-stretch: condensed;
+    color: #cdd6f4;
+  }
+  html:root:not([data-theme="light"]) :is(code, pre, kbd, samp, textarea.code) {
+    font-family: "Noto Sans Mono", monospace;
+    font-stretch: condensed;
+  }
+  /* The site sets its system font stack on buttons and inputs too. */
+  html:root:not([data-theme="light"]) :is(button, input, select, textarea:not(.code)) {
+    font-family: "Noto Sans", sans-serif;
+    font-stretch: condensed;
+  }
+
+  html:root:not([data-theme="light"]) ::selection {
+    background-color: #353749;
+    color: #cdd6f4;
+  }
+
+  /* Visited links in mauve, except in-page anchors (the index, the outline,
+     links between a package's own identifiers), which would otherwise turn
+     a page mauve as it's read, and the site's chrome. */
+  html:root:not([data-theme="light"]) a:visited:not([href^="#"], .go-Tree a, .go-Header a, .go-Footer a, .go-Breadcrumb a) {
+    color: #cba6f7;
+  }
+}

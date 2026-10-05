@@ -1,0 +1,279 @@
+/* ==UserStyle==
+@name           npm shapes (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    npm as tiled panes: header, package tabs and sidebar, search rows, buttons and inputs
+==/UserStyle== */
+
+/* npm's markup is Tachyons utilities (.bb, .b--black-10, .br2, .button)
+   plus hashed CSS-module classes (._8055e658). Selectors here prefer ids,
+   roles, aria-labels, hrefs and Tachyons names, which are stable; the few
+   hashed classes used are noted, and have been stable across npm deploys
+   for years, but are the first thing to check if something stops applying. */
+
+@-moz-document domain("npmjs.com") {
+  /* ---- Header: two mantle strips meeting the page at a muted rule ---- */
+
+  /* The site notice ("npm tokens that bypass 2FA...") is a callout: a
+     yellow left edge, no tint. */
+  html[data-color-mode="dark"] [data-test-id="alert-banner"] {
+    background-color: #181825 !important;
+    color: #cdd6f4 !important;
+    border: 0 !important;
+    border-left: 2px solid #f9e2af !important;
+    border-bottom: 1px solid #6c7086 !important;
+  }
+  html[data-color-mode="dark"] [data-test-id="alert-banner"] a {
+    color: #b4befe !important;
+  }
+
+  html[data-color-mode="dark"] header {
+    background-color: #181825 !important;
+    border-bottom: 1px solid #6c7086 !important;
+  }
+  /* The rainbow stripe across the top is a 10px border-image gradient on
+     the first strip (on the home page there's an empty div before it). */
+  html[data-color-mode="dark"] header > div {
+    background-color: #181825 !important;
+    border-top: 0 !important;
+    border-image: none !important;
+  }
+  html[data-color-mode="dark"] header > div:last-child {
+    border-top: 1px solid #6c7086 !important;
+  }
+  html[data-color-mode="dark"] header :is(#main-menu a, nav a) {
+    color: #cdd6f4 !important;
+  }
+  html[data-color-mode="dark"] header a[aria-label="Npm"] svg :is(path, polygon) {
+    fill: #cdd6f4;
+  }
+
+  /* Search: a recessed field, with the one filled control (Search). */
+  html[data-color-mode="dark"] form#search > div,
+  html[data-color-mode="dark"] form#search input[type="search"] {
+    background-color: #11111b !important;
+  }
+  html[data-color-mode="dark"] form#search > div {
+    border: 1px solid #6c7086 !important;
+    border-right: 0 !important;
+  }
+  html[data-color-mode="dark"] form#search input[type="search"] {
+    color: #cdd6f4 !important;
+    border: 0 !important;
+  }
+  html[data-color-mode="dark"] form#search input::placeholder {
+    color: #9399b2 !important;
+  }
+  html[data-color-mode="dark"] form#search button[type="submit"] {
+    background-color: #b4befe !important;
+    color: #1e1e2e !important;
+    border: 1px solid #b4befe !important;
+  }
+
+  /* Buttons (Sign Up, sidebar links, sort): 1px outlined rectangles. */
+  html[data-color-mode="dark"] :is(a, button).button,
+  html[data-color-mode="dark"] header a[href="/signup"] {
+    background-color: transparent !important;
+    color: #cdd6f4 !important;
+    border: 1px solid #6c7086 !important;
+  }
+  html[data-color-mode="dark"] :is(a, button).button:hover,
+  html[data-color-mode="dark"] header a[href="/signup"]:hover {
+    background-color: #313244 !important;
+  }
+  html[data-color-mode="dark"] a.button > svg {
+    margin-right: 0.4em;
+  }
+  /* "Report malware" keeps its red, as outline and text. */
+  html[data-color-mode="dark"] a.button[href*="security-inquire=malware"] {
+    color: #f38ba8 !important;
+    border-color: #f38ba8 !important;
+  }
+
+  /* ---- Package page ---- */
+
+  /* Version line under the name: metadata, monospace, dim. */
+  html[data-color-mode="dark"] #top > div:first-child > span,
+  html[data-color-mode="dark"] #top > div:first-child > span time {
+    font-family: "Noto Sans Mono", monospace;
+    color: #9399b2 !important;
+  }
+
+  /* Tabs: text, the current one underlined in lavender. npm colours each
+     tab (and its icon) with its own legacy colour; those become fg-dim. */
+  html[data-color-mode="dark"] ul[role="tablist"] {
+    border-bottom: 1px solid #6c7086;
+  }
+  html[data-color-mode="dark"] ul[role="tablist"] > li {
+    background-color: transparent !important;
+    border: 0 !important;
+    border-bottom: 2px solid transparent !important;
+    margin-bottom: -1px;
+  }
+  html[data-color-mode="dark"] ul[role="tablist"] > li a[role="tab"] {
+    color: #9399b2 !important;
+  }
+  html[data-color-mode="dark"] ul[role="tablist"] > li a[role="tab"] svg :is(path, rect, circle, polygon) {
+    fill: currentColor !important;
+  }
+  html[data-color-mode="dark"] ul[role="tablist"] > li:hover {
+    background-color: #313244 !important;
+  }
+  html[data-color-mode="dark"] ul[role="tablist"] > li:has(> a[aria-selected="true"]) {
+    border-bottom-color: #b4befe !important;
+  }
+  html[data-color-mode="dark"] ul[role="tablist"] > li > a[aria-selected="true"] {
+    color: #cdd6f4 !important;
+  }
+  /* "Beta" by Code: a pill, now short text. */
+  html[data-color-mode="dark"] a#package-tab-code span {
+    background-color: transparent !important;
+    border: 0 !important;
+    color: #9399b2 !important;
+  }
+
+  /* Versions tab: tables of versions are rows; versions in the text
+     colour (every row is a link), counts, tags and dates as dim mono. */
+  html[data-color-mode="dark"] #tabpanel-versions tbody tr:hover {
+    background-color: #313244;
+  }
+  html[data-color-mode="dark"] #tabpanel-versions a.code {
+    color: #cdd6f4 !important;
+    text-decoration: none;
+  }
+  html[data-color-mode="dark"] #tabpanel-versions a.code:visited {
+    color: #9399b2 !important;
+  }
+  html[data-color-mode="dark"] #tabpanel-versions a.code:hover {
+    color: #b4befe !important;
+    text-decoration: underline;
+  }
+  html[data-color-mode="dark"] #tabpanel-versions td + td {
+    font-family: "Noto Sans Mono", monospace;
+    color: #9399b2 !important;
+  }
+  html[data-color-mode="dark"] #tabpanel-versions :is(th, td) {
+    border-color: #45475a !important;
+  }
+
+  /* Sidebar: its own pane, split from the README by a vertical rule. */
+  html[data-color-mode="dark"] aside[aria-label="Package sidebar"] {
+    border-left: 1px solid #6c7086;
+    margin-top: 0 !important;
+    padding-top: 1rem !important;
+  }
+
+  /* Provenance (end of the README tab): a framed box, now unframed and
+     closed off by rules above and below. */
+  html[data-color-mode="dark"] aside#user-content-provenance > div {
+    border: 0 !important;
+    border-top: 1px solid #6c7086 !important;
+    border-bottom: 1px solid #6c7086 !important;
+  }
+  html[data-color-mode="dark"] aside[aria-label="Package sidebar"] h3 {
+    color: #9399b2 !important;
+  }
+  html[data-color-mode="dark"] aside[aria-label="Package sidebar"] .bb {
+    border-bottom-color: #45475a !important;
+  }
+  html[data-color-mode="dark"] aside[aria-label="Package sidebar"] a {
+    color: #cdd6f4 !important;
+  }
+  /* The install command is code: a square, recessed frame. */
+  html[data-color-mode="dark"] aside[aria-label="Package sidebar"] p:has(code) {
+    background-color: #11111b !important;
+    border: 1px solid #6c7086 !important;
+  }
+  html[data-color-mode="dark"] aside[aria-label="Package sidebar"] p code {
+    background-color: transparent !important;
+    color: #cdd6f4 !important;
+  }
+
+  html[data-color-mode="dark"] aside#user-content-provenance a {
+    color: #b4befe !important;
+  }
+
+  /* ---- Footer: a mantle pane, like the header ---- */
+  html[data-color-mode="dark"] body footer {
+    background-color: #181825 !important;
+    border-top: 1px solid #6c7086 !important;
+  }
+  html[data-color-mode="dark"] body footer a {
+    color: #9399b2 !important;
+  }
+  html[data-color-mode="dark"] body footer a:hover {
+    color: #cdd6f4 !important;
+  }
+  /* The same rainbow stripe again, under the footer. */
+  html[data-color-mode="dark"] body footer::after {
+    display: none !important;
+  }
+
+  /* ---- Home page (logged out) ---- */
+
+  /* The hero's gradient and shapes are decoration: it becomes plain text
+     on the page, with "Sign up for free" as its one filled action. */
+  html[data-color-mode="dark"] #main > div > article > section:first-child {
+    background: #1e1e2e !important;
+    border-bottom: 1px solid #6c7086;
+  }
+  html[data-color-mode="dark"] #main > div > article > section:first-child :is(h1, h2, div) {
+    color: #cdd6f4 !important;
+  }
+  html[data-color-mode="dark"] #main > div > article > section:first-child a[href="/signup"] {
+    background: #b4befe !important;
+    color: #1e1e2e !important;
+    border: 1px solid #b4befe !important;
+  }
+  html[data-color-mode="dark"] #main > div > article > section:first-child a[href="/products/pro"] {
+    background: transparent !important;
+    color: #cdd6f4 !important;
+    border: 1px solid #6c7086 !important;
+  }
+  html[data-color-mode="dark"] #main > div > article > section:first-child a[href="/products/pro"]:hover {
+    background: #313244 !important;
+  }
+  /* The glossy blob above "Bring the best of open source". */
+  html[data-color-mode="dark"] #main > div > article img[role="presentation"] {
+    display: none;
+  }
+
+  /* ---- Search results ---- */
+
+  /* Metadata (version, age, dependents; weekly downloads): mono, dim. */
+  html[data-color-mode="dark"] main section span[aria-hidden="true"],
+  html[data-color-mode="dark"] main section svg.octicon-download + div {
+    font-family: "Noto Sans Mono", monospace;
+    color: #9399b2 !important;
+  }
+
+  /* Rows between npm's own rules; titles in the text colour. */
+  html[data-color-mode="dark"] main section.bt {
+    border-top-color: #45475a !important;
+  }
+  html[data-color-mode="dark"] main section.bt:hover {
+    background-color: #313244;
+  }
+  html[data-color-mode="dark"] main section a[href^="/package/"] h3 {
+    color: #cdd6f4 !important;
+  }
+  html[data-color-mode="dark"] main section a[href^="/package/"]:visited h3 {
+    color: #9399b2 !important;
+  }
+  /* Keywords and "exact match": pills become short text. */
+  html[data-color-mode="dark"] a[href^="/search?q=keywords:"],
+  html[data-color-mode="dark"] #pkg-list-exact-match {
+    background-color: transparent !important;
+    border: 0 !important;
+    color: #9399b2 !important;
+    padding-left: 0 !important;
+  }
+  html[data-color-mode="dark"] a[href^="/search?q=keywords:"]:hover {
+    color: #b4befe !important;
+    text-decoration: underline;
+  }
+  html[data-color-mode="dark"] #pkg-list-exact-match {
+    color: #b4befe !important;
+    padding-left: 0.75em !important;
+  }
+}

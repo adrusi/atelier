@@ -1,7 +1,29 @@
 description = "MDN Web Docs"
-summary = "developer.mozilla.org: reference and guide pages, the home and search pages, compat tables and code examples. Retunes MDN's own dark mode by overriding its colour tokens, which also reach into its web components' shadow roots."
+summary = "developer.mozilla.org: reference and guide pages, the home and search pages, compat tables and code examples. Retunes MDN's own dark mode by overriding its colour tokens, which also reach into its web components' shadow roots. The tiled style also squares and flattens the page: panes split by rules, callouts as coloured edges, cards as plain blocks."
 
 [[prerequisites]]
-description = "In MDN's Theme menu, leave the theme on OS default (follows the desktop's dark preference) or pick Dark. The style recolours only MDN's dark mode; in Light it changes just the fonts and corner radii."
+description = "In MDN's Theme menu, leave the theme on OS default (follows the desktop's dark preference) or pick Dark. The style recolours only MDN's dark mode; in Light it changes just the fonts and shapes."
 # Matches when the site is in a mode this style restyles.
 check = "html:not([data-theme=\"light\"])"
+
+[[pages]]
+url = "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/display"
+what = "A reference page: sidebar, TOC, Baseline banner, interactive example, notecards, formal definition table, formal syntax, code examples, live sample, compat table, article footer"
+states = ["Baseline banner expanded", "a top menu (HTML, CSS...) open", "Theme menu open", "search dialog open with a query typed", "a sidebar link focused"]
+
+[[pages]]
+url = "https://developer.mozilla.org/en-US/"
+what = "The home page: hero, featured articles and latest news blocks, recent contributions rows, contributor spotlight"
+
+[[pages]]
+url = "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Styling_basics/Box_model"
+what = "A Learn page (html[data-current-area=learn]): prerequisites table, previous/next nav, diagrams on white"
+
+[[pages]]
+url = "https://developer.mozilla.org/en-US/search?q=grid"
+what = "Site search results (<mdn-site-search>)"
+
+[[pages]]
+url = "https://developer.mozilla.org/en-US/plus/collections"
+what = "Signed-in pages (collections, user menu); not seen while styling, since the browser wasn't signed in to MDN, and the URL is unverified"
+states = ["user menu open"]
