@@ -1,0 +1,98 @@
+/* ==UserStyle==
+@name           Lobsters tokens (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Lobsters' colour tokens, set to Catppuccin Mocha
+==/UserStyle== */
+
+/* Lobsters keeps its palettes in four sheets @imported with media
+   conditions (light/dark x normal/high contrast), each setting the same
+   tokens on :root; application.css derives the greys from --base-fg at
+   decreasing opacities. Overriding on html:root (0,1,1) beats all four, so
+   this applies whichever appearance the site is in. The derived greys are
+   set directly, so they land on Mocha colours rather than translucent text. */
+
+@-moz-document domain("lobste.rs") {
+  html:root {
+    color-scheme: dark;
+
+    --base-bg: 30 30 46;              /* base */
+    --base-fg: 205 214 244;           /* text */
+    --base-light: 205 214 244;
+    --base-shadow: 17 17 27;
+    --opacity-fg: 100%;
+
+    /* Text, from body text down to metadata */
+    --color-fg: #cdd6f4;
+    --color-fg-contrast-13: #cdd6f4;
+    --color-fg-contrast-10: #cdd6f4;  /* buttons, inputs */
+    --color-fg-contrast-7-5: #9399b2; /* comment bylines, pagination */
+    --color-fg-contrast-6: #9399b2;   /* header nav, hats */
+    --color-fg-contrast-5: #6c7086;   /* disabled, placeholders */
+    --color-fg-contrast-4-5: #9399b2; /* story bylines, domains, scores, footer */
+    --color-fg-shape: #6c7086;        /* hr, comment thread lines */
+
+    /* Links and the accent: Lobsters' red accent (upvoted arrows) is
+       lavender here. */
+    --color-fg-link: #b4befe;
+    --color-fg-link-visited: #cba6f7;
+    --color-fg-accent: #b4befe;
+    --color-bg-accent: #b4befe;
+    --color-fg-author: #b4befe;       /* "authored by": the submitter wrote it */
+    --color-bg-target: transparent;   /* linked comment: a left edge instead */
+
+    /* Status */
+    --color-fg-negative: #f38ba8;
+    --color-fg-affirmative: #a6e3a1;  /* new users, saved stories */
+    --color-lobsters-fg-has-suggestions: #fab387;
+
+    /* Surfaces and controls: outlined on the page, inputs recessed */
+    --color-bg-50: transparent;
+    --color-box-bg: #11111b;
+    --color-box-bg-shaded: #181825;
+    --color-box-border: #6c7086;
+    --color-box-border-focus: #b4befe;
+    --color-button-bg: transparent;
+    --color-button-bg-shaded: transparent;
+
+    --color-table-header-bg: #181825;
+    --color-table-header-border: #6c7086;
+    --color-table-row-bg-even: transparent;
+    --color-table-row-bg-odd: transparent;
+    --color-table-row-border: #313244;
+
+    /* Tags are text (shape.user.css); their categories keep apart by
+       colour, so the backgrounds and borders go. */
+    --color-tag-bg: transparent;
+    --color-tag-border: transparent;
+    --color-tag-media-bg: transparent;
+    --color-tag-media-border: transparent;
+    --color-tag-meta-bg: transparent;
+    --color-tag-meta-border: transparent;
+    --color-lobsters-tag-special-bg: transparent;
+    --color-lobsters-tag-special-border: transparent;
+
+    /* Hats (the badges people wear on comments) */
+    --color-hat-crown-fill: transparent;
+    --color-hat-crown-stroke: #6c7086;
+    --color-hat-brim-stroke: #6c7086;
+    --color-lobsters-hat-sysop-crown-fill: transparent;
+    --color-lobsters-hat-sysop-brim-stroke: #f38ba8;
+
+    /* Callouts: no tint, a left edge in shape.user.css */
+    --color-flash-bg-error: transparent;
+    --color-flash-bg-success: transparent;
+    --color-flash-bg-notice: transparent;
+
+    /* Flat: no shadows or highlights */
+    --color-light-25: transparent;
+    --color-shadow-80: transparent;
+    --color-shadow-25: transparent;
+    --color-shadow-10: transparent;
+    --color-fg-gradient-lit: transparent;
+    --color-fg-gradient-shadowed: transparent;
+
+    --color-mobile-story-comments-bubble-fill: #45475a;
+    --color-mobile-story-comments-bubble-fill-zero: #313244;
+  }
+}

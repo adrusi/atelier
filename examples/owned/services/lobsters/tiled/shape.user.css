@@ -1,0 +1,263 @@
+/* ==UserStyle==
+@name           Lobsters (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Flat, square and condensed lobste.rs: header and footer panes, tags as text, outlined controls
+==/UserStyle== */
+
+/* Colours come from tokens.user.css; this is type and shape. */
+
+@-moz-document domain("lobste.rs") {
+  html:root {
+    --sans: "Noto Sans", sans-serif;
+    --mono: "Noto Sans Mono", monospace;
+    --input-outline-width: 1px;
+    accent-color: #b4befe;  /* radios and checkboxes */
+  }
+
+  body, input, textarea, button, select {
+    font-family: var(--sans);
+    font-stretch: condensed;
+  }
+  pre, code, kbd, samp, tt, .searchq {
+    font-family: var(--mono);
+    font-stretch: condensed;
+  }
+  ::selection { background: #353749; color: #cdd6f4; }
+  ::placeholder { color: #6c7086; opacity: 1; }
+
+  /* Panes. The body is a centred 960px column; it becomes full width so
+     the header and footer can run edge to edge as bg-deep panes meeting
+     the page at a rule, with their contents still on the column. The
+     footer stays at the bottom of the window on short pages, rather than
+     a pane floating above more page. */
+  body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    row-gap: 0;  /* Lobsters' 16px gap would also follow the footer */
+  }
+  #inside { flex: 1 0 auto; }
+  @media screen and (min-width: 481px) {
+    body {
+      max-width: none;
+      margin: 0;
+      --column: max(0px, (100% - 960px) / 2);
+    }
+    #header {
+      padding: 10px calc(var(--column) + 9.6px);
+    }
+    #inside {
+      margin: 20px calc(var(--column) + 10px) 8px calc(var(--column) + 28px + 0.5rem);
+    }
+    footer {
+      padding: 20px calc(var(--column) + 8px) 32px;
+    }
+  }
+  #header {
+    background: #181825;
+    border-bottom: 1px solid #6c7086;
+  }
+  footer {
+    background: #181825;
+    border-top: 1px solid #6c7086;
+    margin-top: 24px;
+  }
+
+  /* On phones, the nav scrolls sideways under gradient fades; the fades
+     go (no gradients), the scrolling stays. The header's own rule is the
+     one at its foot. */
+  #header-top { border-bottom: 0; }
+  #header-top ul::before, #header-top .inbox::before { display: none; }
+
+  /* Header nav is a row of tabs: the current page underlined in lavender. */
+  #header a:hover { color: #cdd6f4; }
+  #header a[aria-current="page"] {
+    color: #cdd6f4;
+    text-decoration: underline 2px #b4befe;
+    text-underline-offset: 6px;
+  }
+  /* Unread messages are the one thing here that needs attention. */
+  #header-top .inbox-unread { color: #fab387; }
+
+  /* The logo: a light L on a red square whose shade follows traffic (set
+     inline). Kept red, in Mocha red, square, with a dark L. */
+  #logo {
+    background-color: #f38ba8 !important;
+    border-radius: 0;
+  }
+  #logo a { filter: brightness(0.12); }
+
+  /* Story rows. Titles are a list of links: text colour, visited dimmed. */
+  .link a.u-url { color: #cdd6f4; }
+  .link a.u-url:visited { color: #9399b2; }
+  .link a.u-url:hover { color: #b4befe; }
+  li.story { padding-left: 2px; }
+  .upvoter { font-family: var(--mono); font-stretch: condensed; }
+  .upvoter::before { font-family: var(--sans); }
+  /* On phones, the comment count sits in a speech bubble at the row's
+     end: a count, so plain text. */
+  ol.stories.list li.story .mobile_comments span {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    color: #9399b2;
+    font-family: var(--mono);
+    font-stretch: condensed;
+  }
+  ol.stories.list li.story .mobile_comments:hover span { color: #b4befe; }
+  ol.stories.list li.story .mobile_comments.zero span {
+    background: transparent;
+    color: #6c7086;
+  }
+  ol.stories.list li.story .mobile_comments span::before,
+  ol.stories.list li.story .mobile_comments span::after { display: none; }
+
+  /* Tags: short text in their category's colour, no pill. Topics are the
+     plain ones; media, meta and the special kinds (ask, show, announce,
+     interview) each get a Mocha colour. */
+  /* atelier:variant tag-colours */
+  a.tag { color: #9399b2; }
+  a.tag_is_media { color: #89b4fa; }
+  a.tag_meta { color: #94e2d5; }
+  a.tag_announce, a.tag_ask, a.tag_show, a.tag_interview { color: #f5c2e7; }
+  /* atelier:end tag-colours */
+  a.tag {
+    border: 0;
+    border-radius: 0;
+    padding: 0 0.15em;
+    /* Without the pill, Lobsters' 10.5px tags are too small to read. */
+    font-size: 0.8125rem;
+    font-weight: 500;
+  }
+  a.tag:hover { color: #b4befe; text-decoration: underline; }
+  a.tag.filtered { border: 0; text-decoration: line-through; }
+
+  /* Avatars are round by nature. */
+  img.avatar { border-radius: 50%; }
+
+  /* Links in comments and story text are grey and underlined on Lobsters;
+     here they take the accent. */
+  div.comment_text a, div.story_text a,
+  .comment .details div.comment_text a { color: #b4befe; }
+  div.comment_text a:visited, div.story_text a:visited,
+  .comment .details div.comment_text a:visited { color: #cba6f7; }
+
+  /* A linked comment is the current item: a lavender left edge. */
+  .comment:target, li:target, p:target, div:target, span:target,
+  .showing-user-comment {
+    background: transparent;
+    border-radius: 0;
+    box-shadow: inset 2px 0 0 #b4befe;
+  }
+  .comments_subtree:target { box-shadow: none; }
+
+  /* Controls: outlined rectangles; inputs recessed in crust. */
+  input, textarea, select, button, a.button, .button,
+  input[type="submit"], input[type="button"],
+  #story_holder .ts-control {
+    border-radius: 0;
+    box-shadow: none;
+  }
+  button, input[type="submit"], input[type="button"], a.button, .button {
+    background: transparent;
+    border: 1px solid #6c7086;
+    color: #cdd6f4;
+    background-image: none;
+  }
+  button:hover, input[type="submit"]:hover, input[type="button"]:hover,
+  a.button:hover, .button:hover {
+    background: #313244;
+  }
+  /* Page numbers are tabs: text, the current page underlined. */
+  #page-link-buttons a,
+  #page-link-buttons a:not([aria-current="page"]) {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    color: #9399b2;
+    font-family: var(--mono);
+    font-stretch: condensed;
+  }
+  #page-link-buttons a:hover { color: #b4befe; }
+  #page-link-buttons a[aria-current="page"] {
+    color: #cdd6f4;
+    text-decoration: underline 2px #b4befe;
+    text-underline-offset: 4px;
+  }
+  .voters button, button.upvoter { border: 0; background: transparent; }
+  /* The form's one primary action: posting a comment, logging in. */
+  input.comment-post:not(:disabled),
+  #login_form input[type="submit"],
+  form[action="/login"] input[type="submit"] {
+    background: #b4befe;
+    border-color: #b4befe;
+    color: #1e1e2e;
+  }
+  input.comment-post:not(:disabled):hover,
+  form[action="/login"] input[type="submit"]:hover {
+    background: #cdd6f4;
+    border-color: #cdd6f4;
+  }
+  button:disabled, input[type="submit"]:disabled, input[type="button"]:disabled {
+    background: transparent;
+    border-color: #45475a;
+    color: #6c7086;
+  }
+  textarea, select, input[type="text"], input[type="search"],
+  input[type="password"], input[type="email"], input[type="url"],
+  input[type="number"], input:not([type]) {
+    background: #11111b;
+    border: 1px solid #45475a;
+    color: #cdd6f4;
+  }
+  :focus-visible,
+  input:focus, textarea:focus, select:focus {
+    outline: 1px solid #b4befe;
+    outline-offset: 0;
+  }
+
+  /* Menus: surface, a surface-2 border, square. */
+  .caches[open] ul,
+  #story_holder .ts-dropdown {
+    background: #313244;
+    border: 1px solid #45475a;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .caches li { border-bottom-color: #45475a; }
+  .caches a:hover { background: #45475a; text-decoration: none; }
+  #story_holder .ts-dropdown .ts-dropdown-content .active {
+    background: #45475a;
+    color: #cdd6f4;
+  }
+
+  /* Code is a pane: a square frame on crust. */
+  pre {
+    background: #11111b;
+    border: 1px solid #6c7086;
+    border-radius: 0;
+    padding: 8px 10px;
+  }
+  pre code, .searchq { background: none; border-radius: 0; }
+
+  /* Callouts: their kind as a 2px left edge, no box. */
+  div.flash-error, div.flash-notice, div.flash-success {
+    border: 0;
+    border-left: 2px solid #b4befe;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  div.flash-error { border-left-color: #f38ba8; }
+  div.flash-success { border-left-color: #a6e3a1; }
+  div.user-stats {
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    padding-left: 0;
+  }
+  div#gravatar { box-shadow: none; border: 0; }
+
+  /* Hats (badges on comments; none seen yet): unfilled, square. */
+  .hat { border-radius: 0; }
+}

@@ -1,0 +1,187 @@
+/* ==UserStyle==
+@name           Wikipedia article content (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Article furniture without boxes: figures, infoboxes, message boxes, navboxes, categories, tables, code
+==/UserStyle== */
+
+/* Article furniture is drawn by templates whose CSS (TemplateStyles) is
+   inline in the page as .mw-parser-output rules, often with inline style
+   attributes on top, hence the !importants on borders and backgrounds.
+   The class names are the templates' own (infobox, navbox, ambox...), stable
+   across articles and years. Scoped to the dark modes, like the tokens. */
+
+@-moz-document domain("wikipedia.org") {
+  /* ---- Figures ------------------------------------------------------ */
+
+  /* Thumbnails lose their frame: the image and caption stay together by
+     spacing. The image keeps its white backdrop, which is what makes
+     transparent diagrams readable (images aren't recoloured); only its
+     border goes. Captions are secondary text. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output figure[typeof~="mw:File/Thumb"],
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output figure[typeof~="mw:File/Frame"],
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(.thumbinner, .thumbimage) {
+    background-color: transparent;
+    border: 0;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output figure:is([typeof~="mw:File/Thumb"], [typeof~="mw:File/Frame"]) :is(img, figcaption) {
+    border: 0;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output figure:is([typeof~="mw:File/Thumb"], [typeof~="mw:File/Frame"]) > figcaption,
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .thumbcaption {
+    background-color: transparent;
+    color: var(--tl-dim);
+    padding: 4px 0 0;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output figure:is([typeof~="mw:File/Thumb"], [typeof~="mw:File/Frame"]) img {
+    margin: 0;
+  }
+
+  /* ---- Infoboxes, sidebars, pull quotes ----------------------------- */
+
+  /* The floated boxes beside the text become a pane: no frame or fill, a
+     rule on the edge facing the text. Their header rows (often tinted per
+     topic, inline) become mantle strips. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(.infobox, .sidebar, .quotebox, .side-box) {
+    background: transparent !important;
+    border: 0 !important;
+    border-left: 1px solid var(--tl-rule) !important;
+    padding-left: 8px !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .infobox:is(.infobox-left, [style*="float:left"], [style*="float: left"]),
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(.sidebar, .quotebox).floatleft {
+    border-left: 0 !important;
+    border-right: 1px solid var(--tl-rule) !important;
+    padding-left: 0 !important;
+    padding-right: 8px !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(.infobox-above, .infobox-header, .infobox-title, .infobox-subheader, .sidebar-title, .sidebar-heading, .sidebar-above) {
+    background: var(--tl-deep) !important;
+    color: var(--tl-fg) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(.infobox, .sidebar) :is(th, td):not(.infobox-above, .infobox-header, .infobox-title, .infobox-subheader, .sidebar-title, .sidebar-heading, .sidebar-above) {
+    background: transparent !important;
+  }
+
+  /* ---- Message boxes (callouts) ------------------------------------- */
+
+  /* Article and talk message boxes ("This article needs additional
+     citations"), and Codex messages: no box or tint, a 2px left edge in
+     the status colour. Neutral ones (notice, move, protection) are
+     lavender. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.mw-parser-output .ambox, .mw-parser-output .tmbox, .mw-parser-output .ombox, .mw-parser-output .cmbox, .mw-parser-output .fmbox, .mw-parser-output .imbox, .cdx-message) {
+    background: transparent !important;
+    border: 0 !important;
+    border-left: 2px solid var(--tl-accent) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(.ambox, .tmbox, .ombox, .cmbox, .fmbox, .imbox):is(.ambox-speedy, .ambox-delete, .tmbox-speedy, .tmbox-delete, .ombox-speedy, .ombox-delete, .cmbox-speedy, .cmbox-delete, .imbox-speedy, .imbox-delete, .fmbox-warning),
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .cdx-message--error {
+    border-left-color: #f38ba8 !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(.ambox, .tmbox, .ombox, .cmbox, .imbox):is(.ambox-content, .ambox-style, .tmbox-content, .tmbox-style, .ombox-content, .ombox-style, .cmbox-content, .cmbox-style, .imbox-content, .imbox-style),
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .cdx-message--warning {
+    border-left-color: #f9e2af !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .cdx-message--success {
+    border-left-color: #a6e3a1 !important;
+  }
+  /* The ambox draws its edge on the box's first cell in some layouts. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(.ambox, .tmbox, .ombox, .cmbox, .fmbox, .imbox) :is(td, th) {
+    background: transparent !important;
+  }
+
+  /* A template page's documentation is a pane of its own: Wikipedia tints
+     it green; here it keeps its square frame, on the page background, with
+     its header and metadata strips in mantle. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(.documentation, .documentation-metadata) {
+    background: transparent !important;
+    border-color: var(--tl-rule) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .documentation-startbox {
+    background: var(--tl-deep) !important;
+  }
+
+  /* ---- Navboxes ----------------------------------------------------- */
+
+  /* The navigation tables at the foot of an article are a pane spanning
+     the content column: a square 1px frame, the title row a mantle strip,
+     the group labels on mantle beside their lists, and the template's
+     2px page-coloured gutters between cells as 1px rules. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .navbox {
+    border: 1px solid var(--tl-rule) !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .navbox + .navbox,
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .navbox + link + .navbox,
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .navbox + style + .navbox {
+    margin-top: -1px;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(.navbox-inner, .navbox-subgroup) {
+    background: transparent !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(.navbox-title, .navbox-abovebelow, .navbox-group, .navbox th) {
+    background: var(--tl-deep) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(.navbox-list, .navbox-even, .navbox-odd) {
+    background: transparent !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .navbox-list {
+    border-left: 1px solid var(--tl-rule) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output tr + tr > :is(.navbox-abovebelow, .navbox-group, .navbox-image, .navbox-list) {
+    border-top: 1px solid var(--tl-rule) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .navbox :is(table, tbody, tr) {
+    border-spacing: 0;
+  }
+
+  /* ---- Categories --------------------------------------------------- */
+
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .catlinks {
+    background: transparent;
+    border: 0;
+    border-top: 1px solid var(--tl-rule);
+    padding: 8px 0 0;
+  }
+
+  /* ---- Tables ------------------------------------------------------- */
+
+  /* Data tables keep their grid (it's what makes them readable), in the
+     rule colour; header cells are mantle. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .wikitable {
+    background-color: transparent;
+    border-color: var(--tl-rule);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .wikitable > * > tr > :is(th, td) {
+    border-color: var(--tl-rule);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .wikitable > * > tr > th {
+    background-color: var(--tl-deep);
+  }
+
+  /* ---- Code --------------------------------------------------------- */
+
+  /* Code blocks are panes: crust, with a square frame. Inline code is
+     plain monospace in the text colour, without its little box. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(pre, .mw-highlight pre) {
+    background-color: var(--tl-deeper);
+    border: 1px solid var(--tl-surface-2);
+    color: var(--tl-fg);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .mw-highlight {
+    background-color: transparent;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :not(pre) > code {
+    background-color: transparent;
+    border: 0;
+    padding: 0;
+    color: var(--tl-fg);
+  }
+
+  /* ---- Hatnotes ("For other uses, see...") are secondary text -------- */
+
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .hatnote {
+    color: var(--tl-dim);
+  }
+}

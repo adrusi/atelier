@@ -1,0 +1,217 @@
+/* ==UserStyle==
+@name           Wikipedia chrome (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Vector 2022's chrome as panes: square, flat, header strip, sidebars split by rules, menus, focus
+==/UserStyle== */
+
+/* Colours come from the --tl-* names in tokens.user.css. Everything is
+   scoped to Wikipedia's dark modes (night, or Automatic), like the tokens,
+   so Light stays as Wikipedia draws it. Layout and order are Vector's; only
+   borders, fills and a little padding change. */
+
+@-moz-document domain("wikipedia.org") {
+  /* ---- Square and flat, everywhere ---------------------------------- */
+
+  /* Codex hard-codes 2px corners on links, buttons and inputs, and
+     templates put radii and shadows in inline styles, so this has to be
+     broad and !important. Radios stay round. Focus rings drawn with
+     box-shadow come back as an outline below. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) *:not(.cdx-radio__icon),
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) *:not(.cdx-radio__icon)::before,
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) *:not(.cdx-radio__icon)::after {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Focus: a 1px lavender outline, the focused-window mark. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :focus-visible {
+    outline: 1px solid var(--tl-accent) !important;
+    outline-offset: 1px;
+  }
+  /* Codex shows a focused text input with a box-shadow ring only (and on
+     :focus, not :focus-visible). */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.cdx-text-input__input, .cdx-search-input input, textarea, select):focus {
+    border-color: var(--tl-accent);
+    outline: 1px solid var(--tl-accent);
+    outline-offset: -1px;
+  }
+  /* A radio's or checkbox's focus is drawn on its icon. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.cdx-radio__input, .cdx-checkbox__input):focus-visible + :is(.cdx-radio__icon, .cdx-checkbox__icon) {
+    outline: 1px solid var(--tl-accent);
+    outline-offset: 2px;
+  }
+
+  /* ---- Panes -------------------------------------------------------- */
+
+  /* Header: one mantle strip across the window, ruled off below. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-header-container {
+    background-color: var(--tl-deep);
+    border-bottom: 1px solid var(--tl-rule);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-header-container .vector-header {
+    background-color: transparent;
+  }
+  /* The sticky header that appears on scroll is the same strip. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-sticky-header {
+    background-color: var(--tl-deep);
+    border-bottom: 1px solid var(--tl-rule);
+  }
+
+  /* With limited width, the page column sits in mantle gutters; it meets
+     them at a rule, like a tiled window. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-page-container {
+    border-inline: 1px solid var(--tl-rule);
+  }
+
+  /* Sidebars (contents on the left; tools and appearance on the right),
+     split from the article by a rule the height of the page, but only
+     when something is pinned there. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-column-start:has(.vector-pinned-container > *) {
+    border-right: 1px solid var(--tl-rule);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-column-end:has(.vector-pinned-container > *) {
+    border-left: 1px solid var(--tl-rule);
+  }
+  /* The sticky sidebars end in a gradient fade (from transparent white,
+     which shows as a pale band in dark mode). No gradients: the column
+     just ends. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-sticky-pinned-container::after {
+    background: none;
+  }
+  /* Vector's own rule under each sidebar heading ("Contents", "Appearance")
+     and between their groups goes to the muted rule colour. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.vector-pinnable-header, .vector-menu-heading, .vector-pinnable-element .vector-menu-heading, .vector-pinned-container .vector-pinnable-header) {
+    border-color: var(--tl-rule);
+  }
+
+  /* The pinned sidebar's "hide" and "move to sidebar" are small grey
+     filled buttons: outlined text instead. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-pinnable-header-toggle-button {
+    background-color: transparent;
+    border: 1px solid var(--tl-rule);
+    color: var(--tl-dim);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-pinnable-header-toggle-button:hover {
+    background-color: var(--tl-surface);
+    color: var(--tl-fg);
+  }
+
+  /* Contents: every entry is a link, so they're in the text colour; the
+     section you're reading is lavender with the 2px lavender edge. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-toc .vector-toc-link {
+    color: var(--tl-fg);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-toc .vector-toc-link:hover {
+    color: var(--tl-accent);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-toc .vector-toc-list-item-active > .vector-toc-link {
+    color: var(--tl-accent);
+    box-shadow: -2px 0 0 var(--tl-accent) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-toc .vector-toc-list-item-active > .vector-toc-link .vector-toc-text {
+    color: inherit;
+  }
+
+  /* Page tabs (Article/Talk, Read/Edit/View history): text, the current
+     one underlined in lavender. The toolbar's 1px shadow becomes a rule. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-page-toolbar-container {
+    border-bottom: 1px solid var(--tl-rule);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.vector-page-toolbar, .vector-page-titlebar) .vector-tab-noicon.selected a,
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.vector-page-toolbar, .vector-page-titlebar) .vector-tab-noicon.selected a:visited {
+    color: var(--tl-fg);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.vector-page-toolbar, .vector-page-titlebar) .vector-tab-noicon.selected a {
+    border-bottom-color: var(--tl-accent);
+  }
+  /* The tabs aren't "visited" in the sense the theme's mauve means. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.vector-page-toolbar, .vector-page-titlebar, .vector-user-links, .vector-pinnable-element) a:visited {
+    color: var(--tl-accent);
+  }
+
+  /* Headings: Vector's hairline under h1/h2 in the rule colour. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.mw-body h1, .mw-body-content h1, .mw-body-content h2, .mw-heading1, .mw-heading2) {
+    border-bottom-color: var(--tl-rule);
+  }
+
+  /* Footer: a mantle pane under a rule, edge to edge of the page column.
+     It sits inside the column's padding, so it's pulled out over it; the
+     widths follow Vector's own breakpoints for that padding. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-footer-container {
+    --tl-page-pad: 1.5rem;
+    background-color: var(--tl-deep);
+    border-top: 1px solid var(--tl-rule);
+    margin-inline: calc(-1 * var(--tl-page-pad));
+    padding-inline: var(--tl-page-pad);
+  }
+  @media screen and (min-width: 1120px) {
+    html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-footer-container {
+      --tl-page-pad: 2.75rem;
+    }
+  }
+  @media screen and (min-width: 1680px) {
+    html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-footer-container {
+      --tl-page-pad: 3.25rem;
+    }
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-footer {
+    border-top: 0;
+  }
+
+  /* Search results: every title is a link, so titles are in the text
+     colour, dimmed once visited, lavender on hover. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.mw-search-result-heading, .iw-result__title) a {
+    color: var(--tl-fg);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.mw-search-result-heading, .iw-result__title) a:visited {
+    color: var(--tl-dim);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.mw-search-result-heading, .iw-result__title) a:hover {
+    color: var(--tl-accent);
+  }
+
+  /* ---- Controls ----------------------------------------------------- */
+
+  /* Inputs are recessed (crust); buttons are outlined on the page. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.cdx-text-input__input, .cdx-search-input input, textarea, input[type="text"], input[type="search"], select) {
+    background-color: var(--tl-deeper);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .cdx-button:not(.cdx-button--weight-quiet, .cdx-button--weight-primary),
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .cdx-search-input__end-button {
+    background-color: transparent;
+    border-color: var(--tl-rule);
+    color: var(--tl-fg);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .cdx-button:not(.cdx-button--weight-quiet, .cdx-button--weight-primary):hover,
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .cdx-search-input__end-button:hover {
+    background-color: var(--tl-surface);
+  }
+
+  /* ---- Things on top: menus, search suggestions, previews ----------- */
+
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.vector-dropdown-content, .cdx-menu, .vector-typeahead-search .cdx-menu, .uls-menu, .mwe-popups) {
+    background-color: var(--tl-surface);
+    border: 1px solid var(--tl-surface-2);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .cdx-menu-item--highlighted {
+    background-color: var(--tl-surface-2);
+  }
+  /* Page and reference previews: the pointer toward the link is cut out of
+     the box with clip-path, and the extract fades out with a gradient.
+     Square box, no pointer, no fade. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mwe-popups .mwe-popups-container {
+    background-color: var(--tl-surface);
+    clip-path: none !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mwe-popups::before,
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mwe-popups::after {
+    display: none;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mwe-popups .mwe-popups-extract::after,
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mwe-popups .mwe-popups-fade {
+    background-image: none !important;
+    background: none !important;
+  }
+}

@@ -1,2 +1,33 @@
 description = "lobste.rs"
 summary = "lobste.rs: story lists, tag and domain pages, comment threads, user pages and forms. Overrides Lobsters' own colour tokens, so it applies whichever appearance (light, dark, high contrast) the site is in."
+
+[[pages]]
+url = "https://lobste.rs/"
+what = "Front page: story rows with scores, tags, domains, bylines"
+states = ["a story's caches menu open", "upvote arrow focused", "phone width (390): comment counts at row ends, scrolling nav"]
+
+[[pages]]
+url = "https://lobste.rs/s/rwdufq/anti_patterns_software_blogging"
+what = "A story with a comment thread and the comment form"
+states = ["a comment linked with #c_<id> (target)", "logged in: comment form enabled, reply and flag controls"]
+
+[[pages]]
+url = "https://lobste.rs/search?q=rust&what=stories&order=relevance"
+what = "Search: input, radio options, results, pagination"
+
+[[pages]]
+url = "https://lobste.rs/~mtlynch"
+what = "User page: profile table, avatar; short page, so the footer sits at the window's foot"
+
+[[pages]]
+url = "https://lobste.rs/login"
+what = "Login form: recessed inputs, the filled primary button"
+
+[[pages]]
+url = "https://lobste.rs/stories/new"
+what = "Submit form with the tag picker (logged in only; not yet seen in tiled)"
+states = ["tag picker dropdown open"]
+
+[[pages]]
+url = "https://lobste.rs/messages"
+what = "Inbox and messages, flash notices (logged in only; not yet seen in tiled)"

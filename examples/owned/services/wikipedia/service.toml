@@ -1,7 +1,33 @@
 description = "Wikipedia"
-summary = "Wikipedia (Vector 2022 skin), all languages. Retunes Wikipedia's own dark mode to the theme by overriding its Codex design tokens."
+summary = "Wikipedia (Vector 2022 skin), all languages. Retunes Wikipedia's own dark mode to the theme by overriding its Codex design tokens; the tiled styles also flatten the chrome into panes and article furniture (thumbnails, infoboxes, message boxes, navboxes, the English Main Page) into plain blocks, and recolour <syntaxhighlight> code."
 
 [[prerequisites]]
 description = "In Wikipedia's Appearance menu, set Color to Automatic (follows the desktop's dark preference) or Dark. The style only changes Wikipedia's dark mode; it leaves Light alone."
 # Matches when the site is in a mode this style restyles.
 check = "html:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os)"
+
+[[pages]]
+url = "https://en.wikipedia.org/wiki/Typography"
+what = "Article: thumbnails with captions, hatnotes, contents sidebar, appearance sidebar, references"
+states = ["Tools (⋮) menu open", "Contents and Appearance unpinned (hidden into the header)", "scrolled, with the sticky header showing", "hovering a link (page preview popup)"]
+
+[[pages]]
+url = "https://en.wikipedia.org/wiki/Helvetica"
+what = "Article with an infobox, a pull quote and navboxes (expand one) at the foot, categories"
+
+[[pages]]
+url = "https://en.wikipedia.org/wiki/Python_syntax_and_semantics"
+what = "Code blocks (<syntaxhighlight>) and inline code"
+
+[[pages]]
+url = "https://en.wikipedia.org/wiki/Template:Ambox"
+what = "Every kind of article message box (speedy, delete, content, style, notice, move, protection), and a template documentation box"
+
+[[pages]]
+url = "https://en.wikipedia.org/wiki/Main_Page"
+what = "English Main Page: featured article, in the news, did you know, on this day, picture of the day"
+states = ["search field focused, with suggestions open"]
+
+[[pages]]
+url = "https://en.wikipedia.org/wiki/Special:Search?search=typography&fulltext=1"
+what = "Full-text search results"

@@ -1,0 +1,337 @@
+/* ==UserStyle==
+@name           docs.rs (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Retunes docs.rs's own dark theme (its top bar, crate pages, search and home page) to Catppuccin Mocha, with tiled's panes and square outlined controls
+==/UserStyle== */
+
+/* docs.rs styles its own pages and the top bar it adds to rustdoc pages
+   from one set of custom properties, re-declared on
+   html[data-docs-rs-theme="dark"]. That attribute follows the rustdoc theme
+   setting (dark here, since rustdoc follows the system by default); Light and
+   Ayu are left alone. html:root[...] is 0,2,1 and beats docs.rs's 0,1,1.
+   Class names are Pure.css's (pure-menu-*, pure-button, pure-u-*) and
+   docs.rs's own readable ones. */
+
+@-moz-document domain("docs.rs") {
+  html:root[data-docs-rs-theme="dark"] {
+    /* Surfaces */
+    --color-background: #1e1e2e;
+    --color-background-code: #11111b;
+    --color-background-input: #11111b;
+    --color-menu-header-background: #313244;
+    --color-table-header-background: #181825;
+    --color-warn-background: transparent;
+
+    /* Text */
+    --color-standard: #cdd6f4;
+    --color-navbar-standard: #cdd6f4;
+    --color-brand: #cdd6f4;
+    --color-table-header: #cdd6f4;
+    --color-warn-msg: #cdd6f4;
+    --input-color: #cdd6f4;
+    --chart-title-color: #cdd6f4;
+
+    /* Rules: muted; menus' borders surface1. */
+    --color-border: #6c7086;
+    --color-border-light: #6c7086;
+    --color-menu-border: #45475a;
+    --chart-grid: #45475a;
+
+    /* Accent: links, the Documentation button, focus */
+    --color-url: #b4befe;
+    --color-doc-link-background: #b4befe;
+    --color-doc-link-hover: #cdd6f4;
+    --color-search-focus: #b4befe;
+    --input-box-shadow-focus: 0 0 0 1px #b4befe;
+
+    /* Item kinds and status, as in rustdoc.user.css */
+    --color-struct: #94e2d5;
+    --color-type: #94e2d5;
+    --color-macro: #89dceb;
+    --color-error: #f38ba8;
+    --color-error-hover: #f38ba8;
+    --color-warn: #f9e2af;
+    --color-warn-hover: #f9e2af;
+
+    /* Syntax highlighting (crate READMEs), matching rustdoc.user.css */
+    --color-syntax-foreground: inherit;
+    --color-syntax-background: #11111b;
+    --color-syntax-keyword1: #cba6f7;
+    --color-syntax-keyword2: #cba6f7;
+    --color-syntax-lifetime: #f2cdcd;
+    --color-syntax-prelude-ty: #f9e2af;
+    --color-syntax-prelude-val: #fab387;
+    --color-syntax-number: #fab387;
+    --color-syntax-string: #a6e3a1;
+    --color-syntax-bool: #fab387;
+    --color-syntax-attribute: #f9e2af;
+    --color-syntax-self: #f38ba8;
+    --color-syntax-macro: #89b4fa;
+    --color-syntax-question-mark: #89dceb;
+    --color-syntax-comment: #9399b2;
+    --color-syntax-doc-comment: #a6adc8;
+    --color-line-number: #6c7086;
+    --color-line-number-highlighted: #313244;
+
+    /* ---- Type -------------------------------------------------------- */
+
+    /* docs.rs names Fira Sans, Source Serif and Source Code Pro directly in
+       its rules. The attribute is on rustdoc pages too (for the top bar), so
+       rules that would also hit rustdoc's own content skip body.rustdoc-page
+       and leave it to rustdoc.user.css. */
+    & body {
+      font-stretch: condensed;
+    }
+    /* These use the `font` shorthand, which resets font-stretch. */
+    & :is(div.nav-container, div.nav-container div.package-details-menu p.description, #docsrs-alert, div .info, div .warning) {
+      font-family: "Noto Sans", sans-serif;
+      font-stretch: condensed;
+    }
+    & body:not(.rustdoc-page),
+    & body:not(.rustdoc-page) :is(input, select, textarea, button, .pure-g [class*="pure-u"], h1, h2, h3, h4, h5, h6, th, .about thead tr th) {
+      font-family: "Noto Sans", sans-serif;
+    }
+    & body:not(.rustdoc-page) :is(code, kbd, pre, samp) {
+      font-family: "Noto Sans Mono", monospace;
+    }
+
+    /* ---- Panes ------------------------------------------------------- */
+
+    /* The top bar and the crate page's header (name, description, tabs)
+       are header panes: mantle strips, edge to edge, closed by a rule. */
+    & :is(div.nav-container, div.docsrs-package-container) {
+      background-color: #181825;
+      border-bottom: 1px solid #6c7086;
+      box-shadow: none;
+    }
+    /* The bar's items are split by vertical rules of their own. */
+    & div.nav-container :is(.pure-menu-item, .pure-menu-heading, li) {
+      border-color: #6c7086;
+    }
+    & div.nav-container .pure-menu-link {
+      background-color: transparent;
+    }
+    & div.nav-container .pure-menu-link:hover,
+    & div.nav-container .pure-menu-link:focus,
+    & div.nav-container .pure-menu-active > .pure-menu-link {
+      background-color: #313244;
+    }
+
+    /* The top bar's dropdowns (crate, platform, docs.rs, Rust) are menus:
+       surface, with a surface1 border, square, no shadow. */
+    & div.nav-container .pure-menu-children {
+      background-color: #313244;
+      border: 1px solid #45475a;
+      border-radius: 0;
+      box-shadow: none;
+    }
+    & div.nav-container .pure-menu-children :is(.pure-menu-link, .pure-menu-heading) {
+      background-color: transparent;
+    }
+    & div.nav-container .pure-menu-children .pure-menu-link:hover {
+      background-color: #45475a;
+    }
+    & div.nav-container .pure-menu-children .menu-item-divided,
+    & div.nav-container .pure-menu-children .right-border {
+      border-color: #45475a;
+    }
+    /* The crate menu's version list: versions and dates as metadata. */
+    & #releases-list .pure-menu-link {
+      color: #9399b2;
+      font-family: "Noto Sans Mono", monospace;
+      & b { color: #cdd6f4; font-weight: 500; }
+    }
+
+    /* The crate page's tabs (Crate, Source, Builds, Feature flags) are
+       text, the current one underlined in lavender. */
+    & div.docsrs-package-container .pure-menu-link {
+      background-color: transparent;
+      border: 0;
+      border-bottom: 2px solid transparent;
+      border-radius: 0;
+      color: #9399b2;
+      &:hover {
+        background-color: transparent;
+        color: #cdd6f4;
+      }
+    }
+    & div.docsrs-package-container .pure-menu-link.pure-menu-active {
+      background-color: transparent;
+      border: 0;
+      border-bottom: 2px solid #b4befe;
+      border-radius: 0;
+      color: #cdd6f4;
+    }
+    /* The crate description is prose in docs.rs's serif. */
+    & div.docsrs-package-container .description {
+      font-family: "Noto Sans", sans-serif;
+      color: #9399b2;
+    }
+    /* "Documentation" is the header's one primary action: a lavender fill,
+       square. */
+    & div.docsrs-package-container .container .doc-link {
+      border-radius: 0;
+      color: #1e1e2e;
+      &:hover {
+        background-color: #cdd6f4;
+        border-color: #cdd6f4;
+      }
+    }
+
+    /* The crate page's left column (coverage, size, links, versions) is a
+       pane meeting the README at a vertical rule. */
+    /* The column is pulled up through the header's 20px bottom margin, so
+       its rule reaches the header's. */
+    & div.package-page-container div.package-menu {
+      border-right: 1px solid #6c7086;
+      margin-top: -20px;
+      min-height: calc(100% + 20px);
+      padding-top: 20px;
+    }
+    & div.package-page-container div.package-menu .pure-menu-link:hover {
+      background-color: #313244;
+    }
+    & div.package-page-container div.package-menu img.owner {
+      border-radius: 0;
+    }
+
+    /* ---- Controls ---------------------------------------------------- */
+
+    /* Buttons are outlined rectangles on the page; inputs are recessed
+       (crust) as well as outlined, so they don't read as buttons. */
+    & body:not(.rustdoc-page) .pure-button,
+    & div.nav-container .pure-button {
+      background-color: transparent;
+      background-image: none;
+      border: 1px solid #6c7086;
+      border-radius: 0;
+      box-shadow: none;
+      color: #cdd6f4;
+      &:hover {
+        background-color: #313244;
+        background-image: none;
+      }
+    }
+    & :is(div.nav-container, body:not(.rustdoc-page)) :is(input:not([type="checkbox"], [type="radio"]), select, textarea) {
+      background-color: #11111b;
+      border: 1px solid #6c7086;
+      border-radius: 0;
+      box-shadow: none;
+      color: #cdd6f4;
+    }
+    /* The home page's search field draws its frame with a box-shadow from
+       an id rule; the border does that here. (Rustdoc's search results
+       section is #search too, hence the :not.) */
+    & body:not(.rustdoc-page) input#search {
+      border: 1px solid #6c7086;
+      border-radius: 0;
+      box-shadow: none;
+      font-stretch: condensed;
+      &:focus { border-color: #b4befe; }
+    }
+    /* Search is the home page's one primary action. */
+    & .landing-search-form button[type="submit"]:first-of-type {
+      background-color: #b4befe;
+      border-color: #b4befe;
+      color: #1e1e2e;
+      &:hover {
+        background-color: #cdd6f4;
+        border-color: #cdd6f4;
+      }
+    }
+    /* The bar's "Find crate" field sits flush in the bar. */
+    & div.nav-container input.search-input-nav {
+      border-width: 0 0 0 1px;
+    }
+
+    & :is(div.nav-container, body:not(.rustdoc-page)) :focus-visible {
+      outline: 1px solid #b4befe;
+      outline-offset: 0;
+    }
+
+    /* ---- Release lists (search results, recent releases) -------------- */
+
+    /* Rows: each is one link, its every title a link, so names read in body
+       text, dimmed once visited (Firefox only lets :visited change the
+       link's own colour, so the name inherits it). The hovered row gets the
+       surface colour. */
+    & div.recent-releases-container a.release {
+      /* A dense list with aligned columns: spacing, not rules, between
+         rows. */
+      border-bottom-color: transparent;
+      color: #cdd6f4;
+      &:visited { color: #9399b2; }
+    }
+    & div.recent-releases-container a.release :is(.name, .description) {
+      color: inherit;
+    }
+    & div.recent-releases-container :is(.release, .build-in-progress):is(:hover, :focus) {
+      background-color: #313244;
+    }
+    & div.recent-releases-container a.release .date {
+      color: #9399b2;
+      font-family: "Noto Sans Mono", monospace;
+    }
+
+    /* ---- Crate pages ------------------------------------------------- */
+
+    /* Code blocks in READMEs are panes: a square crust frame. */
+    & body:not(.rustdoc-page) pre {
+      background-color: #11111b;
+      border: 1px solid #6c7086;
+      border-radius: 0;
+    }
+    & body:not(.rustdoc-page) :not(pre) > code {
+      border-radius: 0;
+    }
+
+    /* Callouts (docs.rs's `div .info` / `div .warning` notices, e.g. a
+       yanked release or a failed build; the selector also reaches warning
+       blocks in rustdoc docs): a 2px status-coloured left edge, no tint,
+       aligned with the text. */
+    & :is(div .info, div .warning) {
+      background-color: transparent;
+      border: 0;
+      border-left: 2px solid #b4befe;
+      border-radius: 0;
+      box-shadow: none;
+      text-align: start;
+    }
+    & div .warning {
+      border-left-color: #f9e2af;
+    }
+    /* ...except the crate page's size tooltips (the ⓘ by "Source code
+       size"), which reuse .info: popovers, raised. */
+    & div.package-page-container div.package-menu .documented-info .size :is(.info, .warning) {
+      background-color: #313244;
+      border: 1px solid #45475a;
+      color: #cdd6f4;
+    }
+
+    /* docs.rs's site-wide alert floats over the top-right of the page in
+       blue: a raised notice, with the neutral lavender edge. */
+    & #docsrs-alert {
+      background-color: #313244;
+      border: 1px solid #45475a;
+      border-left: 2px solid #b4befe;
+      border-radius: 0;
+      color: #cdd6f4;
+      & > .fa {
+        background: transparent;
+        border-radius: 0;
+        color: #b4befe;
+      }
+      & > .alert-text a { color: #b4befe; }
+    }
+    & #docsrs-alert-hide {
+      color: #9399b2;
+      &:hover { color: #cdd6f4; }
+    }
+
+    & ::selection {
+      background-color: #353749;
+      color: #cdd6f4;
+    }
+  }
+}

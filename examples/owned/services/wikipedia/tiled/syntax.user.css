@@ -1,0 +1,46 @@
+/* ==UserStyle==
+@name           Wikipedia syntax highlighting (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Catppuccin Mocha for <syntaxhighlight> code (Pygments classes)
+==/UserStyle== */
+
+/* <syntaxhighlight> blocks are Pygments output: .mw-highlight with the
+   standard short token classes. In dark mode Wikipedia colours them with
+   Monokai; these are Catppuccin Mocha's mappings instead. Inline
+   <syntaxhighlight inline> (code.mw-highlight) is covered too. */
+
+@-moz-document domain("wikipedia.org") {
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-highlight {
+    color: #cdd6f4;
+
+    & :is(.n, .nv, .vm, .vc, .vg, .vi, .nx, .p, .w, .py, .nl) { color: #cdd6f4; }
+    & :is(.c, .c1, .cm, .ch, .cs, .cpf, .sd) { color: #9399b2; font-style: italic; }
+    & .cp { color: #f5c2e7; font-style: normal; }
+    & :is(.k, .kd, .kn, .kp, .kr, .ow) { color: #cba6f7; }
+    & .kc { color: #fab387; }
+    & .kt { color: #f9e2af; }
+    & :is(.s, .s1, .s2, .sa, .sb, .sc, .sh, .sx, .dl) { color: #a6e3a1; }
+    & :is(.se, .sr, .ss) { color: #f5c2e7; }
+    & .si { color: #f2cdcd; }
+    & :is(.m, .mb, .mf, .mh, .mi, .mo, .il) { color: #fab387; }
+    & :is(.o) { color: #89dceb; }
+    & :is(.nf, .fm) { color: #89b4fa; }
+    & :is(.nc, .ne, .nn) { color: #f9e2af; }
+    & :is(.nb, .no) { color: #fab387; }
+    & .bp { color: #f38ba8; }
+    & .nd { color: #fab387; }
+    & .nt { color: #cba6f7; }
+    & .na { color: #f9e2af; }
+    & .ni { color: #f2cdcd; }
+    & .err { color: #f38ba8; background: transparent; }
+    & .gd { color: #f38ba8; background: transparent; }
+    & .gi { color: #a6e3a1; background: transparent; }
+    & :is(.gh, .gu) { color: #89b4fa; font-weight: 600; }
+    & .ge { font-style: italic; }
+    & .gs { font-weight: 600; }
+    & :is(.go, .gp) { color: #9399b2; }
+    & .hll { background-color: #313244; }
+    & .linenos, & .lineno { color: #6c7086; }
+  }
+}

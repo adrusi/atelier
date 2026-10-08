@@ -484,3 +484,39 @@ decline. Limits recorded in notes outlive their fixes just as limits in
 THEME.md do. Also: `screenshot` failed on a hidden first match;
 `contrast_scan` doesn't look inside shadow roots; a per-tab light/dark
 preview would help (spike R2's emulation).
+
+## On the refactored atelier: docs.rs, lobste.rs and Wikipedia in tiled (2026-10-07)
+
+The first run after the architecture work (journal intents, the page
+runtime on one page model, the fidelity harness, colour-scheme and viewport
+emulation), to find defects the tests missed. Three create tasks in the
+owner's words ("Style docs.rs in the tiled theme"), headless, in parallel:
+7, 8 and 12 minutes. All three landed, with calls for the record, a
+THEME.md proposal each, `[[pages]]` and notes. No tool returned an error in
+any session.
+
+- **The new tools were found from the brief alone.** The docs.rs and
+  Lobsters agents used `viewport` to check phone widths, and the Lobsters
+  agent `color_scheme` to check the site in light mode, both things earlier
+  agents listed as unchecked. The Wikipedia agent didn't, and lists narrow
+  windows as not seen.
+- **One defect, found by the Wikipedia agent:** after navigating a tab bound
+  to its task, the page sometimes had none of its styles, while
+  `styles_status` listed them as applying. Reproduced once (7 of 10
+  navigations, on a site only the task's tree styles, right after the
+  three runs), not since. The likely cause is the shim's injection at
+  commit landing in the outgoing document; bound tabs now also get the
+  shim from a registered, marker-checking script and a second injection at
+  DOMContentLoaded.
+
+**Requests and observations:** say in the brief what goes in
+`variants/NAME/<option>.css` (bare rules) and which attachment paths
+`task_ask` takes; say when a page is a bot check rather than reporting it
+loaded; say up front that the browser isn't logged in to a site; warn when
+Firefox drops a selector (a pseudo-element or `>` inside `:is()` silently
+threw away whole rules); note when computed values are mid-transition in a
+background tab; a way to open states scripts can't reach in a background
+tab (search suggestions, a sticky header); flag which clicks persist site
+settings; an inset `box-shadow` edge drew a stray line along a row's top
+that the tools couldn't explain; a broad rule (`body #search`) matching an
+unrelated element on other pages went unnoticed until a screenshot.

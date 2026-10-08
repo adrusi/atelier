@@ -1,0 +1,36 @@
+/* ==UserStyle==
+@name           Wikipedia Main Page (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    English Wikipedia's Main Page sections as plain blocks under mantle header strips
+==/UserStyle== */
+
+/* The English Main Page is built from .mp-box sections (tinted green, blue,
+   purple and grey, each framed) with .mp-h2 heading bars. Here the boxes
+   lose tint and frame, and the heading bars become mantle strips across
+   their column; the columns stay apart by their gap. Other languages' main
+   pages use their own markup and aren't covered. */
+
+@-moz-document domain("wikipedia.org") {
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .mp-box {
+    background: transparent !important;
+    border: 0 !important;
+    padding-inline: 0 !important;
+  }
+  /* The two columns meet at a rule. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output #mp-left {
+    padding-right: 12px !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output #mp-right {
+    border-left: 1px solid var(--tl-rule) !important;
+    padding-left: 12px !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output #mp-topbanner {
+    border-bottom: 1px solid var(--tl-rule) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .mp-h2 {
+    background: var(--tl-deep) !important;
+    border: 0 !important;
+    color: var(--tl-fg) !important;
+  }
+}

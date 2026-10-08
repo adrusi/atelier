@@ -1,0 +1,4 @@
+  a.tag { color: #9399b2; }
+  a.tag_is_media { color: #89b4fa; }
+  a.tag_meta { color: #94e2d5; }
+  a.tag_announce, a.tag_ask, a.tag_show, a.tag_interview { color: #f5c2e7; }

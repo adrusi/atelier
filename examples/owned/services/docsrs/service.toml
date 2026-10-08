@@ -1,5 +1,5 @@
 description = "docs.rs"
-summary = "docs.rs: crate documentation built with current rustdoc (crate root, item and source pages, rustdoc search and settings) and docs.rs's own pages (home, crate pages, search results, the top bar). Retunes rustdoc's and docs.rs's Dark themes by overriding their colour tokens. Releases built with rustdoc from before about 2023 have no tokens and keep their own colours, apart from docs.rs's top bar."
+summary = "docs.rs: crate documentation built with current rustdoc (crate root, item and source pages, rustdoc search and settings) and docs.rs's own pages (home, crate pages, search results, the top bar). Retunes rustdoc's and docs.rs's Dark themes by overriding their colour tokens; in the tiled theme, also flattens them into panes, rules and square outlined controls. Releases built with rustdoc from before about 2023 have no tokens and keep their own colours, apart from docs.rs's top bar."
 
 [[prerequisites]]
 description = "In rustdoc's Settings (the gear on any documentation page), leave Theme on \"system preference\" with \"Preferred dark theme\" on dark (the defaults; follows the desktop's dark preference), or pick dark. The style restyles only the Dark theme; Light and Ayu are left alone. docs.rs's own pages follow the same setting."
@@ -7,3 +7,40 @@ description = "In rustdoc's Settings (the gear on any documentation page), leave
 # attribute from rustdoc's theme setting on every page, including old rustdoc
 # builds that have no data-theme of their own.
 check = "html[data-docs-rs-theme=\"dark\"]"
+
+[[pages]]
+url = "https://docs.rs/serde/latest/serde/"
+what = "Crate root in rustdoc: sidebar, toolbar, prose docblock, item tables (modules, macros, traits, derive macros)"
+states = ["the top bar's crate dropdown open (versions list, links, owners)", "an anchor target, e.g. #modules"]
+
+[[pages]]
+url = "https://docs.rs/serde/latest/serde/trait.Serializer.html#method.collect_str"
+what = "Item page: declaration block, method sections, code examples, \"Available on crate feature\" notes, the anchor target's edge"
+states = ["Settings popover open", "Help popover open"]
+
+[[pages]]
+url = "https://docs.rs/serde/latest/serde/?search=serialize"
+what = "Rustdoc search: the search field, In Names / In Parameters / In Return Types tabs, result rows"
+states = ["a result row hovered or keyboard-focused"]
+
+[[pages]]
+url = "https://docs.rs/serde/latest/src/serde/lib.rs.html"
+what = "Source view: line numbers, highlighted code"
+states = ["the Files sidebar expanded (a saved rustdoc setting: use a throwaway tab)"]
+
+[[pages]]
+url = "https://docs.rs/crate/serde/latest"
+what = "docs.rs crate page: header with tabs and the Documentation button, the left info column, README"
+states = ["the ⓘ size tooltip by \"Source code size\" hovered"]
+
+[[pages]]
+url = "https://docs.rs/"
+what = "Home: search field, Search / I'm Feeling Lucky, recent releases list"
+
+[[pages]]
+url = "https://docs.rs/releases/search?query=serde"
+what = "docs.rs crate search results with the sort select and Next Page"
+
+# Not seen: a yanked release or failed build (docs.rs's .warning/.info
+# notices), the site-wide #docsrs-alert, deprecated/unstable items in item
+# tables, notable-trait popovers, scraped examples.
