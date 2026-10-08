@@ -570,3 +570,139 @@ fn requests_start_a_session_unless_one_is_at_work() {
     daemon.kill().unwrap();
     daemon.wait().unwrap();
 }
+
+/// Starts a landing (or an undo) in a daemon told to stop at `point`, then
+/// restarts the daemon normally and returns the connection to it.
+fn crash_then_restart(
+    env: &Env,
+    point: &str,
+    setup: impl FnOnce(&mut UnixStream),
+) -> (Child, UnixStream) {
+    let mut crashing = env
+        .command()
+        .args(["daemon", "--dir"])
+        .arg(&env.dir)
+        .env("ATELIER_CRASH_AT", point)
+        .spawn()
+        .unwrap();
+    let mut s = env.connect();
+    initialize(&mut s, &env.dir);
+    setup(&mut s);
+    let status = crashing.wait().unwrap();
+    assert_eq!(status.code(), Some(86), "the daemon stopped at {point}");
+    // The dead daemon's socket is still on disk; wait for the new one.
+    let socket_dir = env.root.join("run/atelier");
+    for e in std::fs::read_dir(&socket_dir).unwrap().flatten() {
+        let _ = std::fs::remove_file(e.path());
+    }
+    let daemon = env.daemon();
+    let mut s = env.connect();
+    initialize(&mut s, &env.dir);
+    (daemon, s)
+}
+
+fn land_blue(s: &mut UnixStream) -> String {
+    let id = call(
+        s,
+        1,
+        "task/create",
+        json!({ "kind": "revise", "service": "site", "brief": { "description": "make it blue" } }),
+    )["result"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let claimed = call(s, 2, "task/claim", json!({ "session": "s1" }))["result"].clone();
+    write(
+        &PathBuf::from(claimed["tree"].as_str().unwrap()),
+        "services/site/dusk/a.user.css",
+        "@-moz-document domain(\"example.com\") { body { color: blue; } }\n",
+    );
+    // The daemon stops partway through this, so there's no reply to wait for.
+    send(
+        s,
+        json!({ "jsonrpc": "2.0", "id": 3, "method": "task/submit", "params": { "id": id, "session": "s1", "summary": "Blue" } }),
+    );
+    id
+}
+
+#[test]
+fn a_landing_interrupted_at_any_point_is_finished_on_restart() {
+    for point in ["journal-intent", "journal-files"] {
+        let env = Env::new();
+        let hook_out = env.root.join("hook.out");
+        write(
+            &env.root.join("config/atelier"),
+            "config.toml",
+            &format!("[hooks]\non_land = \"cat > {}\"\n", hook_out.display()),
+        );
+        let style = env.dir.join("services/site/dusk/a.user.css");
+        let mut task = String::new();
+        let (mut daemon, mut s) = crash_then_restart(&env, point, |s| task = land_blue(s));
+
+        assert!(
+            std::fs::read_to_string(&style).unwrap().contains("blue"),
+            "{point}: the files are written"
+        );
+        let t = call(&mut s, 10, "task/get", json!({ "id": task }))["result"].clone();
+        assert_eq!(t["state"], json!("landed"), "{point}: {t}");
+        assert_eq!(t["outcome"]["journal"], json!(1));
+        let journal = call(&mut s, 11, "journal/list", json!({}))["result"].clone();
+        assert_eq!(journal[0]["summary"], json!("Blue"));
+        // The hook the interrupted landing never ran.
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !hook_out.exists() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(
+            std::fs::read_to_string(&hook_out).unwrap(),
+            "Blue",
+            "{point}"
+        );
+
+        daemon.kill().unwrap();
+        daemon.wait().unwrap();
+    }
+}
+
+#[test]
+fn an_interrupted_undo_is_finished_on_restart() {
+    let env = Env::new();
+    let style = env.dir.join("services/site/dusk/a.user.css");
+    let mut first = env.daemon();
+    {
+        let mut s = env.connect();
+        initialize(&mut s, &env.dir);
+        land_blue(&mut s);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while !std::fs::read_to_string(&style).unwrap().contains("blue")
+            && Instant::now() < deadline
+        {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+    first.kill().unwrap();
+    first.wait().unwrap();
+    for e in std::fs::read_dir(env.root.join("run/atelier"))
+        .unwrap()
+        .flatten()
+    {
+        let _ = std::fs::remove_file(e.path());
+    }
+
+    let (mut daemon, mut s) = crash_then_restart(&env, "journal-intent", |s| {
+        send(
+            s,
+            json!({ "jsonrpc": "2.0", "id": 5, "method": "journal/undo", "params": {} }),
+        );
+    });
+    assert!(
+        std::fs::read_to_string(&style).unwrap().contains("red"),
+        "restored"
+    );
+    let journal = call(&mut s, 10, "journal/list", json!({}))["result"].clone();
+    assert_eq!(journal[0]["undoOf"], json!(1));
+    assert_eq!(journal[1]["undoneBy"], json!(2));
+    daemon.kill().unwrap();
+    daemon.wait().unwrap();
+}

@@ -316,7 +316,14 @@ impl Store {
                 if let Some(text) = replace_block(&current, &v.name, css) {
                     let summary =
                         format!("{}: {chosen} for {} (the user's choice)", v.file, v.name);
-                    self.land_text(&v.file, &text, &summary, Some(task.id.clone()), now)?;
+                    self.land_text(
+                        &v.file,
+                        &text,
+                        &summary,
+                        Some(task.id.clone()),
+                        Vec::new(),
+                        now,
+                    )?;
                     a.applied = true;
                 }
             } else if task.tree.is_some() {

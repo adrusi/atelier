@@ -49,8 +49,46 @@ pub struct Store {
 struct JournalRecord {
     entry: JournalEntry,
     /// For each file: whether it existed before the change (its old contents
-    /// are under `before/` if so), and its hash after (None: deleted).
+    /// are under `before/` if so), and its hash after (None: deleted; its new
+    /// contents are under `after/` otherwise).
     files: BTreeMap<String, FileRecord>,
+    /// False while the entry is only an intent: written down, but not yet
+    /// fully made (see `finish`). Entries from before intents were complete.
+    #[serde(default = "complete_by_default")]
+    complete: bool,
+    /// What else the change does, once its files are written.
+    #[serde(default)]
+    then: Vec<Followup>,
+}
+
+fn complete_by_default() -> bool {
+    true
+}
+
+/// The rest of a change, after its files: done by `finish`, and so redone by
+/// recovery if atelier stopped first.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "lowercase")]
+enum Followup {
+    /// A task landed.
+    Landed {
+        task: String,
+        service: Option<String>,
+        outcome: TaskOutcome,
+    },
+    /// This entry undid another.
+    Undid { seq: u64 },
+    /// A proposal to THEME.md was accepted.
+    Accepted { proposal: String },
+}
+
+/// Stops the process here if ATELIER_CRASH_AT names this point: for tests
+/// that check recovery from a crash partway through a change.
+fn crash_point(name: &str) {
+    if std::env::var("ATELIER_CRASH_AT").as_deref() == Ok(name) {
+        eprintln!("atelier: stopping at {name} (ATELIER_CRASH_AT)");
+        std::process::exit(86);
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -365,7 +403,7 @@ impl Store {
         vars: &BTreeMap<String, String>,
         now: u64,
     ) -> Result<(Task, SubmitResult)> {
-        let mut task = self.held(id, session, now)?;
+        let task = self.held(id, session, now)?;
         if summary.trim().is_empty() {
             return Err(
                 "a summary of what changed and why is needed to land (it becomes the history)"
@@ -520,19 +558,24 @@ impl Store {
                 },
             );
         }
-        self.record(seq, entry, files)?;
-        self.apply(seq, &tree, &changes)?;
-
-        task.state = TaskState::Landed;
-        task.lease = None;
-        task.service = task.service.or(services.into_iter().next());
-        task.outcome = Some(TaskOutcome::Landed {
-            journal: seq,
-            summary: summary.trim().to_string(),
-            assumptions,
-        });
-        task.updated = now;
-        self.save(&task)?;
+        let mut afters = BTreeMap::new();
+        for c in &changes {
+            if c.change != ChangeKind::Deleted {
+                afters.insert(c.path.clone(), fs::read(tree.join(&c.path)).map_err(err)?);
+            }
+        }
+        let landed = Followup::Landed {
+            task: task.id.clone(),
+            service: services.into_iter().next(),
+            outcome: TaskOutcome::Landed {
+                journal: seq,
+                summary: summary.trim().to_string(),
+                assumptions,
+            },
+        };
+        self.record(seq, entry, files, &afters, vec![landed])?;
+        self.finish(seq)?;
+        let task = self.get(id)?;
         self.prune_journal(now);
         Ok((
             task,
@@ -557,13 +600,17 @@ impl Store {
         Ok(seqs)
     }
 
-    /// Saves a journal entry, copying the files' current (pre-change)
-    /// contents into it, and filling in which existed.
+    /// Writes a change down as an intent: copies of each file before and as
+    /// it will be after, and what else the change does (`then`). Nothing in
+    /// the owned directory changes yet; `finish` does that. If atelier stops
+    /// in between, `recover` finishes it from what's recorded here.
     fn record(
         &self,
         seq: u64,
         entry: JournalEntry,
         mut files: BTreeMap<String, FileRecord>,
+        afters: &BTreeMap<String, Vec<u8>>,
+        then: Vec<Followup>,
     ) -> Result<()> {
         let dir = self.state.join("journal").join(seq.to_string());
         for (path, rec) in files.iter_mut() {
@@ -575,35 +622,106 @@ impl Store {
                 fs::copy(&src, &dst).map_err(err)?;
             }
         }
+        for (path, bytes) in afters {
+            let dst = dir.join("after").join(path);
+            fs::create_dir_all(dst.parent().expect("has parent")).map_err(err)?;
+            write_atomic(&dst, bytes).map_err(err)?;
+        }
         fs::create_dir_all(&dir).map_err(err)?;
-        let record = JournalRecord { entry, files };
+        self.write_record(
+            seq,
+            &JournalRecord {
+                entry,
+                files,
+                complete: false,
+                then,
+            },
+        )?;
+        crash_point("journal-intent");
+        Ok(())
+    }
+
+    fn write_record(&self, seq: u64, record: &JournalRecord) -> Result<()> {
+        let dir = self.state.join("journal").join(seq.to_string());
         write_atomic(
             &dir.join("entry.json"),
-            serde_json::to_string_pretty(&record)
+            serde_json::to_string_pretty(record)
                 .map_err(err)?
                 .as_bytes(),
         )
         .map_err(err)
     }
 
-    /// Writes `changes` from `from` into the owned directory: write-then-rename
-    /// for added and modified files, removal for deleted ones.
-    fn apply(&self, _seq: u64, from: &Path, changes: &[FileChange]) -> Result<()> {
-        for c in changes {
-            let dst = self.dir.join(&c.path);
-            match c.change {
-                ChangeKind::Deleted => match fs::remove_file(&dst) {
+    /// Makes a recorded change: writes each file as recorded (or removes it),
+    /// then does what follows (a task landed, an entry undone, a proposal
+    /// accepted), then marks the entry complete. Every step can be repeated,
+    /// so finishing an entry that was interrupted partway is safe.
+    fn finish(&self, seq: u64) -> Result<()> {
+        let mut record = self.load_record(seq)?;
+        if record.complete {
+            return Ok(());
+        }
+        let after_dir = self
+            .state
+            .join("journal")
+            .join(seq.to_string())
+            .join("after");
+        for (path, rec) in &record.files {
+            let dst = self.dir.join(path);
+            if rec.after.is_some() {
+                let bytes = fs::read(after_dir.join(path)).map_err(err)?;
+                fs::create_dir_all(dst.parent().expect("has parent")).map_err(err)?;
+                write_atomic(&dst, &bytes).map_err(err)?;
+            } else {
+                match fs::remove_file(&dst) {
                     Ok(()) => {}
                     Err(e) if e.kind() == io::ErrorKind::NotFound => {}
                     Err(e) => return Err(err(e)),
-                },
-                _ => {
-                    fs::create_dir_all(dst.parent().expect("has parent")).map_err(err)?;
-                    write_atomic(&dst, &fs::read(from.join(&c.path)).map_err(err)?).map_err(err)?;
                 }
             }
         }
-        Ok(())
+        crash_point("journal-files");
+        for then in &record.then {
+            match then {
+                Followup::Landed {
+                    task,
+                    service,
+                    outcome,
+                } => {
+                    let mut t = self.get(task)?;
+                    t.state = TaskState::Landed;
+                    t.lease = None;
+                    t.service = t.service.clone().or(service.clone());
+                    t.outcome = Some(outcome.clone());
+                    t.updated = record.entry.time;
+                    self.save(&t)?;
+                }
+                Followup::Undid { seq: undone } => {
+                    let mut target = self.load_record(*undone)?;
+                    if target.entry.undone_by.is_none() {
+                        target.entry.undone_by = Some(seq);
+                        self.write_record(*undone, &target)?;
+                    }
+                }
+                Followup::Accepted { proposal } => self.accepted(proposal, seq)?,
+            }
+        }
+        record.complete = true;
+        self.write_record(seq, &record)
+    }
+
+    /// Finishes changes that were written down but not completed (atelier
+    /// stopped partway through), oldest first. Returns their entries, so the
+    /// daemon can run the hooks they missed.
+    pub fn recover(&self) -> Result<Vec<JournalEntry>> {
+        let mut recovered = Vec::new();
+        for seq in self.journal_seqs()? {
+            if !self.load_record(seq)?.complete {
+                self.finish(seq)?;
+                recovered.push(self.load_record(seq)?.entry);
+            }
+        }
+        Ok(recovered)
     }
 
     fn load_record(&self, seq: u64) -> Result<JournalRecord> {
@@ -643,7 +761,7 @@ impl Store {
                 found.ok_or("there's nothing to undo")?
             }
         };
-        let mut target = self.load_record(seq)?;
+        let target = self.load_record(seq)?;
         if let Some(by) = target.entry.undone_by {
             return Err(format!(
                 "journal entry {seq} was already undone by entry {by}"
@@ -703,29 +821,20 @@ impl Store {
             undone_by: None,
             undo_of: Some(seq),
         };
-        self.record(undo_seq, entry.clone(), files)?;
+        let mut afters = BTreeMap::new();
         for (path, rec) in &target.files {
-            let dst = self.dir.join(path);
             if rec.existed {
-                fs::create_dir_all(dst.parent().expect("has parent")).map_err(err)?;
-                write_atomic(&dst, &fs::read(before_dir.join(path)).map_err(err)?).map_err(err)?;
-            } else {
-                match fs::remove_file(&dst) {
-                    Ok(()) => {}
-                    Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-                    Err(e) => return Err(err(e)),
-                }
+                afters.insert(path.clone(), fs::read(before_dir.join(path)).map_err(err)?);
             }
         }
-        target.entry.undone_by = Some(undo_seq);
-        let dir = self.state.join("journal").join(seq.to_string());
-        write_atomic(
-            &dir.join("entry.json"),
-            serde_json::to_string_pretty(&target)
-                .map_err(err)?
-                .as_bytes(),
-        )
-        .map_err(err)?;
+        self.record(
+            undo_seq,
+            entry.clone(),
+            files,
+            &afters,
+            vec![Followup::Undid { seq }],
+        )?;
+        self.finish(undo_seq)?;
         self.prune_journal(now);
         Ok(entry)
     }
@@ -740,7 +849,7 @@ impl Store {
         for seq in seqs.into_iter().take(excess) {
             if self
                 .load_record(seq)
-                .is_ok_and(|r| now.saturating_sub(r.entry.time) > JOURNAL_MAX_AGE_MS)
+                .is_ok_and(|r| r.complete && now.saturating_sub(r.entry.time) > JOURNAL_MAX_AGE_MS)
             {
                 let _ = fs::remove_dir_all(self.state.join("journal").join(seq.to_string()));
             }

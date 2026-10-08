@@ -7,7 +7,7 @@
 //! it can be undone and the user's hooks see it. Proposals live in
 //! `proposals/<id>.json` in the state directory.
 
-use super::{FileRecord, Result, Store, err, hash_file, new_id, write_atomic};
+use super::{FileRecord, Followup, Result, Store, err, new_id, write_atomic};
 use atelier_proto::{
     ChangeKind, DecideParams, FileChange, JournalEntry, Proposal, ProposalState, ProposeParams,
 };
@@ -89,6 +89,23 @@ impl Store {
         Ok(proposal)
     }
 
+    fn proposal(&self, id: &str) -> Result<Proposal> {
+        serde_json::from_str(
+            &fs::read_to_string(self.proposal_path(id)?)
+                .map_err(|_| format!("no proposal `{id}`"))?,
+        )
+        .map_err(err)
+    }
+
+    /// The follow-up of a proposal's landing (see `finish`): it's accepted,
+    /// as journal entry `seq`.
+    pub(super) fn accepted(&self, id: &str, seq: u64) -> Result<()> {
+        let mut p = self.proposal(id)?;
+        p.state = ProposalState::Accepted;
+        p.journal = Some(seq);
+        self.save_proposal(&p)
+    }
+
     /// Proposals, newest first; with `open_only`, those still undecided.
     pub fn proposals(&self, open_only: bool) -> Result<Vec<Proposal>> {
         let mut out: Vec<Proposal> = match fs::read_dir(self.state.join("proposals")) {
@@ -131,13 +148,25 @@ impl Store {
             }
             let text = d.text.unwrap_or_else(|| p.after.clone());
             let summary = format!("{}: {}", p.path, p.summary);
-            let e = self.land_text(&p.path, &text, &summary, p.task.clone(), now)?;
-            p.journal = Some(e.seq);
-            p.state = ProposalState::Accepted;
-            entry = Some(e);
-        } else {
-            p.state = ProposalState::Declined;
+            // The note first; the acceptance itself is part of the landing,
+            // so a crash between the two can't leave THEME.md changed and
+            // the proposal still open.
+            self.save_proposal(&p)?;
+            let accepted = Followup::Accepted {
+                proposal: p.id.clone(),
+            };
+            entry = Some(self.land_text(
+                &p.path,
+                &text,
+                &summary,
+                p.task.clone(),
+                vec![accepted],
+                now,
+            )?);
+            let p = self.proposal(&p.id)?;
+            return Ok((p, entry));
         }
+        p.state = ProposalState::Declined;
         self.save_proposal(&p)?;
         Ok((p, entry))
     }
@@ -150,6 +179,7 @@ impl Store {
         text: &str,
         summary: &str,
         task: Option<String>,
+        then: Vec<Followup>,
         now: u64,
     ) -> Result<JournalEntry> {
         let dst = self.dir.join(rel);
@@ -187,10 +217,9 @@ impl Store {
                 after: Some(after),
             },
         );
-        self.record(seq, entry.clone(), files)?;
-        fs::create_dir_all(dst.parent().expect("has parent")).map_err(err)?;
-        write_atomic(&dst, text.as_bytes()).map_err(err)?;
-        debug_assert!(hash_file(&dst).is_ok());
+        let afters = BTreeMap::from([(rel.to_string(), text.as_bytes().to_vec())]);
+        self.record(seq, entry.clone(), files, &afters, then)?;
+        self.finish(seq)?;
         self.prune_journal(now);
         Ok(entry)
     }

@@ -400,6 +400,7 @@ async fn serve(dir: PathBuf) -> std::io::Result<()> {
         tasks: Mutex::new(tasks::Store::new(&dir, &paths::state_dir(&dir))?),
         launcher: Mutex::new(session::Launcher::default()),
     });
+    recover(&state);
     state.reload(None);
 
     // Kept alive for as long as we serve.
@@ -1358,5 +1359,39 @@ fn theme_call(state: &State, method_name: &str, params: Value) -> Result<Value, 
             wire::code::METHOD_NOT_FOUND,
             format!("unknown method `{other}`"),
         )),
+    }
+}
+
+/// Finishes changes to the owned directory that a previous daemon wrote down
+/// but didn't complete (it stopped partway through a landing or an undo),
+/// and runs the hooks they missed. ARCHITECTURE.md, "State and recovery".
+fn recover(state: &State) {
+    let store = state.tasks.lock().unwrap();
+    let recovered = match store.recover() {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("atelier daemon: recovering unfinished changes: {e}");
+            return;
+        }
+    };
+    for entry in recovered {
+        eprintln!(
+            "atelier daemon: finished journal entry {} after an interruption: {}",
+            entry.seq, entry.summary
+        );
+        let task = entry.task.as_deref().and_then(|id| store.get(id).ok());
+        let hook = if entry.undo_of.is_some() {
+            "on_undo"
+        } else {
+            "on_land"
+        };
+        run_hook(
+            state,
+            hook,
+            task.as_ref(),
+            entry.seq,
+            &entry.summary,
+            &entry.files,
+        );
     }
 }

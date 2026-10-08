@@ -102,6 +102,13 @@ about to do, then does it, then records that it's done. Recovery at startup
 finds intents without a completion and finishes them (or rolls them back,
 when finishing isn't possible).
 
+In the daemon, that's the journal: each entry is written first with copies
+of every file before and after, marked incomplete, along with what follows
+from it (a task landed, an entry undone, a proposal accepted). Finishing
+writes the files, applies those follow-ups and marks the entry complete;
+every step is idempotent, so a restart that finds an incomplete entry
+simply finishes it, and runs the hooks it missed.
+
 | Resource | Owner | Desired state lives in | Reconciled by |
 |---|---|---|---|
 | Owned-directory changes (landings, undos, accepted proposals) | daemon | journal intent records | startup: finish or roll back incomplete intents |
