@@ -155,7 +155,10 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
             after editing it), or declines it with a note. Propose when something settles a question for the theme \
             as a whole: a gap or contradiction you found, or an interpretation you settled on, so the next agent \
             doesn't have to work it out again. It needn't wait for an answer: propose your interpretation as soon \
-            as you've settled on one, and the user confirms or corrects it. Write it in THEME.md's own voice and place (it's the user's \
+            as you've settled on one, and the user confirms or corrects it. THEME.md says what the user wants, not \
+            what's possible today: where a limit of atelier or the browser stopped you, say so in notes.md and your \
+            summary rather than writing the limit into the theme, so it doesn't outlive the fix. Write it in \
+            THEME.md's own voice and place (it's the user's \
             document, and reads as theirs), keep it short, and say in `why` what it comes from. Edits apply to \
             THEME.md as it is now: each `find` must match its current text exactly, once (if it doesn't, the \
             error includes the current text); an edit without `find` appends.",
@@ -1112,7 +1115,11 @@ background, shape_scan finds what's still drawn as a box, force_state shows hove
 styles_status reports problems loading your files (a style with errors keeps its last good version \
 applied, so a mistake can look as if nothing happened).\n\
 - Work in the task's tree, not the owned directory: only landings are recorded, undoable, and passed to \
-the user's hooks.\n\n\
+the user's hooks.\n\
+- When a limit of atelier or the browser stops you (a part of the page your styles can't reach, a tool \
+that can't see something), that's a limit to fix, not a decision about the look: say so in your summary \
+and notes.md, and in feedback on the tools, rather than proposing it for THEME.md or quietly lowering \
+the bar.\n\n\
 For a this-or-that question about part of a style, show the user both. Quickest: screenshots of each \
 (screenshot's extraCss shows a variant without editing files; attach: true saves it for task_ask). \
 Better, when the choice matters: mark the part in the style file with the comments \

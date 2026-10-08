@@ -134,9 +134,10 @@ lavender once visited, or the page turns mauve as it's read.
 
 **Syntax highlighting** uses Catppuccin Mocha's standard syntax mapping
 (mauve keywords, green strings, peach numbers and so on). Peach in code
-isn't the "attention" peach. Where a site's code colours can only be
-reached in some places, leave them all in the site's palette: one page
-shouldn't mix two.
+isn't the "attention" peach. It applies to all of a site's code, wherever
+it's drawn. Only if some of it truly can't be reached (drawn on a canvas,
+say) does the rest stay in the site's own palette, so that one page doesn't
+mix two.
 
 **Muted text** (`#6c7086`) is fine for short de-emphasised text, like
 "[comment removed]" or a disabled control, but not for anything meant to be

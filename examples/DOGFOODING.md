@@ -458,3 +458,12 @@ are now short (what atelier is, the rules that matter before any task, the
 tools); the heuristics and the variants explanation are in every task's
 brief, which arrives as a tool result and isn't truncated; and a unit test
 keeps the instructions and every tool description under 1,900 characters.
+
+**The owner's caution on accepting proposals:** one of the accepted lines
+("where some code colours can't be reached, leave them all in the site's
+palette") wrote a limit of atelier (no styling inside shadow roots) into
+the theme, where it would outlive the fix and make an ambitious theme stop
+exercising the system. Reworded so Catppuccin syntax colours are the rule
+and the fallback applies only to code that truly can't be reached; and
+`theme_propose` and the brief now say THEME.md is what the user wants, with
+limits going to notes, summaries and feedback instead.
