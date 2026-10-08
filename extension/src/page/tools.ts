@@ -604,10 +604,9 @@ type Unusable = { style: string; selector: string; effect: "dropped" | "ignored"
 /** atelier's styles as they are in the page: which are present (the
  * shim's elements, and @shadow styles in shadow roots), and selectors in
  * them Firefox can't use, which is silent and easy to mistake for a
- * cascade problem. Each rule's selector is tested with CSS.supports,
- * Firefox's own (unforgiving) parser; a list that fails is narrowed to the
- * parts that do, and each is tried in a sheet to see what Firefox does with
- * the rule. */
+ * cascade problem. Each selector in each rule's list is tested with
+ * CSS.supports, Firefox's own (unforgiving) parser, and one that fails is
+ * tried in a sheet to see what Firefox does with the rule. */
 export function atelierStyleCheck(): { present: string[]; dropped: Unusable[] } {
   const present = new Set<string>();
   const dropped: Unusable[] = [];
@@ -635,9 +634,11 @@ export function atelierStyleCheck(): { present: string[]; dropped: Unusable[] } 
         const prelude = text.slice(start, i).trim();
         const inKeyframes = blocks.some((b) => /^@(-\w+-)?keyframes/.test(b));
         blocks.push(prelude);
-        if (prelude && !prelude.startsWith("@") && !inKeyframes && !supported(prelude)) {
-          const parts = core.splitTop(prelude).filter((p) => !supported(p));
-          for (const p of parts.length ? parts : [prelude]) if (dropped.length < 10) dropped.push({ style: id, selector: p, effect: effect(p) });
+        if (prelude && !prelude.startsWith("@") && !inKeyframes) {
+          // selector() takes one selector, not a list: test each.
+          for (const p of core.splitTop(prelude)) {
+            if (!supported(p) && dropped.length < 10) dropped.push({ style: id, selector: p, effect: effect(p) });
+          }
         }
         start = i + 1;
       } else if (c === "}") {

@@ -270,6 +270,7 @@ try {
   main:unknown-pseudo { outline: 1px solid red; }
   :is(h1::before, h2) { color: red; }
   main { & > p { margin: 0; } }
+  html, body, main > p:first-child, a:link { margin: 0; }
 }
 `);
     const r = await tool("styles_status", { tab });
