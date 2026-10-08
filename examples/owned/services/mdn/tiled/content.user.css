@@ -11,13 +11,14 @@
    they read are zeroed in tokens.user.css, and --color-background-secondary
    (crust) is their code background.
 
-   Not reachable at all (no tokens, no ::part()):
-   - the syntax colours inside <mdn-code-example> (MDN's own Prism palette,
-     hard-coded), and the 0.25rem corners of code examples and of the
-     compat table's frame;
-   - the CodeMirror editor in <interactive-example> (One Dark);
-   - everything inside live-sample and interactive-example iframes, which are
-     separate documents on <hash>.mdnplay.dev. */
+   Syntax colours (Prism in code examples and the formal syntax, CodeMirror
+   in interactive examples) and the code examples' frame are restyled
+   inside their shadow roots with @shadow, in syntax.user.css.
+
+   Still left as MDN draws them: the 0.25rem corners of the compat table's
+   frame (reachable now with @shadow, not yet done); everything inside
+   live-sample and interactive-example iframes, which are separate
+   documents on <hash>.mdnplay.dev. */
 
 @-moz-document domain("developer.mozilla.org") {
   /* ---- Code -------------------------------------------------------- */

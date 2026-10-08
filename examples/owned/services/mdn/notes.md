@@ -27,12 +27,26 @@
 - Radius tokens: `--radius-normal` (0.25rem) and `--radius-full` (pill) are
   read by the search button and sidebar filter; `--elem-radius` by
   `interactive-example`; `--border-radius` by the sidebar ad. Hard-coded
-  and unreachable: code examples and compat table frame (0.25rem), search
+  in shadow roots (token-proof, but `@shadow` reaches them): code examples
+  and compat table frame (0.25rem), search
   dialog (0.5rem), the /search page's field (2rem), `mdn-button` (0.25rem).
 - Syntax colours inside `mdn-code-example` are MDN's own Prism palette,
-  hard-coded in the shadow root. The formal syntax block
-  (`pre.css-formal-syntax`) is light DOM and uses the same palette through
-  `.token.*` rules in the global sheet.
+  hard-coded in the shadow root as `:is(.code-example, .css-formal-syntax)
+  .token.*` (light-dark() pairs); reach them with `@shadow
+  mdn-code-example`. The formal syntax block (`pre.css-formal-syntax`) is
+  light DOM and uses the same rules from the global sheet.
+- Interactive example editors are CodeMirror 6 (`mdn-play-editor`, nested
+  in `interactive-example`'s shadow root; `@shadow mdn-play-editor` reaches
+  it) with the One Dark theme, in dark and light mode alike (`.cm-editor`
+  carries `ͼo`). Highlighting uses generated classes, one per One Dark
+  colour, in the order One Dark's highlight style lists them: ͼp keyword,
+  ͼq names/properties/attributes/variables, ͼr functions, ͼs
+  colours/constants, ͼt definitions/punctuation, ͼu types/tags/numbers, ͼv
+  operators/regexps/URLs, ͼw comments, ͼ10 links, ͼ11 headings, ͼ12
+  atoms/booleans, ͼ13 strings, ͼ14 invalid (checked 2026-10 on CSS, JS and
+  HTML pages). They'd shift if MDN's CodeMirror bundle changes. Minimal
+  CSS choice editors parse `display: block;` as a selector, so both words
+  are ͼu. The console (`mdn-play-console`) is plain text.
 - Interactive examples and live samples render in iframes on
   `<hash>.mdnplay.dev`: separate documents, out of reach.
 - The current item in the left sidebar is `li > em > a[aria-current=page]`
@@ -53,15 +67,23 @@
 
 - Files: `tokens` (MDN tokens plus this style's own `--tl-*` role tokens,
   each a light-dark() pair), `chrome` (header, menus, popovers, sidebars,
-  footer, focus), `content` (article bodies), `home`.
+  footer, focus), `content` (article bodies), `syntax` (syntax colours in
+  every kind of code block), `home`.
 - Panes: the header (nav and breadcrumbs) is one mantle strip; the left
   sidebar and TOC are split from the article by 1px muted rules on their
   inner edges (they're sticky and viewport-high, so the rules run the
   window's height). The footer is a mantle pane.
 - Code is crust (`--color-background-secondary`, which components read as
-  their code background). Inline code is crust too, square. Syntax colours
-  stay MDN's, since the code examples' can't be reached and the formal
-  syntax is kept matching them.
+  their code background). Inline code is crust too, square.
+- Syntax colours (`syntax`): Catppuccin Mocha everywhere. Prism (code
+  examples, formal syntax) through `--tl-syn-*` tokens with MDN's light
+  colours in the light arm, mapped token by token to Catppuccin's standard
+  roles (tags blue, attributes yellow, properties lavender, keywords mauve,
+  strings green, numbers peach, punctuation and comments overlay2). The
+  CodeMirror editors map each One Dark colour to its Mocha role; One Dark
+  lumps roles together, so there HTML tags are yellow (with types and
+  numbers) and attributes lavender (with properties and variables), unlike
+  Prism. Editor background crust, like other code.
 - Semantic tints (`--color-background-red/green/blue/...`) are the page
   colour in dark mode: notecards, good/bad examples and menu tabs show their
   kind by edge or text colour. Yellow keeps a tint, as it marks search
@@ -81,5 +103,7 @@
   monospace fg-dim; "Get involved" is the one lavender-filled button.
 - Lists where every title is a link (search dialog, /search results) use the
   text colour, dimmed once visited.
-- Not reached: hard-coded radii above; the Copy/Reset/Yes/No buttons
-  (`mdn-button`) keep MDN's fills and 0.25rem corners; iframe contents.
+- Not yet done: hard-coded radii above (other than code examples', now
+  square) and the Copy/Reset/Yes/No buttons (`mdn-button`), which keep
+  MDN's fills and 0.25rem corners. All are in open shadow roots, so
+  `@shadow` can reach them now. Iframe contents are out of reach.

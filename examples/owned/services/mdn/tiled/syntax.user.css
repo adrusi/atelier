@@ -1,0 +1,181 @@
+/* ==UserStyle==
+@name           MDN syntax colours (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Catppuccin Mocha syntax highlighting for MDN's code: static code examples, the formal syntax, and the editors in interactive examples
+==/UserStyle== */
+
+/* MDN highlights code two ways:
+
+   - Prism, for static code examples (<mdn-code-example>, open shadow root)
+     and the formal syntax (pre.css-formal-syntax, light DOM). Both use the
+     same .token.* rules, each colour light-dark(<light>, <dark>). The
+     --tl-syn-* tokens below keep that shape, so MDN's Light setting keeps
+     its colours; they're set on :root and inherit into the shadow roots.
+
+   - CodeMirror 6 with the One Dark theme, for the editors in interactive
+     examples (<mdn-play-editor>, nested in <interactive-example>'s shadow
+     root). One Dark is used whatever the colour scheme, so these are plain
+     Mocha colours. CodeMirror's classes are generated (ͼp, ͼq ...): each is
+     one of One Dark's colours, in the order its highlight style defines
+     them, so they're stable while MDN ships the same CodeMirror bundle. If
+     they shift, the editors show the wrong Mocha colours rather than One
+     Dark's; the editor's background and plain text (.cm-editor, .cm-content)
+     don't depend on them. */
+
+@-moz-document domain("developer.mozilla.org") {
+  html:root {
+    --tl-syn-comment: light-dark(#51565d, #9399b2);
+    --tl-syn-punctuation: light-dark(#51565d, #9399b2);
+    --tl-syn-keyword: light-dark(#0069c2, #cba6f7);
+    --tl-syn-atrule: light-dark(#007936, #cba6f7);
+    --tl-syn-string: light-dark(#007936, #a6e3a1);
+    --tl-syn-template-string: light-dark(#872bff, #a6e3a1);
+    --tl-syn-number: light-dark(#007936, #fab387);
+    --tl-syn-tag: light-dark(#007936, #89b4fa);
+    --tl-syn-attr-name: light-dark(#d30038, #f9e2af);
+    --tl-syn-property: light-dark(#d30038, #b4befe);
+    --tl-syn-function: light-dark(#d30038, #89b4fa);
+    --tl-syn-class-name: light-dark(#d30038, #f9e2af);
+    --tl-syn-builtin: light-dark(#872bff, #f38ba8);
+    --tl-syn-selector: light-dark(#872bff, #89b4fa);
+    --tl-syn-inserted: light-dark(#872bff, #a6e3a1);
+    --tl-syn-deleted: light-dark(#007936, #f38ba8);
+    /* Tokens MDN leaves in the text colour. */
+    --tl-syn-operator: light-dark(currentcolor, #89dceb);
+    --tl-syn-regex: light-dark(currentcolor, #f5c2e7);
+    --tl-syn-important: light-dark(currentcolor, #cba6f7);
+  }
+
+  /* ---- Prism, light DOM (the formal syntax, older pages) ------------- */
+
+  html :is(.code-example, .css-formal-syntax) {
+    & :is(.token.comment, .token.prolog, .token.doctype, .token.cdata) { color: var(--tl-syn-comment); }
+    & .token.punctuation { color: var(--tl-syn-punctuation); }
+    & .token.keyword { color: var(--tl-syn-keyword); }
+    & .token.atrule { color: var(--tl-syn-atrule); }
+    & :is(.token.string, .token.attr-value, .token.char, .token.url) { color: var(--tl-syn-string); }
+    & .token.template-string > .token.string { color: var(--tl-syn-template-string); }
+    & :is(.token.number, .token.boolean, .token.constant, .token.symbol) { color: var(--tl-syn-number); }
+    & .token.tag { color: var(--tl-syn-tag); }
+    & .token.attr-name { color: var(--tl-syn-attr-name); }
+    & .token.property { color: var(--tl-syn-property); }
+    & .token.function { color: var(--tl-syn-function); }
+    & .token.class-name { color: var(--tl-syn-class-name); }
+    & .token.builtin { color: var(--tl-syn-builtin); }
+    & .token.selector { color: var(--tl-syn-selector); }
+    & .token.inserted { color: var(--tl-syn-inserted); }
+    & .token.deleted { color: var(--tl-syn-deleted); }
+    & .token.operator { color: var(--tl-syn-operator); }
+    & .token.regex { color: var(--tl-syn-regex); }
+    & .token.important { color: var(--tl-syn-important); }
+  }
+
+  /* ---- Prism, static code examples ----------------------------------- */
+
+  /* :host raises these above MDN's :is(.code-example, ...) .token.x. */
+  @shadow mdn-code-example {
+    /* The pane's frame, square (MDN hard-codes 0.25rem). */
+    :host .code-example {
+      border-radius: 0;
+    }
+    :host .code-example {
+      & :is(.token.comment, .token.prolog, .token.doctype, .token.cdata) { color: var(--tl-syn-comment); }
+      & .token.punctuation { color: var(--tl-syn-punctuation); }
+      & .token.keyword { color: var(--tl-syn-keyword); }
+      & .token.atrule { color: var(--tl-syn-atrule); }
+      & :is(.token.string, .token.attr-value, .token.char, .token.url) { color: var(--tl-syn-string); }
+      & .token.template-string > .token.string { color: var(--tl-syn-template-string); }
+      & :is(.token.number, .token.boolean, .token.constant, .token.symbol) { color: var(--tl-syn-number); }
+      & .token.tag { color: var(--tl-syn-tag); }
+      & .token.attr-name { color: var(--tl-syn-attr-name); }
+      & .token.property { color: var(--tl-syn-property); }
+      & .token.function { color: var(--tl-syn-function); }
+      & .token.class-name { color: var(--tl-syn-class-name); }
+      & .token.builtin { color: var(--tl-syn-builtin); }
+      & .token.selector { color: var(--tl-syn-selector); }
+      & .token.inserted { color: var(--tl-syn-inserted); }
+      & .token.deleted { color: var(--tl-syn-deleted); }
+      & .token.operator { color: var(--tl-syn-operator); }
+      & .token.regex { color: var(--tl-syn-regex); }
+      & .token.important { color: var(--tl-syn-important); }
+    }
+  }
+
+  /* ---- CodeMirror, interactive example editors ----------------------- */
+
+  @shadow mdn-play-editor {
+    /* The editor is a crust pane like every other code block; plain text
+       in the text colour. */
+    :host .cm-editor {
+      color: #cdd6f4;
+      background-color: #11111b;
+    }
+    :host .cm-editor .cm-gutters {
+      color: #6c7086;
+      background-color: #11111b;
+    }
+    :host .cm-editor .cm-activeLineGutter {
+      background-color: #181825;
+    }
+    :host .cm-editor .cm-activeLine {
+      background-color: rgb(49 50 68 / 0.5);
+    }
+    :host .cm-editor .cm-cursor {
+      border-left-color: #f5e0dc;
+    }
+    :host .cm-editor .cm-scroller .cm-selectionLayer .cm-selectionBackground,
+    :host .cm-editor .cm-content ::selection {
+      background-color: #353749;
+    }
+    :host .cm-editor.cm-focused :is(.cm-matchingBracket, .cm-nonmatchingBracket) {
+      background-color: #45475a;
+    }
+    :host .cm-editor .cm-searchMatch {
+      background-color: rgb(249 226 175 / 0.28);
+      outline: none;
+    }
+    /* Autocomplete and hover tooltips: popovers, square, surface0 with a
+       surface1 border. */
+    :host .cm-editor .cm-tooltip {
+      color: #cdd6f4;
+      background-color: #313244;
+      border: 1px solid #45475a;
+      border-radius: 0;
+    }
+    :host .cm-editor .cm-tooltip-autocomplete > ul > li[aria-selected] {
+      color: #cdd6f4;
+      background-color: #45475a;
+    }
+
+    /* One Dark's highlight classes, each mapped by its role to Catppuccin
+       Mocha's. One Dark gives one colour to several roles, so these can't
+       be told apart further: */
+    /* keywords */
+    :host .ͼp { color: #cba6f7; }
+    /* names: properties, attributes, variables */
+    :host .ͼq { color: #b4befe; }
+    /* function names */
+    :host .ͼr { color: #89b4fa; }
+    /* colours, constants */
+    :host .ͼs { color: #fab387; }
+    /* definitions, separators */
+    :host .ͼt { color: #cdd6f4; }
+    /* types, classes, tag names, numbers */
+    :host .ͼu { color: #f9e2af; }
+    /* operators, escapes, regexps, URLs */
+    :host .ͼv { color: #89dceb; }
+    /* comments, meta */
+    :host .ͼw { color: #9399b2; }
+    /* links */
+    :host .ͼ10 { color: #9399b2; }
+    /* headings */
+    :host .ͼ11 { color: #f38ba8; }
+    /* atoms, booleans, keyword values */
+    :host .ͼ12 { color: #fab387; }
+    /* strings */
+    :host .ͼ13 { color: #a6e3a1; }
+    /* invalid */
+    :host .ͼ14 { color: #f38ba8; }
+  }
+}

@@ -467,3 +467,20 @@ exercising the system. Reworded so Catppuccin syntax colours are the rule
 and the fallback applies only to code that truly can't be reached; and
 `theme_propose` and the brief now say THEME.md is what the user wants, with
 limits going to notes, summaries and feedback instead.
+
+## @shadow in production use: MDN's code examples (2026-10-07)
+
+A revise task in the user's words ("The interactive code examples on MDN
+pages still use MDN's own syntax colours, not the theme's"), with no mention
+of `@shadow`. The agent found it from the brief alone and recoloured all
+three kinds of MDN code (CodeMirror editors in shadow roots, static examples,
+formal syntax) in about 5 minutes, added the pages it checked to
+`[[pages]]`, and left other newly reachable parts (the compat table's frame,
+MDN's buttons) alone as outside the request.
+
+Its main point: MDN's notes and CSS comments, written before `@shadow`,
+still called these components unreachable, which could have led it to
+decline. Limits recorded in notes outlive their fixes just as limits in
+THEME.md do. Also: `screenshot` failed on a hidden first match;
+`contrast_scan` doesn't look inside shadow roots; a per-tab light/dark
+preview would help (spike R2's emulation).

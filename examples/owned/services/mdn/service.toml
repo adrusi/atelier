@@ -1,5 +1,5 @@
 description = "MDN Web Docs"
-summary = "developer.mozilla.org: reference and guide pages, the home and search pages, compat tables and code examples. Retunes MDN's own dark mode by overriding its colour tokens, which also reach into its web components' shadow roots. The tiled style also squares and flattens the page: panes split by rules, callouts as coloured edges, cards as plain blocks."
+summary = "developer.mozilla.org: reference and guide pages, the home and search pages, compat tables and code examples. Retunes MDN's own dark mode by overriding its colour tokens, which also reach into its web components' shadow roots. The tiled style also squares and flattens the page: panes split by rules, callouts as coloured edges, cards as plain blocks. Syntax colours in code examples, the formal syntax and interactive example editors are Catppuccin Mocha's."
 
 [[prerequisites]]
 description = "In MDN's Theme menu, leave the theme on OS default (follows the desktop's dark preference) or pick Dark. The style recolours only MDN's dark mode; in Light it changes just the fonts and shapes."
@@ -10,6 +10,15 @@ check = "html:not([data-theme=\"light\"])"
 url = "https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/display"
 what = "A reference page: sidebar, TOC, Baseline banner, interactive example, notecards, formal definition table, formal syntax, code examples, live sample, compat table, article footer"
 states = ["Baseline banner expanded", "a top menu (HTML, CSS...) open", "Theme menu open", "search dialog open with a query typed", "a sidebar link focused"]
+
+[[pages]]
+url = "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map"
+what = "A JavaScript page: full interactive example editor (CodeMirror, with gutter), Run/Reset, console output, JS code examples"
+states = ["example run (console output shown)"]
+
+[[pages]]
+url = "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input"
+what = "An HTML element page: tabbed HTML/CSS interactive editor, HTML code examples"
 
 [[pages]]
 url = "https://developer.mozilla.org/en-US/"
