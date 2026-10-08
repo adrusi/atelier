@@ -3,8 +3,8 @@
 // its undo button undoes the landing.
 //
 // The popup is opened as a page of its own (popup.html?tab=ID, about the
-// fixture's tab), and driven with keystrokes through the compositor, since
-// BiDi can't script extension pages.
+// fixture's tab), and driven with keystrokes through the compositor, as a
+// person would use it.
 //
 // Build first (`cargo build`, `(cd extension && npm run build)`), then from a
 // `nix develop` shell:  node dev/e2e/popup.ts

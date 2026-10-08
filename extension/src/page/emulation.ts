@@ -30,6 +30,22 @@ export function rewrite(text: string, features: Features): string {
 
 const mentions = (text: string, features: Features) => Object.keys(features).some((f) => text.includes(f));
 
+/** A color-scheme value as the browser would use it under the emulated
+ * preference: where the page offers both schemes ("light dark"), only the
+ * preferred one; anything else ("light", "normal", "only dark") as it is.
+ * The browser picks from what the page offers, so a page that doesn't offer
+ * dark stays light under a dark preference. */
+export function narrowScheme(value: string, scheme: "light" | "dark"): string {
+  const words = value.trim().toLowerCase().split(/\s+/);
+  if (!(words.includes("light") && words.includes("dark"))) return value;
+  return words.includes("only") ? `only ${scheme}` : scheme;
+}
+
+/** CSS text with each color-scheme declaration narrowed (narrowScheme). */
+export function narrowSchemeText(text: string, scheme: "light" | "dark"): string {
+  return text.replace(/(color-scheme\s*:\s*)([^;}!]*)/gi, (_, head: string, value: string) => head + narrowScheme(value, scheme));
+}
+
 /** The features the tab's marker asks for, if any. */
 export function fromMarker(): Features | null {
   let scheme: string | null = null;
@@ -77,7 +93,7 @@ export function start() {
         (_, q, u) => `url(${q}${new URL(u, href)}${q})`,
       );
       const copy = document.createElement("style");
-      copy.textContent = rewrite(absolute, features);
+      copy.textContent = scheme ? narrowSchemeText(rewrite(absolute, features), scheme) : rewrite(absolute, features);
       copy.setAttribute("data-atelier-scheme-copy", href);
       sheet.node.after(copy);
       sheet.css.disabled = true;
@@ -102,14 +118,30 @@ export function start() {
     for (const el of core.mediaElements()) {
       if (mentions(el.media, features)) el.media = rewrite(el.media, features);
     }
+    if (scheme) narrowSchemes(scheme);
   };
-  if (scheme) {
-    // light-dark(), form controls and scrollbars follow color-scheme.
-    const force = document.createElement("style");
-    force.setAttribute("data-atelier-scheme-force", "");
-    force.textContent = `:root { color-scheme: ${scheme} !important; }`;
-    root.append(force);
-  }
   core.watch(apply);
   apply();
+}
+
+/** Where the page offers both schemes, narrows the offer to the emulated
+ * one: color-scheme declarations in every readable sheet, inline styles, and
+ * <meta name="color-scheme">. light-dark(), system colours, form controls
+ * and scrollbars then follow, as they would for real. */
+function narrowSchemes(scheme: "light" | "dark") {
+  const narrow = (style: CSSStyleDeclaration) => {
+    const value = style.getPropertyValue("color-scheme");
+    if (!value) return;
+    const narrowed = narrowScheme(value, scheme);
+    if (narrowed !== value) style.setProperty("color-scheme", narrowed, style.getPropertyPriority("color-scheme"));
+  };
+  for (const scope of core.scopes()) {
+    for (const { rule } of core.rules(core.sheets(scope).filter((s) => s.owner !== "fetched"))) narrow(rule.style);
+  }
+  for (const el of core.queryAll("[style*='color-scheme' i]")) narrow((el as HTMLElement).style);
+  for (const meta of core.queryAll("meta[name='color-scheme' i]")) {
+    const content = meta.getAttribute("content") ?? "";
+    const narrowed = narrowScheme(content, scheme);
+    if (narrowed !== content) meta.setAttribute("content", narrowed);
+  }
 }

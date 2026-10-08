@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- The harder ways a page follows the colour scheme, for the fidelity
+       harness (dev/fidelity.ts). Each element is styled through one; the
+       harness compares the page under a real dark preference and under
+       atelier's emulation. -->
+  <title>scheme-hard fixture</title>
+  <meta name="color-scheme" content="light dark">
+  <style>
+    @import url("imported.css") (prefers-color-scheme: dark);
+    @layer base {
+      @supports (display: grid) {
+        @media (prefers-color-scheme: dark) { #layered { color: rgb(200, 100, 0); } }
+      }
+    }
+    #nested { color: rgb(0, 0, 0); @media (prefers-color-scheme: dark) { color: rgb(0, 200, 200); } }
+    #light-only { color-scheme: light; color: CanvasText; background: Canvas; }
+    #system { color: CanvasText; background: Canvas; }
+    #tokens { color: var(--fg); }
+    :root { --fg: rgb(10, 10, 10); }
+    @media (prefers-color-scheme: dark) { :root { --fg: rgb(240, 240, 240); } }
+    @media not all and (prefers-color-scheme: light) { #negated { color: rgb(150, 0, 150); } }
+    @media (prefers-color-scheme: dark) and (min-width: 100px), print { #compound { color: rgb(0, 150, 0); } }
+  </style>
+  <script src="late.js"></script>
+</head>
+<body>
+  <p id="imported">@import with a media condition</p>
+  <p id="layered">@media in @supports in @layer</p>
+  <p id="nested">@media nested in a style rule</p>
+  <p id="light-only">color-scheme: light, inside a light-dark page</p>
+  <p id="system">system colours under &lt;meta name=color-scheme&gt;</p>
+  <p id="tokens">a custom property redefined for dark</p>
+  <p id="negated">a negated light condition</p>
+  <p id="compound">a compound condition in a list</p>
+  <p id="inline" style="color-scheme: light dark; color: light-dark(rgb(1, 1, 1), rgb(220, 220, 0))">inline color-scheme and light-dark()</p>
+  <p id="adopted">an adopted stylesheet</p>
+  <p id="late-style">a style element added after load</p>
+  <p id="late-link">a link added after load</p>
+  <p id="script">a class set from matchMedia at startup</p>
+  <p><input id="field" value="a form control"> <select><option>a select</option></select> <button>a button</button></p>
+  <svg width="40" height="40"><style>@media (prefers-color-scheme: dark) { .dot { fill: rgb(0, 100, 255); } }</style><circle class="dot" cx="20" cy="20" r="15" fill="rgb(255, 100, 0)"/></svg>
+  <x-scheme></x-scheme>
+</body>
+</html>

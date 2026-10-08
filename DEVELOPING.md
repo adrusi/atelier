@@ -69,7 +69,7 @@ atelier-dev down dev1
 - `up` installs `extension/dist` automatically if it exists, unless `--extension` is given (a directory, or a packed `.xpi`), and registers `target/debug/atelier` as the native host if it exists (override with `--native-host`).
 - Extensions and the native host must be inside the repo, because that's the only part of the real filesystem the jail can see (read-only).
 - The BiDi commands each open and end their own session. **Firefox allows only one BiDi session at a time**, so these commands fail while another client (e.g. a test runner) holds one. Browsing-context IDs from one session aren't accepted by the next, so anything that needs IDs should do all its work in one session: write a script using `dev/bidi.ts` (see `spikes/r1/run.ts`).
-- `--pref` adds a line to the profile's `user.js`; the value is parsed as JSON if it can be (`--pref extensions.foo=false`). `--system-access` starts Firefox with `--remote-allow-system-access`. Even with it, BiDi can't drive privileged pages such as `moz-extension://` pages.
+- `--pref` adds a line to the profile's `user.js`; the value is parsed as JSON if it can be (`--pref extensions.foo=false`). `--system-access` starts Firefox with `--remote-allow-system-access`, which lets BiDi script extension pages (`script.evaluate` in a `moz-extension://` tab) and reach the browser's chrome (`browsingContext.getTree` with `"moz:scope": "chrome"`): `dev/e2e/recovery.ts` and the fidelity harness rely on it.
 - `--fontconfig FILE` installs FILE as the jail's user `fonts.conf`, instead of binding the developer's fontconfig directory. Fonts it adds with `<dir>` must be in the Nix store, or somewhere else Firefox's content sandbox allows reading: a directory under the repo looks fine to `fc-list` but isn't visible to pages.
 - `--color-scheme dark|light` sets what pages see as `prefers-color-scheme` (instances otherwise default to light).
 - `--atelier-dir DIR` makes a host directory the instance's owned directory, bound read-write at the same path inside the jail, so host-side tools (`atelier-dev atelier`, `atelier mcp`) reach the same daemon and files. Use it to try real styles in a dev instance.
@@ -117,12 +117,27 @@ owned directory, daemon, native host, extension and page shim. Build first
 `node dev/e2e/sources.ts` (tabs bound to a task's tree),
 `node dev/e2e/tasks.ts` (a task from queue to landing through `atelier mcp`),
 `node dev/e2e/popup.ts` (requests and undo from the popup, driven by keystrokes),
-`node dev/e2e/calls.ts` (questions from agents, the inbox, answers, theme stage), and
-`node dev/e2e/recovery.ts` (agent tabs and containers reconciled after a restart, simulated by reloading the extension). A failing run keeps the instance and its owned
+`node dev/e2e/calls.ts` (questions from agents, the inbox, answers, theme stage),
+`node dev/e2e/recovery.ts` (agent tabs and containers reconciled after a restart, simulated by reloading the extension), and
+`node dev/e2e/fidelity.ts` (emulation against the real thing, through the fidelity harness). A failing run keeps the instance and its owned
 directory (`$XDG_RUNTIME_DIR/atelier-dev/<name>{,-owned}`) for inspection.
 
 Unit and integration tests for the Rust side run with `cargo test`. Those for
 the daemon start real daemons against temporary directories.
+
+### The fidelity harness
+
+`node dev/fidelity.ts [--scheme dark|light] [--ignore SELECTOR]... URL...`
+renders each page for real and through atelier's emulation in one dev
+instance, and prints what differs: computed styles per property, the root's
+custom properties, layout (resized, or only moved), which image a
+`<picture>` chose, and pixels, attributed to the elements they're in. Paths
+starting with `/` are fixtures (`/scheme-hard/`). It starts its own instance
+unless given `--instance NAME` (one started with `--system-access`); images
+and `report.json` go to `$XDG_RUNTIME_DIR/atelier-dev/fidelity-reports/`.
+Real pages are loaded twice, and what varies between loads is left out as
+noise; `--ignore` leaves out what varies on every load (ad slots).
+`--no-emulation` is the control: everything emulation should fix, unfixed.
 
 ### Fixture sites
 

@@ -143,11 +143,21 @@ adding a row: who owns it, where its desired state is, and what reconciles it.
 
 - **Fixtures per mechanism**, each reporting what it concluded
   (`dev/fixtures/color-scheme` is the model).
-- **A fidelity harness** for emulations: render a page emulated in an
-  ordinary tab, and for real in the dev jail (`browsingContext.setViewport`
-  over BiDi; `--color-scheme`), and diff element geometry, computed styles
-  and pixels. It's how subtle failures get noticed, and how fixes get
-  measured.
+- **A fidelity harness** for emulations (`dev/fidelity.ts`): a page
+  rendered for real and through atelier's emulation, side by side in one
+  dev instance, diffed on every computed style of every element (shadow
+  roots and pseudo-elements included), geometry, chosen images and pixels.
+  Ground truth for the colour scheme is Firefox's own per-tab override
+  (`BrowsingContext.prefersColorSchemeOverride`, through BiDi's chrome
+  scope); for width it will be `browsingContext.setViewport`. Real pages
+  vary between loads, so the real page is loaded twice and what differs
+  between those is left out as noise (and counted); `--ignore` leaves out
+  ad slots and the like. Differences that can't show (a page's offered
+  schemes narrowed to one) are listed as equivalences, each with its
+  reason. Pixel differences are attributed to the elements they're in.
+  It's how subtle failures get noticed, and how fixes get measured:
+  `dev/e2e/fidelity.ts` holds the fixtures to it in both directions, with
+  a control run without emulation, and asserts the known gaps.
 - **Crash tests**: kill points in the daemon (an environment variable in dev
   builds, e.g. "after the journal intent"), and e2e tests that kill Firefox
   or the daemon mid-operation and check that reconcile and recovery leave
@@ -167,6 +177,10 @@ In order, each step leaving everything working:
    elements), with the layering check. Moving them extended css_tokens,
    force_state and colour-scheme emulation to shadow roots, which they
    hadn't reached.
-3. **The fidelity harness**, first on `color_scheme`.
+3. **The fidelity harness** (done), first on `color_scheme`. Its first run
+   found that emulation forced `color-scheme` on every page, darkening
+   default text on pages that don't offer dark; emulation now narrows what
+   a page offers instead, as the browser does. Known gaps it shows: frames,
+   and SVG images with their own scheme rules (MDN's sidebar chevrons).
 4. **Width emulation**, as a media feature in the emulation layer, measured
    by the harness.
