@@ -7,6 +7,7 @@ import { cssFor } from "./matching";
 import * as page from "./pagefns";
 import type { Bundle } from "./proto/Bundle";
 import { RpcError } from "./rpc";
+import * as containers from "./containers";
 import { emulateStyles, SCHEME_MARKER } from "./scheme";
 import { userScripts } from "./userscripts";
 
@@ -131,7 +132,15 @@ const call = (tabId: number, fn: (...args: any[]) => unknown, ...args: unknown[]
 
 function describeTab(tab: browser.tabs.Tab, ctx: ToolContext) {
   const task = ctx.sourceOf(tab.id!);
-  return { tab: tab.id, url: tab.url, title: tab.title, status: tab.status, visible: Boolean(tab.active), ...(task ? { task } : {}) };
+  return {
+    tab: tab.id,
+    url: tab.url,
+    title: tab.title,
+    status: tab.status,
+    visible: Boolean(tab.active),
+    ...(task ? { task } : {}),
+    ...(containers.isThrowaway(tab.id!) ? { throwaway: true } : {}),
+  };
 }
 
 const HIDDEN_NOTE =
@@ -229,8 +238,18 @@ const handlers: Record<string, Handler> = {
     await loaded;
     const url = param<string>(params, "url", "string");
     const task = param<string | null>(params, "task", "string", null);
+    // A throwaway container: the user's cookies for the site, nothing else of theirs.
+    let container: { cookieStoreId: string; copied: number } | null = null;
+    if (param<boolean>(params, "throwaway", "boolean", false)) {
+      try {
+        container = await containers.fork(url, param<string>(params, "from", "string", "firefox-default"));
+      } catch (e) {
+        throw new RpcError(PAGE_ERROR, `couldn't make a throwaway container: ${e instanceof Error ? e.message : e} (Firefox's containers may be turned off)`);
+      }
+    }
     // Bound before anything loads, so the first load already shows the task's tree.
-    const tab = await browser.tabs.create({ url: "about:blank", active: false });
+    const tab = await browser.tabs.create({ url: "about:blank", active: false, ...(container ? { cookieStoreId: container.cookieStoreId } : {}) });
+    if (container) containers.remember(tab.id!, container.cookieStoreId);
     agentTabs.add(tab.id!);
     await saveTabs();
     if (task !== null) {
@@ -242,7 +261,8 @@ const handlers: Record<string, Handler> = {
       }
     }
     await browser.tabs.update(tab.id!, { url });
-    return afterLoad(tab.id!, params, ctx, await settled(tab.id!));
+    const result = await afterLoad(tab.id!, params, ctx, await settled(tab.id!));
+    return container ? { ...result, cookiesCopied: container.copied } : result;
   },
 
   async "tab/bind"(params, ctx) {

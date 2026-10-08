@@ -18,6 +18,7 @@ import type { JournalEntry } from "./proto/JournalEntry";
 import type { Task } from "./proto/Task";
 import { cssFor } from "./matching";
 import { Rpc } from "./rpc";
+import * as containers from "./containers";
 import * as tools from "./tools";
 import { emulateMatchMedia, emulateStyles } from "./scheme";
 import { onUserScriptConnect, onUserScriptMessage, type UserScript, userScripts } from "./userscripts";
@@ -636,4 +637,5 @@ browser.alarms.onAlarm.addListener((alarm) => {
 });
 
 listenToShims();
+void containers.sweep();
 void connect();

@@ -326,6 +326,18 @@ try {
     await tool("tab_close", { tab: cs });
   });
 
+  await check("a throwaway tab has the user's cookies, and what changes there stays there", async () => {
+    await tool("eval", { tab, expression: "document.cookie = 'seen=1; path=/'; 0" });
+    const opened = await tool("tab_open", { url: fixture, throwaway: true });
+    assert.equal(opened.throwaway, true);
+    assert.ok(opened.cookiesCopied >= 1, JSON.stringify(opened));
+    const away = opened.tab;
+    assert.match((await tool("eval", { tab: away, expression: "document.cookie" })).result, /seen=1/);
+    await tool("eval", { tab: away, expression: "document.cookie = 'theme=dark; path=/'; 0" });
+    assert.doesNotMatch((await tool("eval", { tab, expression: "document.cookie" })).result, /theme=dark/, "the user's cookies are untouched");
+    await tool("tab_close", { tab: away });
+  });
+
   await check("tab_navigate and tab_close", async () => {
     const r = await tool("tab_navigate", { tab, url: `http://127.0.0.1:${state.fixturesPort}/basic/` });
     assert.equal(r.title, "basic fixture");
