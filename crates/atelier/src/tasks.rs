@@ -30,6 +30,8 @@ pub const LEASE_MS: u64 = 10 * 60 * 1000;
 /// The journal keeps at least this many entries, and anything younger than JOURNAL_MAX_AGE_MS.
 const JOURNAL_KEEP: usize = 50;
 const JOURNAL_MAX_AGE_MS: u64 = 90 * 24 * 60 * 60 * 1000;
+/// A finished task's tree is kept this long, for a look at what it did.
+const TREE_KEEP_MS: u64 = 24 * 60 * 60 * 1000;
 /// The largest file a request may attach.
 const MAX_ATTACHMENT: usize = 16 * 1024 * 1024;
 /// Conflicting files are sent back to the agent in full up to this size.
@@ -839,6 +841,65 @@ impl Store {
         Ok(entry)
     }
 
+    /// Removes what finished work no longer needs (ARCHITECTURE.md, "State
+    /// and recovery"): a finished task's tree, base and scratch space after
+    /// TREE_KEEP_MS (what it changed is in the journal), and the rest of it
+    /// (its record, calls and attachments) once it's as old as the journal
+    /// keeps; decided proposals likewise. Returns how many things it removed.
+    pub fn prune(&self, now: u64) -> usize {
+        self.prune_journal(now);
+        let mut removed = 0;
+        let mut remove = |path: &Path| {
+            let gone = if path.is_dir() {
+                fs::remove_dir_all(path)
+            } else {
+                fs::remove_file(path)
+            };
+            if gone.is_ok() {
+                removed += 1;
+            }
+        };
+        let finished = |t: &Task| {
+            matches!(
+                t.state,
+                TaskState::Landed | TaskState::Declined | TaskState::Abandoned
+            )
+        };
+        for entry in fs::read_dir(self.state.join("tasks"))
+            .into_iter()
+            .flatten()
+            .flatten()
+        {
+            let Some(task) = entry.file_name().to_str().and_then(|id| self.get(id).ok()) else {
+                continue;
+            };
+            if !finished(&task) {
+                continue;
+            }
+            let age = now.saturating_sub(task.updated);
+            let dir = self.task_dir(&task.id);
+            if age > JOURNAL_MAX_AGE_MS {
+                remove(&dir);
+            } else if age > TREE_KEEP_MS {
+                for name in ["tree", "scratch", "base.json"] {
+                    if dir.join(name).exists() {
+                        remove(&dir.join(name));
+                    }
+                }
+            }
+        }
+        if let Ok(proposals) = self.proposals(false) {
+            for p in proposals {
+                if p.decided
+                    .is_some_and(|d| now.saturating_sub(d) > JOURNAL_MAX_AGE_MS)
+                {
+                    remove(&self.state.join("proposals").join(format!("{}.json", p.id)));
+                }
+            }
+        }
+        removed
+    }
+
     /// Keeps the newest JOURNAL_KEEP entries, and anything younger than
     /// JOURNAL_MAX_AGE_MS.
     fn prune_journal(&self, now: u64) {
@@ -1310,6 +1371,34 @@ pub(super) mod tests {
             fs::read_to_string(tree(&t2).join("services/site/t/a.user.css")).unwrap(),
             "work in progress\n"
         );
+    }
+
+    #[test]
+    fn pruning_removes_finished_trees_then_finished_tasks() {
+        let e = env();
+        create(&e, Some("site"));
+        create(&e, Some("site"));
+        let done = e.store.claim(None, "s1", 1000).unwrap().unwrap();
+        let working = e.store.claim(None, "s2", 1000).unwrap().unwrap();
+        put(
+            &tree(&done),
+            "services/site/t/a.user.css",
+            "@-moz-document domain(\"a.example\") { p { color: blue; } }\n",
+        );
+        submit(&e, &done.id);
+        let landed = e.store.get(&done.id).unwrap().updated;
+
+        assert_eq!(e.store.prune(landed + 1000), 0, "a fresh tree is kept");
+        e.store.prune(landed + TREE_KEEP_MS + 1);
+        assert!(!tree(&done).exists());
+        assert_eq!(e.store.get(&done.id).unwrap().state, TaskState::Landed);
+        assert!(tree(&working).exists(), "unfinished work is never pruned");
+        // Undo doesn't need the tree: the journal has its own copies.
+        e.store.undo(None, landed + TREE_KEEP_MS + 2).unwrap();
+
+        e.store.prune(landed + JOURNAL_MAX_AGE_MS + TREE_KEEP_MS);
+        assert!(e.store.get(&done.id).is_err());
+        assert!(tree(&working).exists());
     }
 
     #[test]

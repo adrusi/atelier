@@ -368,6 +368,11 @@ async fn serve(dir: PathBuf) -> std::io::Result<()> {
     let runtime = socket.parent().expect("socket has a parent");
     fs::create_dir_all(runtime)?;
     fs::create_dir_all(paths::state_dir(&dir))?;
+    // Which owned directory this state is for, for anyone looking at it.
+    let _ = fs::write(
+        paths::state_dir(&dir).join("dir"),
+        format!("{}\n", dir.display()),
+    );
 
     // Holding this lock for our lifetime is what makes us the daemon for `dir`.
     let lock = fs::File::create(socket.with_extension("lock"))?;
@@ -398,7 +403,7 @@ async fn serve(dir: PathBuf) -> std::io::Result<()> {
         next_link: AtomicU64::new(1),
         reload_pending: AtomicBool::new(false),
         tasks: Mutex::new(tasks::Store::new(&dir, &paths::state_dir(&dir))?),
-        launcher: Mutex::new(session::Launcher::default()),
+        launcher: Mutex::new(session::Launcher::new(&paths::state_dir(&dir))),
     });
     recover(&state);
     state.reload(None);
@@ -406,6 +411,7 @@ async fn serve(dir: PathBuf) -> std::io::Result<()> {
     // Kept alive for as long as we serve.
     let _watcher = watch(state.clone())?;
     tokio::spawn(exit_when_idle(state.clone(), socket.clone()));
+    tokio::spawn(tidy(state.clone()));
 
     loop {
         let (stream, _) = listener.accept().await?;
@@ -536,6 +542,34 @@ fn classify(state: &State, changed: &[PathBuf], config: &Path, tasks: &Path) -> 
     dirty
 }
 
+/// Removes what finished work left behind (ARCHITECTURE.md, "State and
+/// recovery"): at startup, then hourly for as long as the daemon runs.
+async fn tidy(state: Arc<State>) {
+    loop {
+        let removed = state.tasks.lock().unwrap().prune(now_ms());
+        if removed > 0 {
+            eprintln!("atelier daemon: pruned {removed} finished task files");
+        }
+        // Lists for hooks whose process is gone (the daemon stopped while
+        // they ran): a hook's list is removed when it exits otherwise.
+        let state_dir = paths::state_dir(&state.dir);
+        for e in fs::read_dir(&state_dir).into_iter().flatten().flatten() {
+            let name = e.file_name();
+            let old = e
+                .metadata()
+                .and_then(|m| m.modified())
+                .is_ok_and(|t| t.elapsed().unwrap_or_default() > Duration::from_secs(3600));
+            if old
+                && name
+                    .to_str()
+                    .is_some_and(|n| n.starts_with("hook-") && n.ends_with(".changed"))
+            {
+                let _ = fs::remove_file(e.path());
+            }
+        }
+        tokio::time::sleep(Duration::from_secs(3600)).await;
+    }
+}
 async fn exit_when_idle(state: Arc<State>, socket: PathBuf) {
     let idle = std::env::var("ATELIER_DAEMON_IDLE_SECS")
         .ok()
@@ -1061,13 +1095,19 @@ fn run_hook(
                 let _ = stdin.write_all(summary.as_bytes());
             }
             let hook = hook.to_string();
-            std::thread::spawn(move || match child.wait() {
-                Ok(s) if s.success() => {}
-                Ok(s) => eprintln!("atelier daemon: {hook} hook failed ({s})"),
-                Err(e) => eprintln!("atelier daemon: {hook} hook: {e}"),
+            std::thread::spawn(move || {
+                match child.wait() {
+                    Ok(s) if s.success() => {}
+                    Ok(s) => eprintln!("atelier daemon: {hook} hook failed ({s})"),
+                    Err(e) => eprintln!("atelier daemon: {hook} hook: {e}"),
+                }
+                let _ = std::fs::remove_file(&list);
             });
         }
-        Err(e) => eprintln!("atelier daemon: {hook} hook: {e}"),
+        Err(e) => {
+            eprintln!("atelier daemon: {hook} hook: {e}");
+            let _ = std::fs::remove_file(&list);
+        }
     }
 }
 

@@ -23,14 +23,18 @@
 use crate::paths;
 use std::fs;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 /// After launching, assume the session is on its way for this long, so a
 /// burst of requests starts one session rather than several.
 const STARTING_FOR: Duration = Duration::from_secs(180);
 /// A session that called task_claim this recently is waiting for work.
 const WAITING_FOR: Duration = Duration::from_secs(15);
+/// session.log is started afresh (the old one kept as session.log.old) once
+/// it's this big.
+const LOG_MAX: u64 = 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Start {
@@ -136,13 +140,51 @@ pub fn render(template: &Template, dir: &Path, task: Option<&str>) -> Vec<String
 }
 
 /// What the daemon knows about sessions, for deciding whether to start one.
+/// The last launch is also written to `launched` in the state directory, so
+/// a daemon that restarts while a session is starting doesn't start another.
 #[derive(Default)]
 pub struct Launcher {
-    launched: Option<Instant>,
+    launched: Option<SystemTime>,
     polled: Option<Instant>,
+    /// Where the last launch is recorded (None in tests).
+    record: Option<PathBuf>,
 }
 
 impl Launcher {
+    pub fn new(state_dir: &Path) -> Launcher {
+        let record = state_dir.join("launched");
+        let launched = fs::read_to_string(&record)
+            .ok()
+            .and_then(|t| t.trim().parse::<u64>().ok())
+            .map(|ms| SystemTime::UNIX_EPOCH + Duration::from_millis(ms));
+        Launcher {
+            launched,
+            polled: None,
+            record: Some(record),
+        }
+    }
+
+    fn set_launched(&mut self, at: Option<SystemTime>) {
+        self.launched = at;
+        let Some(record) = &self.record else { return };
+        let written = match at {
+            Some(t) => fs::write(
+                record,
+                t.duration_since(SystemTime::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis()
+                    .to_string(),
+            ),
+            None => match fs::remove_file(record) {
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                other => other,
+            },
+        };
+        if let Err(e) = written {
+            eprintln!("atelier daemon: {}: {e}", record.display());
+        }
+    }
+
     /// A session asked for work (and may be waiting for more).
     pub fn polled(&mut self) {
         self.polled = Some(Instant::now());
@@ -150,7 +192,9 @@ impl Launcher {
 
     /// A session claimed a task: whatever was launched has arrived.
     pub fn claimed(&mut self) {
-        self.launched = None;
+        if self.launched.is_some() {
+            self.set_launched(None);
+        }
     }
 
     /// Why a new session shouldn't be started now, if there's a reason.
@@ -159,7 +203,10 @@ impl Launcher {
             Some("a session is working on a task, and will see the queue when it's done")
         } else if self.polled.is_some_and(|t| t.elapsed() < WAITING_FOR) {
             Some("a session is waiting for work")
-        } else if self.launched.is_some_and(|t| t.elapsed() < STARTING_FOR) {
+        } else if self
+            .launched
+            .is_some_and(|t| t.elapsed().unwrap_or_default() < STARTING_FOR)
+        {
             Some("a session was started recently and hasn't claimed anything yet")
         } else {
             None
@@ -180,6 +227,9 @@ impl Launcher {
             .ok_or("no [session] command is configured in config.toml")?;
         let argv = render(template, dir, task);
         let log_path = paths::state_dir(dir).join("session.log");
+        if fs::metadata(&log_path).is_ok_and(|m| m.len() > LOG_MAX) {
+            let _ = fs::rename(&log_path, log_path.with_extension("log.old"));
+        }
         let log = fs::OpenOptions::new()
             .create(true)
             .append(true)
@@ -208,7 +258,7 @@ impl Launcher {
         let mut child = command
             .spawn()
             .map_err(|e| format!("couldn't run `{}`: {e}", argv[0]))?;
-        self.launched = Some(Instant::now());
+        self.set_launched(Some(SystemTime::now()));
         let line = argv.join(" ");
         let shown = line.clone();
         std::thread::spawn(move || match child.wait() {
@@ -253,11 +303,21 @@ mod tests {
         let mut l = Launcher::default();
         assert_eq!(l.busy(false), None);
         assert!(l.busy(true).is_some());
-        l.launched = Some(Instant::now());
+        l.launched = Some(SystemTime::now());
         assert!(l.busy(false).unwrap().contains("started recently"));
         l.claimed();
         assert_eq!(l.busy(false), None);
         l.polled();
         assert!(l.busy(false).unwrap().contains("waiting"));
+    }
+
+    #[test]
+    fn a_launch_is_remembered_across_restarts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut l = Launcher::new(tmp.path());
+        l.set_launched(Some(SystemTime::now()));
+        assert!(Launcher::new(tmp.path()).busy(false).is_some());
+        l.claimed();
+        assert_eq!(Launcher::new(tmp.path()).busy(false), None);
     }
 }

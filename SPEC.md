@@ -244,18 +244,24 @@ Users will reasonably want a generic fallback, such as Dark Reader, for the many
 ```
 $XDG_STATE_HOME/atelier/<dir-id>/
 ├── dir                       # canonical ATELIER_DIR path (for humans and for diagnosing problems)
-├── queue.json                # task order
 ├── tasks/<task-id>/
-│   ├── task.json             # the task record (§8.2)
+│   ├── task.json             # the task record (§8.2), including its handoff
 │   ├── base.json             # path → hash for every file when the task was claimed
 │   ├── tree/                 # full copy of ATELIER_DIR, which the contractor edits
-│   ├── handoff.md            # contractor's notes for whoever resumes the task
-│   └── thread.jsonl          # messages
-├── journal/<seq>.json        # undo journal (§8.5)
-├── health/                   # latest check results, per style
-├── approvals/<sha256>        # approved script hashes (§12)
-└── feedback/                 # drafts of feedback to the developers
+│   ├── scratch/              # the contractor's own files (screenshots to attach)
+│   ├── attachments/          # files that came with the request
+│   └── calls/<n>/            # a batch of calls (§9.5): batch.json and its attachments
+├── journal/<seq>/            # undo journal (§8.5): entry.json, before/ and after/ copies
+├── proposals/<id>.json       # proposed edits to THEME.md (§9.5)
+├── launched                  # when a session was last started (§9.1)
+├── session.log               # started sessions' output
+├── hook-<seq>.changed        # the changed-file list for a running hook (§8.6)
+├── health/                   # (planned) latest check results, per style
+├── approvals/<sha256>        # (planned) approved script hashes (§12)
+└── feedback/                 # (planned) drafts of feedback to the developers
 ```
+
+What's kept, and for how long (the daemon prunes at startup and hourly): a finished task's `tree/`, `base.json` and `scratch/` for a day (what it changed is in the journal, which doesn't need them for undo); the rest of a finished task, and decided proposals, for 90 days; the journal's newest 50 entries, and any younger than 90 days; a hook's list until the hook exits. Unfinished tasks and incomplete journal entries are never pruned.
 
 ---
 
@@ -362,7 +368,7 @@ Rules:
 - **Work the system found** (repairs) never starts a session by default. It is queued and flagged, and the user clicks **Fix** or opens a session themselves. Opting in: `on_breakage = "spawn"`, with a rate limit (default: at most once per 24 hours, batched).
 - **Sandboxing is up to the user.** A container is just a spawn command that bind-mounts the socket and the state directory.
 
-*Implemented (phase 2d):* `[session]` in `config.toml` sets `start` (`pull`, `spawn` or `headless`) and `command`. The command is a string run with `sh -c`, with `{dir}` and `{task}` replaced by shell-quoted values, or an array run directly. It runs in the owned directory, detached from the daemon, with its output in the state directory's `session.log`. It gets `ATELIER_DIR`, `ATELIER_TASK_ID` and `ATELIER_SESSION` (`spawn` or `headless`) in its environment. Harnesses pass their environment on to MCP servers (Claude Code does), so `atelier mcp` knows when a session is headless, and its `work` prompt then says that nobody is there to answer: calls go in `assumptions`, and declining with what's missing is fine. A task created by anything but an agent (`create`, `revise`, `port`, `audit`) starts a session unless one is at work (some task is claimed), one is waiting for work (`task_claim` was called in the last 15 seconds), or one was started in the last 3 minutes and hasn't claimed anything yet. `atelier session start [--force]` runs the command by hand, whatever `start` says, which is also how to try a template. Verified in the dev jail: a daemon started by Firefox through the native host inherits the compositor's environment, and `foot` opened beside Firefox.
+*Implemented (phase 2d):* `[session]` in `config.toml` sets `start` (`pull`, `spawn` or `headless`) and `command`. The command is a string run with `sh -c`, with `{dir}` and `{task}` replaced by shell-quoted values, or an array run directly. It runs in the owned directory, detached from the daemon, with its output in the state directory's `session.log`. It gets `ATELIER_DIR`, `ATELIER_TASK_ID` and `ATELIER_SESSION` (`spawn` or `headless`) in its environment. Harnesses pass their environment on to MCP servers (Claude Code does), so `atelier mcp` knows when a session is headless, and its `work` prompt then says that nobody is there to answer: calls go in `assumptions`, and declining with what's missing is fine. A task created by anything but an agent (`create`, `revise`, `port`, `audit`) starts a session unless one is at work (some task is claimed), one is waiting for work (`task_claim` was called in the last 15 seconds), or one was started in the last 3 minutes and hasn't claimed anything yet (the launch time is kept in the state directory, so this holds across a daemon restart). `session.log` is started afresh past 1 MiB, the previous one kept as `session.log.old`. `atelier session start [--force]` runs the command by hand, whatever `start` says, which is also how to try a template. Verified in the dev jail: a daemon started by Firefox through the native host inherits the compositor's environment, and `foot` opened beside Firefox.
 
 ### 9.2 The agent kit
 
