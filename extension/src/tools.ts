@@ -165,7 +165,11 @@ async function waitFor(tabId: number, params: any): Promise<string | null> {
 
 /** A tab's description after loading, with any warnings about the load. */
 async function afterLoad(tabId: number, params: any, ctx: ToolContext, slow: string | null) {
-  const warnings = [slow, await waitFor(tabId, params)].filter(Boolean);
+  const check = (await call(tabId, "botCheck").catch(() => null)) as string | null;
+  const bot = check
+    ? `This is a bot check ("${check}"), not the page itself: screenshots and tools see the check. It may pass on its own; wait a few seconds and tab_reload, or try another page of the site.`
+    : null;
+  const warnings = [slow, bot, await waitFor(tabId, params)].filter(Boolean);
   return { ...describeTab(await browser.tabs.get(tabId), ctx), ...(warnings.length ? { warning: warnings.join(" ") } : {}) };
 }
 
@@ -450,6 +454,8 @@ const handlers: Record<string, Handler> = {
   async "page/computed"(params) {
     const tab = await agentTab(params);
     const selector = param<string>(params, "selector", "string");
+    // Values mid-transition aren't the ones a page settles on.
+    await call(tab.id!, "finishAnimations");
     const r = await call(tab.id!, "computed", selector, params?.properties ?? null);
     if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\``);
     return r;
@@ -504,6 +510,7 @@ const handlers: Record<string, Handler> = {
   async "page/shapes"(params) {
     const tab = await agentTab(params);
     const scope = param<string | null>(params, "scope", "string", null);
+    await call(tab.id!, "finishAnimations");
     const r = await call(tab.id!, "shapeScan", scope, param<number>(params, "limit", "number", 40));
     if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${scope}\``);
     return r;
@@ -573,11 +580,23 @@ const handlers: Record<string, Handler> = {
       diagnostics: bundle?.diagnostics ?? [],
     };
     if (tab) {
+      const applying = (bundle?.styles ?? []).filter((s) => tab.url && cssFor(s, tab.url) !== null).map((s) => s.id);
+      const inPage = (await call(tab.id!, "atelierStyleCheck").catch(() => null)) as { present: string[]; dropped: { style: string; selector: string; effect: string }[] } | null;
+      const missing = inPage ? applying.filter((id) => !inPage.present.includes(id)) : [];
       out.tab = {
         ...describeTab(tab, ctx),
-        applying: (bundle?.styles ?? []).filter((s) => tab.url && cssFor(s, tab.url) !== null).map((s) => s.id),
+        applying,
         shim: ctx.hasShim(tab.id!),
         unmetPrerequisites: ctx.unmet(tab.id!),
+        ...(missing.length
+          ? { notInPage: missing, notInPageNote: "These should apply to this page but aren't in it, so the page doesn't show them. tab_reload usually fixes it; if it doesn't, say so in your feedback." }
+          : {}),
+        ...(inPage?.dropped.length
+          ? {
+              droppedSelectors: inPage.dropped,
+              droppedNote: "Firefox can't use these selectors, and says nothing. \"dropped\": it can't parse the selector, so the whole rule is thrown away. \"ignored\": inside :is() or :where(), which forgive what they can't parse, so the rule stays but those arguments match nothing; usually a pseudo-element (::before) or a leading > inside :is(). Write those outside the :is(), e.g. :is(.a, .b)::before.",
+            }
+          : {}),
       };
     }
     return out;

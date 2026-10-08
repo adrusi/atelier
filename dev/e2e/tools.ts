@@ -264,6 +264,37 @@ try {
     ]);
   });
 
+  await check("styles_status names selectors Firefox drops or ignores, and styles missing from the page", async () => {
+    const file = path.join(owned, "services/fixtures/e2e/selectors.user.css");
+    fs.writeFileSync(file, `@-moz-document url-prefix("http://127.0.0.1:") {
+  main:unknown-pseudo { outline: 1px solid red; }
+  :is(h1::before, h2) { color: red; }
+  main { & > p { margin: 0; } }
+}
+`);
+    const r = await tool("styles_status", { tab });
+    const style = "services/fixtures/e2e/selectors.user.css";
+    assert.deepEqual(
+      r.tab.droppedSelectors,
+      [
+        { style, selector: "main:unknown-pseudo", effect: "dropped" },
+        { style, selector: ":is(h1::before, h2)", effect: "ignored" },
+      ],
+      JSON.stringify(r.tab),
+    );
+    assert.equal(r.tab.notInPage, undefined, "every applying style is in the page");
+    fs.rmSync(file);
+  });
+
+  await check("tab_open says when a page is a bot check", async () => {
+    const r = await tool("tab_open", { url: fixture.replace("/tokens/", "/bot-check/") });
+    assert.match(r.warning ?? "", /This is a bot check \("Making sure you're not a bot!"\)/);
+    await tool("tab_close", { tab: r.tab });
+    const plain = await tool("tab_open", { url: fixture });
+    assert.equal(plain.warning, undefined);
+    await tool("tab_close", { tab: plain.tab });
+  });
+
   await check("screenshot's extraCss shows a variant just for the capture", async () => {
     const content = await tool("screenshot", { tab, extraCss: "html { background: rgb(255, 0, 0) !important; }", scale: 0.25 });
     assert.equal(content[0].type, "image");

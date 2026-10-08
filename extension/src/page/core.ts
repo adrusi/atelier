@@ -419,6 +419,18 @@ export function mediaElements(): (HTMLLinkElement | HTMLSourceElement | HTMLStyl
   return queryAll("link[media], source[media], style[media]") as (HTMLLinkElement | HTMLSourceElement | HTMLStyleElement)[];
 }
 
+/** Whether Firefox keeps a rule with this selector (parsed on its own, in
+ * a sheet of its own), rather than dropping it as unparseable. */
+export function keepsRule(selector: string): boolean {
+  try {
+    const sheet = new CSSStyleSheet();
+    sheet.replaceSync(`${selector} {}`);
+    return sheet.cssRules.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** Restores shorthands where the CSSOM serialises only empty longhands (a
  * var() shorthand mixed with overriding longhands). */
 export const SHORTHANDS = [

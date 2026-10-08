@@ -586,3 +586,66 @@ export function emulationGaps(): { frames: number; svgImages: string[] } {
   }
   return { frames: core.queryAll("iframe, frame").length, svgImages: [...urls].slice(0, 40) };
 }
+
+/** A selector of one of atelier's styles that Firefox can't use:
+ * "dropped" (it can't parse it, so the whole rule is thrown away), or
+ * "ignored" (inside :is() or :where(), which forgive what they can't parse:
+ * the rule stays, but those arguments match nothing). */
+type Unusable = { style: string; selector: string; effect: "dropped" | "ignored" };
+
+/** atelier's styles as they are in the page: which are present (the
+ * shim's elements, and @shadow styles in shadow roots), and selectors in
+ * them Firefox can't use, which is silent and easy to mistake for a
+ * cascade problem. Each rule's selector is tested with CSS.supports,
+ * Firefox's own (unforgiving) parser; a list that fails is narrowed to the
+ * parts that do, and each is tried in a sheet to see what Firefox does with
+ * the rule. */
+export function atelierStyleCheck(): { present: string[]; dropped: Unusable[] } {
+  const present = new Set<string>();
+  const dropped: Unusable[] = [];
+  const effect = (sel: string): Unusable["effect"] => (core.keepsRule(sel.replace(/&/g, "*")) ? "ignored" : "dropped");
+  const supported = (sel: string) => {
+    // Nesting: & stands for the parent, and a leading combinator is relative to it.
+    const testable = sel.replace(/&/g, "*").replace(/^\s*[>+~]/, "* $&");
+    try {
+      return CSS.supports(`selector(${testable})`);
+    } catch {
+      return true; // can't tell
+    }
+  };
+  for (const el of core.queryAll("style[data-atelier]")) {
+    const id = el.getAttribute("data-atelier")!;
+    present.add(id);
+    // Rule preludes in the source: text before each {, outside comments and
+    // strings, skipping at-rules and keyframe selectors.
+    const text = (el.textContent ?? "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""');
+    const blocks: string[] = [];
+    let start = 0;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (c === "{") {
+        const prelude = text.slice(start, i).trim();
+        const inKeyframes = blocks.some((b) => /^@(-\w+-)?keyframes/.test(b));
+        blocks.push(prelude);
+        if (prelude && !prelude.startsWith("@") && !inKeyframes && !supported(prelude)) {
+          const parts = core.splitTop(prelude).filter((p) => !supported(p));
+          for (const p of parts.length ? parts : [prelude]) if (dropped.length < 10) dropped.push({ style: id, selector: p, effect: effect(p) });
+        }
+        start = i + 1;
+      } else if (c === "}") {
+        blocks.pop();
+        start = i + 1;
+      } else if (c === ";") start = i + 1;
+    }
+  }
+  return { present: [...present], dropped };
+}
+
+/** Whether the page is a bot check (a challenge shown before the real page),
+ * and which, judged by its title and markers the common ones use. */
+export function botCheck(): string | null {
+  const title = document.title.trim();
+  if (/^(just a moment|attention required|checking your browser|verifying you are human|making sure you('|’)re not a bot|ddos-guard|please wait)/i.test(title)) return title;
+  if (core.find("#challenge-form, #cf-challenge-running, .cf-browser-verification, #anubis_challenge, [data-ddg-challenge]")) return title || "a challenge page";
+  return null;
+}

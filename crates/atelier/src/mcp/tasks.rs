@@ -1159,7 +1159,8 @@ off without losing the rest.\n\
 - Check your work beyond screenshots: contrast_scan finds text that doesn't stand out against its \
 background, shape_scan finds what's still drawn as a box, force_state shows hover and focus styles, and \
 styles_status reports problems loading your files (a style with errors keeps its last good version \
-applied, so a mistake can look as if nothing happened).\n\
+applied, so a mistake can look as if nothing happened), and, with a tab, selectors Firefox silently drops \
+or ignores.\n\
 - Work in the task's tree, not the owned directory: only landings are recorded, undoable, and passed to \
 the user's hooks.\n\
 - When a limit of atelier or the browser stops you (a part of the page your styles can't reach, a tool \
