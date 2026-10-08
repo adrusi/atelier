@@ -520,3 +520,37 @@ tab (search suggestions, a sticky header); flag which clicks persist site
 settings; an inset `box-shadow` edge drew a stray line along a row's top
 that the tools couldn't explain; a broad rule (`body #search`) matching an
 unrelated element on other pages went unnoticed until a screenshot.
+
+## Design notes in use: Hacker News, the Python docs and the ArchWiki in tiled (2026-10-07)
+
+The run after the design notes (themes/tiled/notes.md) were added, with
+three of them in place, on sites chosen to meet them: Hacker News (a
+centred column), the Python docs (anchor targets) and the ArchWiki
+(MediaWiki figures). Headless, in parallel: 5, 7 and 13 minutes; all landed.
+
+- **The notes worked as precedent.** Hacker News followed two without being
+  told (full-width strips on its centred column, the left edge on a
+  jumped-to comment). The ArchWiki agent distinguished one: Wikipedia's
+  inline code had lost its box, but on a wiki whose prose is full of
+  commands it kept a recessed fill, said why, offered both as a live
+  variant, and recorded the distinction. The three added six notes between
+  them, each a general call with its reason and where it came from
+  (hover on dense lists but not threads; a site's signals, like Hacker
+  News's black bar, kept as content; diagrams the site inverts left as
+  drawn; a full grid for data tables; dim prompts in REPL examples).
+- **The new warnings misfired.** styles_status's dropped-selector check
+  flagged ordinary selector lists as "ignored" (CSS.supports' selector()
+  takes one selector, not a list) and blanked quoted attribute values in
+  what it reported. All three agents checked computed values and saw
+  through it; one said it "trains you to ignore it". Both fixed, with the
+  cases in the e2e test.
+
+**Requests and observations:** force_state hover on a row didn't seem to
+reach a `tr:hover + tr` rule (it does; checking it showed the clones were
+placed before atelier's styles, which can lose at equal specificity, now
+fixed); eval saw the real innerWidth under viewport emulation (fixed);
+choosing a `<select>` option the way a user would (type_text does it now);
+cropping a screenshot to a region; a warning when a page's CSP blocks a
+`url()` in a style (Hacker News blocks `data:` images); a hint in
+matched_rules when an `!important` rule loses to one with an ID; a way to
+wait for a navigation started inside eval.

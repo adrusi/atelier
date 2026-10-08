@@ -1,2 +1,32 @@
 description = "Hacker News"
 summary = "news.ycombinator.com: story lists, item/comment pages, user pages and forms."
+
+[[pages]]
+url = "https://news.ycombinator.com/"
+what = "Front page: ranked story rows, header nav, footer with search"
+states = ["a story row hovered", "scrolled to the footer", "black mourning bar above the header, when HN shows one"]
+
+[[pages]]
+url = "https://news.ycombinator.com/item?id=50002008"
+what = "Story with a comment tree: comment box, nested comments, downvoted (faded) comments"
+states = ["a comment targeted via #id (parent/next links)", "a comment collapsed with [–]", "textarea focused"]
+
+[[pages]]
+url = "https://news.ycombinator.com/item?id=49971347"
+what = "Short item page: footer should sit at the window's foot"
+
+[[pages]]
+url = "https://news.ycombinator.com/login"
+what = "Bare login / create-account page (no header)"
+
+[[pages]]
+url = "https://news.ycombinator.com/user?id=pg"
+what = "User profile table; when it's your own, a settings form (unseen: needs login)"
+
+[[pages]]
+url = "https://news.ycombinator.com/submit"
+what = "Submit form (unseen: needs login; redirects to login otherwise)"
+
+[[pages]]
+url = "https://news.ycombinator.com/threads"
+what = "Your comment threads, header with username/karma/logout (unseen: needs login)"

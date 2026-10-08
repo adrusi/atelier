@@ -1,0 +1,279 @@
+/* ==UserStyle==
+@name           ArchWiki chrome (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    The Arch navbar and Vector 2022's chrome as panes: square, flat, header strips, sidebars split by rules, menus, focus
+==/UserStyle== */
+
+/* Colours come from the --tl-* names in tokens.user.css. Scoped to the
+   dark modes, like the tokens. Layout and order are Vector's and the
+   ArchWiki's; only borders, fills and a little padding change.
+
+   The ArchLinux extension colours links with
+   `#content a:not([role="button"]):not(.new) { color: … !important }` (and
+   the same for #mw-panel-toc, #mw-panel, the header), and visited ones
+   likewise, so link colours that differ from its tokens need !important. */
+
+@-moz-document domain("wiki.archlinux.org") {
+  /* ---- Square and flat, everywhere ---------------------------------- */
+
+  /* Codex hard-codes 2px corners on buttons and inputs; broad and
+     !important, like on Wikipedia. Radios stay round. Focus rings drawn
+     with box-shadow come back as an outline below. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) *:not(.cdx-radio__icon),
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) *:not(.cdx-radio__icon)::before,
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) *:not(.cdx-radio__icon)::after {
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+
+  /* Focus: a 1px lavender outline. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :focus-visible {
+    outline: 1px solid var(--tl-accent) !important;
+    outline-offset: 1px;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.cdx-text-input__input, .cdx-search-input input, textarea, select):focus {
+    border-color: var(--tl-accent);
+    outline: 1px solid var(--tl-accent);
+    outline-offset: -1px;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.cdx-radio__input, .cdx-checkbox__input):focus-visible + :is(.cdx-radio__icon, .cdx-checkbox__icon) {
+    outline: 1px solid var(--tl-accent);
+    outline-offset: 2px;
+  }
+
+  /* ---- Panes -------------------------------------------------------- */
+
+  /* The Arch navbar (shared by archlinux.org's sites): a mantle strip,
+     ruled off below, in place of its grey bar and 5px blue rule. Its
+     links are a tab row: dim text, the current site (Wiki) in the text
+     colour underlined in lavender. Its CSS is all !important. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #archnavbar {
+    background: var(--tl-deep) !important;
+    border-bottom: 1px solid var(--tl-rule) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #archnavbar ul#archnavbarlist li a {
+    color: var(--tl-dim);
+    font-weight: 600 !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #archnavbar ul li a:hover {
+    color: var(--tl-fg) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #archnavbar ul#archnavbarlist li.anb-selected a {
+    color: var(--tl-fg) !important;
+    text-decoration: underline !important;
+    text-decoration-color: var(--tl-accent) !important;
+    text-decoration-thickness: 2px !important;
+    text-underline-offset: 6px;
+  }
+
+  /* The wiki's own header (menu, search, log in) is the next strip down,
+     mantle too, with its own rule; the window's gutters beside the page
+     column are mantle, and the column meets them at a rule each side. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) body {
+    background: var(--tl-deep);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.vector-header-container, .vector-header-container .vector-header) {
+    background-color: var(--tl-deep);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-header-container {
+    border-bottom: 1px solid var(--tl-rule);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-sticky-header {
+    background: var(--tl-deep);
+    border-bottom: 1px solid var(--tl-rule);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) body.skin-vector div.mw-page-container {
+    background-color: var(--tl-bg);
+    border-inline: 1px solid var(--tl-rule);
+  }
+
+  /* The article is a bordered box of its own (#content) floating on the
+     page: it loses the box, and the sidebars are split from it by rules
+     the height of the page instead, when something is pinned in them. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content {
+    background: transparent;
+    border: 0;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-pinned-container {
+    background: transparent;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-column-start:has(.vector-pinned-container > *) {
+    border-right: 1px solid var(--tl-rule);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-column-end:has(.vector-pinned-container > *) {
+    border-left: 1px solid var(--tl-rule);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.vector-pinnable-header, .vector-menu-heading, .vector-pinnable-element .vector-menu-heading) {
+    border-color: var(--tl-rule);
+  }
+
+  /* The pinned sidebar's "hide" and "move to sidebar": small grey filled
+     buttons become outlined text. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-pinnable-header-toggle-button {
+    background-color: transparent;
+    border: 1px solid var(--tl-rule);
+    color: var(--tl-dim);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-pinnable-header-toggle-button:hover {
+    background-color: var(--tl-surface);
+    color: var(--tl-fg);
+  }
+
+  /* Contents: every entry is a link, so they're in the text colour (the
+     extension makes them blue with !important); the section you're
+     reading is lavender with the 2px lavender edge. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-toc a.vector-toc-link:not(.new) {
+    color: var(--tl-fg) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-toc a.vector-toc-link:not(.new):hover,
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-toc .vector-toc-list-item-active > a.vector-toc-link:not(.new) {
+    color: var(--tl-accent) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-toc .vector-toc-list-item-active > .vector-toc-link {
+    box-shadow: -2px 0 0 var(--tl-accent) !important;
+  }
+  /* When the current section is folded away, its top-level entry stands
+     in for it (Vector only makes it bold). */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-toc .vector-toc-level-1-active:not(.vector-toc-list-item-expanded) > a.vector-toc-link:not(.new) {
+    color: var(--tl-accent) !important;
+    box-shadow: -2px 0 0 var(--tl-accent) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-toc .vector-toc-numb {
+    color: var(--tl-dim);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-toc .vector-toc-list-item-active > .vector-toc-link :is(.vector-toc-text, .vector-toc-numb) {
+    color: inherit;
+  }
+
+  /* Page tabs (Page/Discussion, Read/Edit/View history): text, the
+     current one in the text colour underlined in lavender. The extension
+     draws the selected tab as a box joined to the old article frame; that
+     goes with the frame. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .vector-page-toolbar-container {
+    border-bottom: 1px solid var(--tl-rule);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) nav.vector-menu-tabs li.selected {
+    border: 0;
+    margin-top: 0;
+    background: transparent;
+  }
+  /* (The tabs are inside #content, so these need its id to beat the
+     extension's link colours.) */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content :is(.vector-page-toolbar, .vector-page-titlebar) .vector-tab-noicon.selected a:not(.new) {
+    color: var(--tl-fg) !important;
+    border-bottom-color: var(--tl-accent);
+  }
+  /* Chrome links aren't "visited" in the sense the theme's mauve means. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content :is(.vector-page-toolbar, .vector-page-titlebar, .vector-pinnable-element, .vector-dropdown-content) a:not(.new):visited,
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.vector-user-links, .vector-pinnable-element, .vector-dropdown-content, .mw-footer) a:not(.new):visited {
+    color: var(--tl-accent) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content :is(.vector-page-toolbar, .vector-page-titlebar) .vector-tab-noicon.selected a:not(.new):visited {
+    color: var(--tl-fg) !important;
+  }
+  /* Links that jump within the page (the "Beginning" link, footnote
+     markers, cross-references to sections) stay lavender once visited,
+     or the page turns mauve as it's read. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content a[href^="#"]:not(.new):visited {
+    color: var(--tl-accent) !important;
+  }
+  /* The extension greys links on hover; the lighter lavender instead. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content a:not([role="button"], .new):visited:hover {
+    color: #d8bdf9 !important;
+  }
+
+  /* ---- Footer ------------------------------------------------------- */
+
+  /* A mantle pane under a rule, edge to edge of the page column: pulled
+     out over the column's padding, which follows Vector's breakpoints
+     (and the ArchWiki's own: none below 1000px). */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-footer-container {
+    --tl-page-pad: 1.5rem;
+    background-color: var(--tl-deep);
+    border-top: 1px solid var(--tl-rule);
+    margin-inline: calc(-1 * var(--tl-page-pad));
+    padding-inline: var(--tl-page-pad);
+    padding-top: 0;
+    padding-bottom: 0;
+    margin-top: 32px;
+  }
+  @media screen and (max-width: 999px) {
+    html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-footer-container {
+      --tl-page-pad: 0px;
+    }
+  }
+  @media screen and (min-width: 1120px) {
+    html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-footer-container {
+      --tl-page-pad: 2.75rem;
+    }
+  }
+  @media screen and (min-width: 1680px) {
+    html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-footer-container {
+      --tl-page-pad: 3.25rem;
+    }
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-footer {
+    border-top: 0;
+    padding-block: 16px 24px;
+    color: var(--tl-dim);
+  }
+
+  /* Search results: every title is a link, so titles are in the text
+     colour, dimmed once visited, lavender on hover. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content :is(.mw-search-result-heading, .searchmatch) a:not(.new) {
+    color: var(--tl-fg) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content .mw-search-result-heading a:not(.new):visited {
+    color: var(--tl-dim) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content .mw-search-result-heading a:not(.new):hover {
+    color: var(--tl-accent) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-search-result-data {
+    color: var(--tl-dim);
+  }
+  /* The search profiles (Content pages, Multimedia, …) sit in a filled
+     tray: a tab row instead, the current one in the text colour
+     underlined in lavender. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-search-profile-tabs {
+    background: transparent;
+    border: 0;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content .search-types li.current a {
+    color: var(--tl-fg) !important;
+    text-decoration: underline 2px var(--tl-accent);
+    text-underline-offset: 6px;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content .search-types a:not(.new):visited {
+    color: var(--tl-accent) !important;
+  }
+
+  /* ---- Controls ----------------------------------------------------- */
+
+  /* Inputs are recessed (crust); buttons are outlined on the page. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.cdx-text-input__input, .cdx-search-input input, textarea, input[type="text"], input[type="search"], select, .oo-ui-inputWidget-input) {
+    background-color: var(--tl-deeper);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .cdx-button:not(.cdx-button--weight-quiet, .cdx-button--weight-primary),
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .cdx-search-input__end-button {
+    background-color: transparent;
+    border-color: var(--tl-rule);
+    color: var(--tl-fg);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .cdx-button:not(.cdx-button--weight-quiet, .cdx-button--weight-primary):hover,
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .cdx-search-input__end-button:hover {
+    background-color: var(--tl-surface);
+  }
+
+  /* ---- Things on top: menus, search suggestions, previews ----------- */
+
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.vector-dropdown-content, .cdx-menu, .vector-typeahead-search .cdx-menu, .mwe-popups) {
+    background-color: var(--tl-surface);
+    border: 1px solid var(--tl-surface-2);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .cdx-menu-item--highlighted {
+    background-color: var(--tl-surface-2);
+  }
+}

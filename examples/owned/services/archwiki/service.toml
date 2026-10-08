@@ -1,0 +1,33 @@
+description = "ArchWiki (wiki.archlinux.org)"
+summary = "The ArchWiki (MediaWiki, Vector 2022 skin). Retunes its dark mode to the theme through Vector's Codex tokens and the wiki's own --archwiki-* tokens; the tiled styles also flatten the Arch navbar and the page into panes, turn Note/Tip/Warning and article-status boxes into callouts with a coloured left edge, and restyle tables, code, related articles and search."
+
+[[prerequisites]]
+description = "In the ArchWiki's Appearance sidebar, set Color to Automatic (follows the desktop's dark preference) or Dark. The style only changes the dark mode; it leaves Light alone."
+# Matches when the site is in a mode this style restyles. With Automatic it
+# also needs the browser to prefer dark, which the desktop does.
+check = "html:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os)"
+
+[[pages]]
+url = "https://wiki.archlinux.org/title/Installation_guide"
+what = "Article: Arch navbar, header, contents sidebar, appearance sidebar, numbered headings, code blocks, Note and Tip callouts, footer"
+states = ["Main menu (☰) open", "Tools menu open", "search field focused, with suggestions open", "scrolled, with the sticky header showing", "a contents section folded, with the current section inside it"]
+
+[[pages]]
+url = "https://wiki.archlinux.org/title/Pacman"
+what = "Related articles box, Warning callouts, an article-status message ({{Expansion}}), package and man page links, inline code"
+
+[[pages]]
+url = "https://wiki.archlinux.org/title/File_systems"
+what = "Sortable data tables with Yes/No status cells"
+
+[[pages]]
+url = "https://wiki.archlinux.org/title/Main_page"
+what = "Main page: two-column index of links with descriptions"
+
+[[pages]]
+url = "https://wiki.archlinux.org/index.php?search=bluetooth+headset&fulltext=1"
+what = "Full-text search results, search profile tabs, the primary Search button"
+
+[[pages]]
+url = "https://wiki.archlinux.org/index.php?title=Pacman&action=history"
+what = "Page history: Filter revisions panel (OOUI, still framed), revision rows, Compare button; diffs from it not checked yet"

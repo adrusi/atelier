@@ -1,0 +1,58 @@
+/* ==UserStyle==
+@name           Python docs syntax (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    docs.python.org's syntax highlighting (Pygments) in Catppuccin Mocha's mapping
+==/UserStyle== */
+
+/* Pygments' classes, as on codeberg (Chroma uses the same names). The site
+   loads a light sheet always and a Monokai one for dark mode; every class
+   either sets is set here, so both come out the same. */
+
+@-moz-document domain("docs.python.org") {
+  html body .highlight {
+    background-color: #11111b;
+    color: #cdd6f4;
+
+    /* The light sheet bolds and italicises some kinds; colour alone tells
+       them apart here. */
+    & span { font-style: normal; font-weight: normal; }
+    & .hll { background-color: #313244; }
+    & .c, & .c1, & .ch, & .cm, & .cs, & .gp { color: #9399b2; font-style: normal; font-weight: normal; }
+    & .cp { color: #f5c2e7; }
+    & .cpf { color: #a6e3a1; }
+    & .k, & .kd, & .kn, & .kp, & .kr, & .ow, & .sa { color: #cba6f7; font-weight: normal; }
+    & .kc, & .no, & .m, & .mb, & .mf, & .mh, & .mi, & .mo, & .il, & .nd, & .l, & .ld { color: #fab387; }
+    & .kt, & .nc, & .ne, & .na { color: #f9e2af; font-weight: normal; }
+    & .n, & .nn, & .nx, & .nv, & .py, & .x, & .esc, & .g { color: #cdd6f4; font-weight: normal; }
+    & .nb, & .bp { color: #f38ba8; }
+    & .nf, & .fm, & .gh { color: #89b4fa; font-weight: normal; }
+    & .ni, & .ss { color: #f2cdcd; }
+    & .nl { color: #74c7ec; }
+    & .nt { color: #cba6f7; }
+    & .vc, & .vg, & .vi, & .vm { color: #eba0ac; }
+    & .o { color: #89dceb; font-weight: normal; }
+    & .p, & .pm { color: #9399b2; }
+    & .s, & .s1, & .s2, & .sb, & .sd, & .sh, & .sx, & .dl, & .gu { color: #a6e3a1; font-style: normal; }
+    & .se, & .sc, & .si, & .sr { color: #f5c2e7; }
+    & .gd { color: #f38ba8; }
+    & .gi { color: #a6e3a1; }
+    & .ge { color: #cdd6f4; font-style: italic; }
+    & .gs { color: #cdd6f4; font-weight: 600; }
+    & .ges { color: #cdd6f4; font-weight: 600; font-style: italic; }
+    & .gr, & .gt { color: #f38ba8; }
+    /* Doctest output is the example's answer, read as much as the input:
+       text colour, while the >>> prompt is dim. */
+    & .go { color: #cdd6f4; }
+    & .err { color: #f38ba8; background-color: transparent; border: 0; }
+    & .w { color: #6c7086; }
+  }
+  html body :is(td.linenos .normal, span.linenos) {
+    color: #6c7086;
+    background-color: transparent;
+  }
+  html body :is(td.linenos .special, span.linenos.special) {
+    color: #cdd6f4;
+    background-color: #313244;
+  }
+}

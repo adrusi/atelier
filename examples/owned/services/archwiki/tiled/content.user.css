@@ -1,0 +1,210 @@
+/* ==UserStyle==
+@name           ArchWiki article content (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Article furniture without boxes: Note/Tip/Warning, article status messages, related articles, headings, code, tables, figures
+==/UserStyle== */
+
+/* The ArchWiki's templates are styled by its site CSS under stable
+   archwiki-template-* class names, mostly through --archwiki-* tokens
+   (set in tokens.user.css). This file does the shapes. Scoped to the dark
+   modes, like the tokens. */
+
+@-moz-document domain("wiki.archlinux.org") {
+  /* ---- Callouts: Note, Tip, Warning, and highlighted boxes ---------- */
+
+  /* {{Note}}, {{Tip}}, {{Warning}} and the highlighted boxes ({{Accuracy}},
+     {{Out of date}}, {{Merge}}, …) lose their frame and tint, and keep
+     their 2px left edge in the status colour: lavender for notes, green
+     for tips, red for warnings, yellow for the article-status boxes. The
+     label's rule ("Note" over the text) goes with the frame. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) div.archwiki-template-box {
+    border-width: 0 0 0 2px;
+    padding-block: 2px;
+    padding-inline: 12px 0;
+    & > strong:first-child {
+      border-bottom: 0;
+      margin-bottom: 2px;
+      padding-bottom: 0;
+    }
+  }
+
+  /* Article status messages ({{Expansion}}, {{Accuracy}}, {{Out of date}},
+     {{Merge}}, …): the same, with a yellow edge, as content issues are on
+     Wikipedia. Their large Tango icon only repeats the heading beside it
+     (theme: ornamental icons that repeat a label go), so it's hidden and
+     the text takes its 74px gutter back. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) div.archwiki-template-message {
+    border: 0;
+    border-left: 2px solid #f9e2af;
+    min-height: 0;
+    padding: 2px 0 2px 12px;
+    & > p > span[typeof~="mw:File"] {
+      display: none;
+    }
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.mw-warning, .mw-parser-output .mw-warning) {
+    background: transparent;
+    border: 0;
+    border-left: 2px solid #f9e2af;
+  }
+
+  /* {{Related articles start}}: floated beside the text with a dark
+     title bar over a 5px blue rule. It becomes a pane like Wikipedia's
+     infoboxes: a 1px rule on the edge facing the text, the title a mantle
+     strip. Below 721px the site turns it into an inline box. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) div.archwiki-template-meta-related-articles {
+    background: transparent;
+    border: 0;
+    border-left: 1px solid var(--tl-rule);
+    padding-left: 0;
+    & > p {
+      background: var(--tl-deep) !important;
+      color: var(--tl-fg) !important;
+      border-bottom: 1px solid var(--tl-rule) !important;
+      padding: 4px 8px !important;
+    }
+  }
+  /* Every entry is a link, as in Contents: text colour, dimmed once
+     visited, lavender on hover. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content .archwiki-template-meta-related-articles li a:not(.new) {
+    color: var(--tl-fg) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content .archwiki-template-meta-related-articles li a:not(.new):visited {
+    color: var(--tl-dim) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content .archwiki-template-meta-related-articles li a:not(.new):hover {
+    color: var(--tl-accent) !important;
+  }
+  @media screen and (max-width: 720px) {
+    html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) div.archwiki-template-meta-related-articles {
+      border: 0;
+      border-left: 1px solid var(--tl-rule);
+      padding: 0 0 0 8px;
+      & > p {
+        background: transparent !important;
+        border: 0 !important;
+        padding: 0 !important;
+      }
+    }
+  }
+
+  /* Navigation boxes (← previous | next →): rows between rules, not a
+     box. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .archwiki-template-navigation {
+    border-width: 1px 0;
+    & > hr {
+      background-color: var(--tl-rule);
+      border-color: var(--tl-rule);
+    }
+  }
+
+  /* Contents boxes of the old kind (#toc, on some special and legacy
+     pages) and .toccolours: a square frame in the rule colour on the
+     page, like a pane. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(#toc, .toc, .toccolours) {
+    background-color: transparent;
+    border-color: var(--tl-rule);
+  }
+
+  /* ---- Headings ----------------------------------------------------- */
+
+  /* Hairlines under h1/h2 in the rule colour. The ArchWiki numbers its
+     sections with counters drawn before each heading, in an olive gold:
+     they're furniture, so they go to the secondary text colour. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) :is(.mw-body h1, .mw-body-content h1, .mw-body-content h2, .mw-heading1, .mw-heading2) {
+    border-bottom-color: var(--tl-rule);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-heading > :is(h2, h3, h4, h5, h6)::before {
+    color: var(--tl-dim);
+  }
+
+  /* ---- Code --------------------------------------------------------- */
+
+  /* Code blocks are panes: crust with a square surface1 frame (from the
+     tokens). Package and man page links are monospace already. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output pre:not([class*="CodeMirror"]) {
+    color: var(--tl-fg);
+  }
+  /* Inline code ({{ic}}) is commands, paths and options to type, all
+     through the prose, so unlike on Wikipedia it keeps a fill to stand
+     out: recessed crust, square, no frame. */
+  /* atelier:variant inline-code */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :not(pre) > :is(code, tt) {
+    background-color: var(--tl-deeper);
+    border: 0;
+    padding: 0 0.3em;
+    color: var(--tl-fg);
+  }
+  /* atelier:end inline-code */
+  /* Keys ({{ic}} aside, <kbd> is a key cap): an outlined rectangle, like
+     a control, rather than a raised box. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output kbd {
+    background: transparent;
+    border: 1px solid var(--tl-rule);
+    color: var(--tl-fg);
+  }
+
+  /* ---- Tables ------------------------------------------------------- */
+
+  /* Data tables keep their grid (it's what makes them readable), in the
+     rule colour; header cells are mantle. Status cells ({{Yes}}, {{No}},
+     …) keep their meaning-carrying tints, retuned in the tokens. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .wikitable {
+    background-color: transparent;
+    border-color: var(--tl-rule);
+    color: var(--tl-fg);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .wikitable > * > tr > :is(th, td) {
+    border-color: var(--tl-rule);
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .wikitable > * > tr > th {
+    background-color: var(--tl-deep);
+  }
+
+  /* ---- Figures ------------------------------------------------------ */
+
+  /* Thumbnails lose their frame; the image keeps its own backdrop (images
+     aren't recoloured); captions are secondary text right under it. */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output figure:is([typeof~="mw:File/Thumb"], [typeof~="mw:File/Frame"]),
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :is(.thumbinner, .thumbimage) {
+    background-color: transparent;
+    border: 0;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output figure:is([typeof~="mw:File/Thumb"], [typeof~="mw:File/Frame"]) :is(img, figcaption) {
+    border: 0;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output figure:is([typeof~="mw:File/Thumb"], [typeof~="mw:File/Frame"]) > figcaption,
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output .thumbcaption {
+    background-color: transparent;
+    color: var(--tl-dim);
+    padding: 4px 0 0;
+  }
+
+  /* ---- Main page ---------------------------------------------------- */
+
+  /* The main page is an index whose every entry title is a link: titles
+     in the text colour, dimmed once visited, lavender on hover. (The
+     extension's link colour is id-specific and !important.) */
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content .archwiki-main-page-columns dt > a:not(.new) {
+    color: var(--tl-fg) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content .archwiki-main-page-columns dt > a:not(.new):visited {
+    color: var(--tl-dim) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) #content .archwiki-main-page-columns dt > a:not(.new):hover {
+    color: var(--tl-accent) !important;
+  }
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .archwiki-main-page-columns dd {
+    color: var(--tl-dim);
+  }
+
+  /* ---- Categories --------------------------------------------------- */
+
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .catlinks {
+    background: transparent;
+    border: 0;
+    border-top: 1px solid var(--tl-rule);
+    padding: 8px 0 0;
+  }
+}

@@ -1,0 +1,36 @@
+description = "The Python documentation (docs.python.org)"
+summary = "docs.python.org: every page of the Sphinx docs (library and C API reference, tutorial, home, module index, general index, search), in the theme's colours whichever of the site's Theme settings (Auto, Light, Dark) is chosen. In the tiled theme: header, sidebar and footer as edge-to-edge panes, callouts as left edges, square code panes, outlined controls, Pygments in Catppuccin Mocha."
+
+# No prerequisite: the styles set every colour explicitly, so they don't
+# depend on the site's Theme select. The one thing that differs is diagrams
+# the site marks .invert-in-dark-mode, which it inverts only in its dark mode.
+
+[[pages]]
+url = "https://docs.python.org/3/library/pathlib.html"
+what = "Library module page: sidebar contents, version notes, see-also and warning callouts, code examples with tracebacks, tables, signatures, an inverted diagram"
+states = ["an anchor target, e.g. #pathlib.PurePath.relative_to", "a code block hovered (Copy button)", "the site's Theme set to Light (use a throwaway tab)"]
+
+[[pages]]
+url = "https://docs.python.org/3/c-api/list.html"
+what = "C API page: C signatures, refcount, Stable ABI and thread-safety annotations, a note"
+
+[[pages]]
+url = "https://docs.python.org/3/"
+what = "Docs home: the grid of section links, the versions sidebar"
+
+[[pages]]
+url = "https://docs.python.org/3/py-modindex.html"
+what = "Module index: letter jump bar, letter strips, deprecated modules"
+
+[[pages]]
+url = "https://docs.python.org/3/search.html?q=pathlib"
+what = "Search: search field and button, result rows with highlighted terms, a short page (footer reaching the window's bottom)"
+
+[[pages]]
+url = "https://docs.python.org/3/tutorial/controlflow.html"
+what = "Tutorial page; check at a narrow width (below 1024px) for the fixed top bar and slide-in menu"
+states = ["narrow, menu open"]
+
+# Not seen: the general index (genindex), code-block captions, "good/bad"
+# example blocks, danger/error admonitions, topic/contents boxes and
+# floated sidebars in content, footnote targets, right-to-left translations.

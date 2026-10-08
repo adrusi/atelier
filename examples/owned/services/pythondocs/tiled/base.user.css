@@ -1,0 +1,257 @@
+/* ==UserStyle==
+@name           Python docs base (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    docs.python.org in Catppuccin Mocha: page colours, type, and the header, sidebar and footer as edge-to-edge panes
+==/UserStyle== */
+
+/* The docs are Sphinx with the "python-docs-theme": classic.css, then
+   pydoctheme.css (light), then pydoctheme_dark.css and pygments_dark.css,
+   whose <link media> the site's Theme select sets ("(prefers-color-scheme:
+   dark)" for Auto, "all" for Dark, "not all" for Light). The dark sheet is
+   mostly hard-coded colours, with only a few tokens (admonitions, version
+   notes), so these styles set every colour explicitly and work whichever
+   of the site's modes is on. `html body` and `html` prefixes are there to
+   outrank the site's selectors whatever the load order. */
+
+@-moz-document domain("docs.python.org") {
+  :root {
+    color-scheme: dark;
+    scrollbar-color: #6c7086 #45475a;
+    /* The site's own font stack, used by its inputs and the Persian
+       pages' fallback. */
+    --sans-serif-font-stack: "Noto Sans", sans-serif;
+  }
+
+  /* The window below a short page's footer is mantle, the footer's own
+     colour, so the footer pane reaches the bottom of the window without
+     changing the page's layout. */
+  html {
+    background-color: #181825;
+    color: #cdd6f4;
+  }
+  html body {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+  }
+  html body {
+    font-family: "Noto Sans", sans-serif;
+    font-stretch: condensed;
+    /* The site insets the whole page by 1em; panes run to the window's
+       edges instead, and the column keeps its own padding. */
+    margin: 0;
+  }
+  /* classic.css names its own stack for headings, as div.body h1 and the
+     like, so these go a class higher. */
+  html body :is(h1, h2, h3, h4, h5, h6, input, select, button, textarea, label):not(.atelier-none) {
+    font-family: "Noto Sans", sans-serif;
+    font-stretch: condensed;
+  }
+  html body :is(tt, code, pre, kbd, samp, .sig, dl > dt span ~ em, .copybutton) {
+    font-family: "Noto Sans Mono", monospace;
+    font-stretch: condensed;
+  }
+  html body div.body :is(h1, h2, h3, h4, h5, h6) {
+    color: #cdd6f4;
+  }
+
+  ::selection {
+    background-color: #353749;
+    color: #cdd6f4;
+  }
+
+  /* ---- Links -------------------------------------------------------- */
+
+  /* Prose links in lavender; ones visited, in mauve, only where they leave
+     the page. Same-page anchors and cross-references to identifiers (a link
+     wrapping <code class="xref">) stay lavender, or a module page turns
+     mauve as it's read. */
+  html body div.body a {
+    color: #b4befe;
+  }
+  html body div.body a:visited {
+    color: #cba6f7;
+  }
+  html body div.body a:is([href^="#"], .reference.internal:has(> code.xref)):visited {
+    color: #b4befe;
+  }
+  html body div.body a:hover {
+    color: #cdd6f4;
+  }
+
+  /* ---- Header ------------------------------------------------------- */
+
+  /* Both navigation bars (div.related, above and below the document) are
+     mantle strips running the window's full width: the top one closed by
+     a rule below, the bottom one opening the footer pane. */
+  html body div.related {
+    background-color: #181825;
+    border-color: #6c7086;
+    color: #9399b2;
+    /* classic.css makes it width: 100%, so the padding is kept inside. */
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0.5em 1em;
+  }
+  html body .mobile-nav + div.related {
+    border-bottom: 1px solid #6c7086;
+  }
+  html body .document + div.related {
+    border-top: 1px solid #6c7086;
+  }
+  html body div.related a {
+    color: #cdd6f4;
+  }
+  html body div.related a:hover {
+    color: #b4befe;
+  }
+
+  /* ---- Sidebar ------------------------------------------------------ */
+
+  /* The table of contents is a mantle pane, square, from the header's rule
+     down, meeting the column at a rule. The collapse handle beside it is
+     part of the pane: a narrow strip holding the rule, surface on hover. */
+  html body div.sphinxsidebar {
+    background-color: #181825;
+    border-radius: 0;
+    color: #cdd6f4;
+  }
+  html body div.sphinxsidebar :is(h3, h4, h3 a) {
+    color: #cdd6f4;
+  }
+  html body div.sphinxsidebar a {
+    color: #cdd6f4;
+  }
+  html body div.sphinxsidebar a:hover {
+    background-color: #313244;
+    color: #cdd6f4;
+  }
+  html body div.sphinxsidebar ul ul {
+    color: #9399b2;
+  }
+  html body #sidebarbutton {
+    background-color: #181825 !important;
+    border-radius: 0;
+    border-right: 1px solid #6c7086;
+    color: #9399b2 !important;
+    /* Its 1px top padding made it overhang the sidebar into the footer's
+       rule. */
+    padding: 0;
+  }
+  html body #sidebarbutton:hover {
+    background-color: #313244 !important;
+    color: #cdd6f4 !important;
+  }
+  /* Collapsed, Sphinx keeps only the handle (inline styles on the
+     sidebar), which still meets the column at its rule. */
+
+  /* The column: room on both sides now the page inset is gone. */
+  html body div.body {
+    padding-inline: 1.5em;
+  }
+  /* Narrow, the site gives the column min-width: 100%, which the padding
+     would push past the window. */
+  @media (max-width: 1023px) {
+    html body div.body {
+      box-sizing: border-box;
+      padding-inline: 1em;
+    }
+  }
+
+  /* ---- Footer ------------------------------------------------------- */
+
+  /* The copyright lines continue the bottom bar's mantle pane to the
+     bottom of the window. The site pulls them up 2em, beside the bar;
+     they start below it instead, so the pane is one strip. */
+  html body div.footer {
+    background-color: #181825;
+    color: #9399b2;
+    margin: 0;
+    padding: 0.5em 1.5em 1.5em;
+  }
+  html body div.footer a {
+    color: #b4befe;
+  }
+  html body div.footer a:visited {
+    color: #cba6f7;
+  }
+
+  /* ---- Controls ----------------------------------------------------- */
+
+  /* Selects (language, version, theme) and the Go button: outlined on the
+     page. The search field is recessed (crust) as well, to tell it from
+     the button beside it. */
+  html body :is(div.related, .mobile-nav, .menu-wrapper, div.sphinxsidebar, div.body) select,
+  html body :is(div.related, .mobile-nav, .menu-wrapper, div.sphinxsidebar, div.body, form.inline-search) input[type="submit"],
+  html body :is(div.body, #search-results) button:not(.copybutton) {
+    background-color: transparent;
+    border: 1px solid #6c7086;
+    border-radius: 0;
+    box-shadow: none;
+    color: #cdd6f4;
+  }
+  html body :is(div.related, .mobile-nav, .menu-wrapper, div.sphinxsidebar, div.body, form.inline-search) input[type="submit"]:hover {
+    background-color: #313244;
+  }
+  html body select option {
+    background-color: #313244;
+    color: #cdd6f4;
+  }
+  html body :is(div.related, .mobile-nav, .menu-wrapper, div.sphinxsidebar, div.body, form.inline-search) input:is([type="text"], [type="search"]) {
+    background-color: #11111b;
+    border: 1px solid #6c7086;
+    border-radius: 0;
+    color: #cdd6f4;
+  }
+  html body input::placeholder {
+    color: #9399b2;
+    opacity: 1;
+  }
+  html body :focus-visible {
+    outline: 1px solid #b4befe;
+    outline-offset: 0;
+  }
+  html body :is(input, select):focus {
+    border-color: #b4befe;
+    outline: 1px solid #b4befe;
+    outline-offset: -1px;
+  }
+
+  /* ---- Narrow screens (below 1024px) --------------------------------- */
+
+  /* The fixed top bar is a mantle header pane closed by a rule; the
+     slide-in menu a mantle pane meeting the page at a rule, no shadows. */
+  html body .mobile-nav {
+    box-shadow: none;
+  }
+  html body .nav-content {
+    background-color: #181825;
+    border-bottom: 1px solid #6c7086;
+    color: #cdd6f4;
+  }
+  html body .nav-content .search {
+    border-color: #6c7086;
+  }
+  html body .nav-content .search input[type="search"] {
+    border: 0;
+  }
+  html body .nav-content .search input[type="submit"] {
+    border: 0;
+    border-inline-start: 1px solid #6c7086;
+  }
+  html body .nav-content .search svg {
+    color: #9399b2;
+  }
+  html body .toggler__label:is(:hover, :focus) {
+    background-color: #313244;
+  }
+  html body .menu-wrapper {
+    background-color: #181825;
+    border-inline-end: 1px solid #6c7086;
+    box-shadow: none;
+    color: #cdd6f4;
+  }
+  html body .menu :is(a, h3, h3 a, h4, p) {
+    color: #cdd6f4;
+  }
+}

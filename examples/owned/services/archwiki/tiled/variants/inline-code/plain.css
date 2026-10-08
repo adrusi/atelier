@@ -1,0 +1,6 @@
+  html:root:is(.skin-theme-clientpref-night, .skin-theme-clientpref-os) .mw-parser-output :not(pre) > :is(code, tt) {
+    background-color: transparent;
+    border: 0;
+    padding: 0;
+    color: var(--tl-fg);
+  }

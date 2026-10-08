@@ -1,0 +1,287 @@
+/* ==UserStyle==
+@name           Python docs content (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    docs.python.org's documents in tiled's shapes: callouts as left edges, square code panes, flat tables and contents boxes, the anchor target's edge
+==/UserStyle== */
+
+@-moz-document domain("docs.python.org") {
+  /* ---- Callouts ----------------------------------------------------- */
+
+  /* Admonitions lose their box and tint, keeping a 2px edge in the status
+     colour: neutral kinds (note, see also, tip, hint, attention, and the
+     plain ones like "Availability") in lavender, warning and caution in
+     yellow, danger and error in red. The site colours them through
+     tokens, so the tokens carry it. */
+  :root:root {
+    --admonition-background: transparent;
+    --admonition-border: #b4befe;
+    --admonition-color: #cdd6f4;
+    --attention-background: transparent;
+    --attention-border: #b4befe;
+    --caution-background: transparent;
+    --caution-border: #f9e2af;
+    --danger-background: transparent;
+    --danger-border: #f38ba8;
+    --error-background: transparent;
+    --error-border: #f38ba8;
+    --hint-background: transparent;
+    --hint-border: #b4befe;
+    --seealso-background: transparent;
+    --seealso-border: #b4befe;
+    --tip-background: transparent;
+    --tip-border: #b4befe;
+    --warning-background: transparent;
+    --warning-border: #f9e2af;
+
+    /* "Added in version", "Changed in version", "Deprecated since": status
+       edges and labels in Mocha's green, yellow and red; soft deprecation
+       keeps the site's purple, as mauve. */
+    --good-color: #a6e3a1;
+    --good-border: #a6e3a1;
+    --middle-color: #f9e2af;
+    --middle-border: #f9e2af;
+    --bad-color: #f38ba8;
+    --bad-border: #f38ba8;
+    --versionadded: #a6e3a1;
+    --versionadded-border: #a6e3a1;
+    --versionchanged: #f9e2af;
+    --versionchanged-border: #f9e2af;
+    --deprecated: #f38ba8;
+    --deprecated-border: #f38ba8;
+    --soft-deprecated: #cba6f7;
+    --soft-deprecated-border: #cba6f7;
+  }
+  html body div.body div.admonition {
+    background-color: transparent;
+    border: 0;
+    border-inline-start: 2px solid var(--admonition-border);
+    border-radius: 0;
+    margin: 1em 0;
+    padding: 0 0 0 1em;
+  }
+  html body div.body div.admonition:is(.attention, .caution, .danger, .error, .hint, .seealso, .tip, .warning) {
+    background-color: transparent;
+  }
+  html body div.body div.admonition.attention { border-inline-start-color: var(--attention-border); }
+  html body div.body div.admonition.caution { border-inline-start-color: var(--caution-border); }
+  html body div.body div.admonition.danger { border-inline-start-color: var(--danger-border); }
+  html body div.body div.admonition.error { border-inline-start-color: var(--error-border); }
+  html body div.body div.admonition.hint { border-inline-start-color: var(--hint-border); }
+  html body div.body div.admonition.seealso { border-inline-start-color: var(--seealso-border); }
+  html body div.body div.admonition.tip { border-inline-start-color: var(--tip-border); }
+  html body div.body div.admonition.warning { border-inline-start-color: var(--warning-border); }
+  html body div.body div.admonition > p.admonition-title {
+    margin-top: 0;
+  }
+  /* Version notes are already edges; 2px, like every other one. */
+  html body div.body :is(div.versionadded, div.versionchanged, div.deprecated, div.deprecated-removed, div.versionremoved, div.soft-deprecated) {
+    border-inline-start-width: 2px;
+  }
+  /* The C API's "CPython implementation detail" boxes. */
+  html body div.body div.impl-detail {
+    background-color: transparent;
+    border: 0;
+    border-inline-start: 2px solid #b4befe;
+    border-radius: 0;
+  }
+  /* Code inside a callout keeps the ordinary inline code look rather than
+     the dark sheet's translucent red or white. */
+  html body :is(.note, .warning) code {
+    background-color: #11111b;
+  }
+
+  /* Boxes that group without being callouts (a page's "Contents", topic
+     boxes, sidebars floated beside the text) lose their box and keep a
+     muted rule down their side. */
+  html body div.body :is(aside.topic, div.topic, nav.contents, div.sidebar, aside.sidebar) {
+    background-color: transparent;
+    border: 0;
+    border-inline-start: 1px solid #6c7086;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  /* ---- Code --------------------------------------------------------- */
+
+  /* Code blocks are panes: crust, a square muted frame. */
+  html body div.body pre {
+    background-color: #11111b;
+    border: 1px solid #6c7086;
+    border-radius: 0;
+    color: #cdd6f4;
+  }
+  /* "Good", "bad" and "maybe" examples keep their status edge. */
+  html body div.body :is(.good, .bad, .maybe) pre {
+    border-inline-start-width: 2px;
+  }
+  html body div.body .good pre { border-inline-start-color: #a6e3a1; }
+  html body div.body .bad pre { border-inline-start-color: #f38ba8; }
+  html body div.body .maybe pre { border-inline-start-color: #f9e2af; }
+  /* A block's caption is its header strip: mantle, edge to edge on top of
+     the frame. */
+  html body div.code-block-caption {
+    background-color: #181825;
+    border: 1px solid #6c7086;
+    border-bottom: 0;
+    border-radius: 0;
+    color: #9399b2;
+  }
+  /* Inline literals: crust, square. Cross-references in code type are
+     links, and keep just the link's colour. */
+  html body div.body :is(tt, code) {
+    border-radius: 0;
+  }
+  html body div.body code.literal:not(.xref) {
+    background-color: #11111b;
+    color: #cdd6f4;
+  }
+  html body div.body code.xref {
+    background-color: transparent;
+  }
+  /* The copy button, shown over a block on hover: outlined, square. */
+  html body .copybutton {
+    background-color: #11111b;
+    border: 1px solid #6c7086;
+    border-radius: 0;
+    color: #9399b2;
+  }
+  html body .copybutton:hover {
+    background-color: #313244;
+    color: #cdd6f4;
+  }
+  html body .copybutton:active {
+    background-color: #45475a;
+  }
+
+  /* ---- Signatures ---------------------------------------------------- */
+
+  /* "class", "classmethod", "async" and the module prefix of a name are
+     secondary to the name and its parameters. */
+  html body div.body dt.sig :is(.sig-prename, em.property) {
+    color: #9399b2;
+  }
+  html body div.body dt.sig .sig-name {
+    color: #cdd6f4;
+  }
+  /* The ¶ after headings and signatures. */
+  html body a.headerlink {
+    color: #9399b2;
+  }
+  html body a.headerlink:hover {
+    background-color: transparent;
+    color: #b4befe;
+  }
+  /* What a link has just jumped to gets the 2px lavender "current" edge,
+     without a tint, pulled into the gutter so text stays where it was. */
+  html body div.body dt:target,
+  html body div.body .footnote:target {
+    background-color: transparent;
+    border-inline-start: 2px solid #b4befe;
+    margin-inline-start: -10px;
+    padding-inline-start: 8px;
+  }
+  /* Search terms highlighted on arrival from search (?highlight=). */
+  html body span.highlighted {
+    background-color: #45475a;
+  }
+  /* "Parameters:", "Returns:", "Raises:" labels. */
+  html body div.body dl.field-list > dt {
+    background-color: transparent;
+    color: #cdd6f4;
+  }
+  /* C API annotations: refcounts and thread safety are status colours
+     (the tokens above); "Part of the Stable ABI" is a note, in fg-dim. */
+  html body .stableabi {
+    color: #9399b2;
+  }
+  html body .sig.c :is(.k, .kt),
+  html body .sig.cpp :is(.k, .kt) {
+    color: #cba6f7;
+  }
+
+  /* ---- Tables ------------------------------------------------------- */
+
+  /* Tables keep their cell rules (they're what makes a table read as
+     one), muted and square; the header row is a mantle strip. */
+  html body table.docutils {
+    border: 1px solid #6c7086;
+    border-collapse: collapse;
+    border-radius: 0;
+  }
+  html body table.docutils :is(td, th) {
+    border: 1px solid #6c7086 !important;
+    border-radius: 0;
+  }
+  html body table.docutils th {
+    background-color: #181825;
+    color: #cdd6f4;
+  }
+  html body table.footnote,
+  html body table.footnote td {
+    border: 0 !important;
+  }
+  html body div.body hr {
+    background-color: #6c7086;
+  }
+
+  /* ---- Docs home ------------------------------------------------------ */
+
+  /* The home page's grid of sections: every title is a link, so titles
+     are in the text colour (lavender on hover), descriptions dim. They
+     aren't dimmed once visited: they're the docs' own sections, and
+     nearly all of them would be. */
+  html body div.body div.contentstable a.biglink {
+    color: #cdd6f4;
+  }
+  html body div.body div.contentstable a.biglink:hover {
+    color: #b4befe;
+  }
+  html body div.body div.contentstable .linkdescr {
+    color: #9399b2;
+  }
+
+  /* ---- Index, module index, search ------------------------------------ */
+
+  /* Index tables' letter headings ("cap" rows) and the module index's
+     group rows are mantle strips. */
+  html body table.indextable tr.cap {
+    background-color: #181825;
+  }
+  html body table.indextable tr.pcap {
+    background-color: transparent;
+  }
+  /* Collapsed, so a letter's strip is one band rather than cells. */
+  html body table.modindextable {
+    border-collapse: collapse;
+  }
+  html body table.modindextable td {
+    border: 0;
+  }
+  html body div.body :is(div.genindex-jumpbox, div.modindex-jumpbox) {
+    border-color: #6c7086;
+  }
+  /* Search results are a dense list: rows separated by spacing, the
+     context line dim. */
+  html body ul.search li {
+    background-image: none;
+    padding-inline-start: 0;
+  }
+  /* Every result's title is a link: text colour, dimmed once visited. */
+  html body div.body ul.search li > a {
+    color: #cdd6f4;
+  }
+  html body div.body ul.search li > a:visited {
+    color: #9399b2;
+  }
+  html body div.body ul.search li > a:hover {
+    color: #b4befe;
+  }
+  html body ul.search li p.context {
+    color: #9399b2;
+  }
+  html body #search-results .search-summary,
+  html body #search-progress {
+    color: #9399b2;
+  }
+}

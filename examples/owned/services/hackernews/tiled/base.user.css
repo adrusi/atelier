@@ -1,0 +1,210 @@
+/* ==UserStyle==
+@name           Hacker News (tiled)
+@namespace      atelier
+@version        0.1.0
+@description    Flat, square and condensed news.ycombinator.com: header and footer panes, story and comment rows on Mocha
+==/UserStyle== */
+
+/* HN has no tokens: colours come from bgcolor attributes, <font color>
+   and a handful of classes in news.css, so everything here is direct. */
+
+@-moz-document domain("news.ycombinator.com") {
+  :root {
+    color-scheme: dark;
+    --sans: "Noto Sans", sans-serif;
+    --mono: "Noto Sans Mono", monospace;
+    /* HN's column is the #hnmain table at 85% of the window. The table
+       goes full width so the header and footer can run edge to edge;
+       their contents, and the page's, are put back on the column. */
+    --gutter: 7.5vw;
+    accent-color: #b4befe;
+  }
+  /* HN's own narrow layout runs the table full width, with no column. */
+  @media (max-width: 750px) {
+    :root { --gutter: 4px; }
+  }
+
+  html, body { background: #1e1e2e; }
+  body { color: #9399b2; }
+  body:has(> center > #hnmain) { margin: 0; }
+  /* Bare pages (login, some errors) have no #hnmain: just a heading or two. */
+  body > b { color: #cdd6f4; }
+  body, td, .title, .subtext, .subtext td, .comment, .commtext, .default,
+  .admin, .pagetop, .comhead, .yclinks, input, textarea, select, button {
+    font-family: var(--sans);
+    font-stretch: condensed;
+  }
+  pre, code, tt, kbd, samp {
+    font-family: var(--mono);
+    font-stretch: condensed;
+  }
+  ::selection { background: #353749; color: #cdd6f4; }
+  ::placeholder { color: #6c7086; opacity: 1; }
+
+  /* Links HN leaves to the browser (item text, forms, the footer's
+     apply line) take the accent. */
+  a:link { color: #b4befe; }
+  a:visited { color: #cba6f7; }
+
+  /* ---- Panes ---- */
+
+  /* The table fills the window and at least its height, so the footer
+     meets the window's foot on short pages; the main row takes the slack. */
+  #hnmain {
+    width: 100% !important;
+    min-width: 0;
+    height: 100vh;
+    background: #1e1e2e;
+  }
+  #hnmain > tbody > tr#bigbox { height: 100%; }
+  #bigbox > td, #hnmain > tbody > tr > td:has(> table.fatitem, > form, > table.itemlist) {
+    padding: 0 var(--gutter);
+    vertical-align: top;
+  }
+
+  /* HN's black bar above the header marks the death of someone notable
+     to the community; it's kept, as a crust band over a muted rule. */
+  #hnmain > tbody > tr:first-child > td[bgcolor="#000000"] {
+    background: #11111b;
+    height: 5px;
+    border-bottom: 1px solid #6c7086;
+  }
+
+  /* Header: a bg-deep pane, edge to edge, meeting the page at a rule.
+     Found by its contents, since a logged-in user picks its colour. */
+  #hnmain > tbody > tr:has(.pagetop) > td {
+    background: #181825;
+    border-bottom: 1px solid #6c7086;
+    padding: 6px var(--gutter);
+  }
+  #hnmain > tbody > tr:has(.pagetop) > td > table { padding: 0 !important; }
+  .pagetop, .pagetop a:link, .pagetop a:visited { color: #9399b2; }
+  .pagetop a:hover { color: #b4befe; }
+  .hnname a:link, .hnname a:visited { color: #cdd6f4; }
+  /* Nav is a row of tabs: the current page underlined in lavender. */
+  .topsel a:link, .topsel a:visited {
+    color: #cdd6f4;
+    text-decoration: underline 2px #b4befe;
+    text-underline-offset: 4px;
+  }
+  /* Karma, after the username when logged in. */
+  .pagetop #karma { font-family: var(--mono); }
+
+  /* The logo, a white Y on an orange square, becomes a crust Y on peach:
+     still HN's mark, in Mocha. HN's Content-Security-Policy refuses data:
+     images, so the Y is a letter rather than a replacement SVG. */
+  #hnmain > tbody > tr:has(.pagetop) a:has(> img[src="y18.svg"]) {
+    display: block;
+    width: 18px;
+    height: 18px;
+    background: #fab387;
+    color: #11111b;
+    font: 700 14px/18px var(--sans);
+    text-align: center;
+    text-decoration: none;
+  }
+  #hnmain > tbody > tr:has(.pagetop) a:has(> img[src="y18.svg"])::before { content: "Y"; }
+  #hnmain > tbody > tr:has(.pagetop) img[src="y18.svg"] { display: none !important; }
+
+  /* Footer: a bg-deep pane with a rule at its head, in place of HN's
+     orange line. */
+  #hnmain > tbody > tr:last-child > td:has(.yclinks) {
+    background: #181825;
+    border-top: 1px solid #6c7086;
+    padding: 4px var(--gutter) 16px;
+  }
+  #hnmain > tbody > tr:last-child > td:has(.yclinks) > img:first-child,
+  #hnmain > tbody > tr:last-child > td:has(.yclinks) > table:first-of-type:has(td[bgcolor]) {
+    display: none;
+  }
+  .yclinks, .yclinks a:link, .yclinks a:visited { color: #9399b2; }
+  .yclinks a:hover { color: #b4befe; }
+  form[action="//hn.algolia.com/"] { color: #9399b2; }
+
+  /* ---- Stories ---- */
+
+  .title { color: #9399b2; }
+  .rank {
+    color: #9399b2;
+    font-family: var(--mono);
+    font-stretch: condensed;
+  }
+  /* A list of links: titles in the text colour, visited dimmed. */
+  .titleline > a:link { color: #cdd6f4; }
+  .titleline > a:visited { color: #9399b2; }
+  .titleline > a:hover { color: #b4befe; }
+  .sitebit, .sitebit a:link, .sitebit a:visited, .sitestr { color: #9399b2; }
+  .sitebit a:hover { color: #b4befe; }
+  /* HN's 7pt and 8pt meta lines are too small in a condensed face: a
+     little larger and heavier. */
+  .subtext, .subtext td, .comhead {
+    font-size: 8pt;
+    font-weight: 500;
+  }
+  .titleline .sitebit { font-size: 8.5pt; font-weight: normal; margin-left: 0.25em; }
+  .subtext, .subline, .subtext a:link, .subtext a:visited { color: #9399b2; }
+  .subtext a:hover { color: #b4befe; }
+  a.morelink:link, a.morelink:visited { color: #b4befe; }
+
+  /* A hovered story (its title row and meta row) gets the surface. */
+  tr.athing.submission:hover, tr.athing.submission:hover + tr,
+  .itemlist tr.athing.submission:has(+ tr:hover) {
+    background: #313244;
+  }
+  .fatitem tr.athing.submission:hover, .fatitem tr.athing.submission:hover + tr {
+    background: transparent;
+  }
+
+  /* Vote arrows: HN's grey triangle image, redrawn in fg-dim. */
+  .votearrow {
+    background: #9399b2 !important;
+    clip-path: polygon(50% 10%, 100% 90%, 0 90%);
+  }
+  .votelinks a:hover .votearrow { background: #b4befe !important; }
+
+  /* ---- Comments ---- */
+
+  .commtext, .commtext.c00, .c00 a:link { color: #cdd6f4; }
+  .commtext a:link, .toptext a:link { color: #b4befe; }
+  .commtext a:visited, .toptext a:visited { color: #cba6f7; }
+  .toptext { color: #cdd6f4; }
+  .comhead, .comhead a:link, .comhead a:visited, .hnuser { color: #9399b2; }
+  .comhead a:hover { color: #b4befe; }
+  .togg { color: #9399b2; }
+  .reply a:link, .reply a:visited { color: #9399b2; }
+  .reply a:hover { color: #b4befe; }
+  /* New accounts' names are green on HN. */
+  font[color="#3c963c"] { color: #a6e3a1 !important; }
+  /* "help" by the comment box, and other text HN greys with <font>. */
+  font[color="#AFAFAF"], font[color="#afafaf"], font[color="#828282"] { color: #9399b2; }
+
+  /* Downvoted comments fade in steps; the steps stay, on Mocha greys of
+     about the same contrast. The last ones are meant to be hard to read. */
+  .c5a, .c5a a:link, .c5a a:visited { color: #9399b2; }
+  .c73, .c73 a:link, .c73 a:visited { color: #7f849c; }
+  .c82, .c82 a:link, .c82 a:visited,
+  .c88, .c88 a:link, .c88 a:visited { color: #6c7086; }
+  .c9c, .c9c a:link, .c9c a:visited { color: #585b70; }
+  .cae, .cae a:link, .cae a:visited,
+  .cbe, .cbe a:link, .cbe a:visited { color: #45475a; }
+  .cce, .cce a:link, .cce a:visited,
+  .cdd, .cdd a:link, .cdd a:visited { color: #313244; }
+
+  /* A comment jumped to (parent, next, root) is current: a 2px lavender
+     edge down the side of its vote column. */
+  tr.comtr:target td.votelinks { box-shadow: inset 2px 0 0 #b4befe; }
+
+  /* Code is a pane: a square frame on crust. */
+  pre {
+    background: #11111b;
+    border: 1px solid #6c7086;
+    border-radius: 0;
+    padding: 6px 8px;
+    overflow: auto;
+    color: #cdd6f4;
+  }
+
+  /* Tables HN draws with bgcolor elsewhere (user pages, lists) sit on
+     the page. */
+  #bigbox table[bgcolor], #hnmain table[bgcolor] { background: transparent; }
+}
