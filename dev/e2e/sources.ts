@@ -106,6 +106,19 @@ try {
     await expectValue(plain, "");
   });
 
+  await check("navigating around that site keeps the tree's style on every page", async () => {
+    // An agent on Wikipedia saw most navigations of a bound tab end up
+    // unstyled (reproduced once, 7 of 10, right after three busy agent runs;
+    // not since). The likely cause is the shim's injection at commit landing
+    // in the outgoing document. This doesn't reproduce that race, but checks
+    // the behaviour the fix keeps: a marker-checking script registered for
+    // every page, and a second injection at DOMContentLoaded.
+    for (const page of ["slow-stream", "basic", "slow-stream", "cards", "slow-stream", "tokens"]) {
+      browser("tab/navigate", { tab: bound, url: otherSite.replace("/plain/", `/${page}/`) });
+      await expectValue(bound, "new-site");
+    }
+  });
+
   await check("tab/bind moves an open tab onto the tree and back", async () => {
     browser("tab/navigate", { tab: plain, url: fixture });
     browser("tab/bind", { tab: plain, task });

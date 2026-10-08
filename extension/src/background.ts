@@ -21,7 +21,7 @@ import { cssFor } from "./matching";
 import { Rpc } from "./rpc";
 import * as agentTabs from "./agenttabs";
 import * as tools from "./tools";
-import { EMULATION_MARKER } from "./page/markers";
+import { EMULATION_MARKER, SOURCE_MARKER } from "./page/markers";
 import { onUserScriptConnect, onUserScriptMessage, type UserScript, userScripts } from "./userscripts";
 
 declare const ATELIER_NATIVE_HOST: string;
@@ -284,6 +284,9 @@ async function applyBundle(bundle: Bundle) {
   wanted.push(
     { id: "scheme:main", matches: ["<all_urls>"], js: [{ code: ATELIER_PAGE_MAIN }], runAt: "document_start", world: "MAIN" },
     { id: "scheme:styles", matches: ["<all_urls>"], js: [{ code: emulationStub }], runAt: "document_start", world: "USER_SCRIPT" },
+    // Tabs bound to a task's tree (SPEC §6.2), on pages the owned directory
+    // has no style for: inert unless the page carries the binding marker.
+    { id: "bound:shim", matches: ["<all_urls>"], js: [{ code: boundStub }], runAt: "document_start", world: "USER_SCRIPT" },
   );
   const existing = new Map((await us.getScripts()).map((s) => [s.id, s]));
   const wantedIds = new Set(wanted.map((s) => s.id));
@@ -305,6 +308,15 @@ async function applyBundle(bundle: Bundle) {
   await injectIntoOpenTabs(bundle);
   void tools.reapplyForcedStates();
 }
+
+/** Starts the page runtime's shim in a page whose binding marker says its
+ * tab shows a task's tree: on every load after the first on an origin
+ * (the marker is per origin), the shim is there from document_start. */
+const boundStub = `(() => {
+  try { if (!sessionStorage.getItem(${JSON.stringify(SOURCE_MARKER)})) return; } catch { return; }
+  ${ATELIER_PAGE}
+  __atelierPage.shim.attach();
+})();`;
 
 /** Starts the page runtime's emulation in a page whose marker asks for it. */
 const emulationStub = `(() => {
@@ -401,12 +413,18 @@ function notifyUrlChange(details: { tabId: number; frameId: number }) {
 
 browser.webNavigation.onHistoryStateUpdated.addListener(notifyUrlChange);
 browser.webNavigation.onReferenceFragmentUpdated.addListener(notifyUrlChange);
-browser.webNavigation.onCommitted.addListener((details) => {
-  if (details.frameId !== 0) return;
-  void bindingsLoaded.then(() => {
-    if (bindings.has(details.tabId)) void ensureShim(details.tabId);
+// Bound tabs, on an origin whose page has no marker yet (the first load
+// there): the shim is injected as the load commits, and again once the DOM
+// is ready, as an injection racing the commit can miss the new document.
+// A second injection finds the runtime and shim already there.
+for (const event of [browser.webNavigation.onCommitted, browser.webNavigation.onDOMContentLoaded]) {
+  event.addListener((details) => {
+    if (details.frameId !== 0) return;
+    void bindingsLoaded.then(() => {
+      if (bindings.has(details.tabId)) void ensureShim(details.tabId);
+    });
   });
-});
+}
 browser.tabs.onRemoved.addListener((tabId) => {
   void bindingsLoaded.then(() => {
     if (bindings.delete(tabId)) void saveBindings();
