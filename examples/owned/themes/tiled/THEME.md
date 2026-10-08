@@ -59,7 +59,8 @@ from its chrome: restyle the shapes as well as the colours.
   that colour with the name as text where that's possible, and leave them as
   the site draws them where it isn't.
 - **Callouts** (notes, warnings, alerts) lose their box and tint, and show
-  their kind with a 2px left edge in the status colour.
+  their kind with a 2px left edge in the status colour. Neutral ones
+  (notes, info) use lavender.
 - **No decorative imagery.** Hero illustrations, background art and large
   ornamental icons that repeat a text label go. Small inline glyphs before
   metadata (a calendar by a date, an arrow by a download count) stay, as do
@@ -84,6 +85,9 @@ completeness at any cost:
   needed: removing a card's padding, or moving a margin so that two rules
   meet. Changing the order of things, or moving them between columns, is
   risky: leave it alone unless there's a strong reason, and say what you did.
+- **Build on a site's own dark mode** where it has one: retune its dark
+  colours and ask me (as a prerequisite) to switch it on, rather than
+  recolouring the light mode, which usually means many fragile rules.
 - **Broad rules need broad checking.** A short selector can reach a long way
   (removing every shadow also removes focus rings drawn with them). Check
   broad rules on pages and states beyond the ones you started from, and say
@@ -124,9 +128,15 @@ to distinct Mocha colours rather than collapsing into lavender. Dark text
 Where a list's every item title is a link, titles read better in the text
 colour, with visited ones dimmed, than all in lavender.
 
+Visited mauve is for links that leave the page. Links to anchors on the
+same page (a docs index, cross-references between identifiers) stay
+lavender once visited, or the page turns mauve as it's read.
+
 **Syntax highlighting** uses Catppuccin Mocha's standard syntax mapping
 (mauve keywords, green strings, peach numbers and so on). Peach in code
-isn't the "attention" peach.
+isn't the "attention" peach. Where a site's code colours can only be
+reached in some places, leave them all in the site's palette: one page
+shouldn't mix two.
 
 **Muted text** (`#6c7086`) is fine for short de-emphasised text, like
 "[comment removed]" or a disabled control, but not for anything meant to be
