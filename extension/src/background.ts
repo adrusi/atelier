@@ -19,7 +19,8 @@ import type { Task } from "./proto/Task";
 import { cssFor } from "./matching";
 import { Rpc } from "./rpc";
 import * as tools from "./tools";
-import { onUserScriptConnect, type UserScript, userScripts } from "./userscripts";
+import { emulateMatchMedia, emulateStyles } from "./scheme";
+import { onUserScriptConnect, onUserScriptMessage, type UserScript, userScripts } from "./userscripts";
 
 declare const ATELIER_NATIVE_HOST: string;
 /** The compiled page shim, inlined by build.ts. */
@@ -274,6 +275,11 @@ async function applyBundle(bundle: Bundle) {
     runAt: "document_start",
     world: "USER_SCRIPT",
   }));
+  // Per-tab colour-scheme emulation (scheme.ts): inert unless a tab opts in.
+  wanted.push(
+    { id: "scheme:main", matches: ["<all_urls>"], js: [{ code: `(${emulateMatchMedia})();` }], runAt: "document_start", world: "MAIN" },
+    { id: "scheme:styles", matches: ["<all_urls>"], js: [{ code: `(${emulateStyles})();` }], runAt: "document_start", world: "USER_SCRIPT" },
+  );
   const existing = new Map((await us.getScripts()).map((s) => [s.id, s]));
   const wantedIds = new Set(wanted.map((s) => s.id));
   const removed = [...existing.keys()].filter((id) => !wantedIds.has(id));
@@ -351,6 +357,18 @@ function onShimConnect(port: browser.runtime.Port) {
 function listenToShims() {
   const event = onUserScriptConnect();
   if (event && !event.hasListener(onShimConnect)) event.addListener(onShimConnect);
+  const messages = onUserScriptMessage();
+  if (messages && !messages.hasListener(onUserScriptRequest)) messages.addListener(onUserScriptRequest);
+}
+
+/** Requests from page scripts: the text of a cross-origin stylesheet, which
+ * the page can't read but the extension can fetch (scheme.ts). */
+function onUserScriptRequest(msg: unknown): Promise<unknown> | undefined {
+  const m = msg as { type?: string; href?: string };
+  if (m?.type !== "fetch-css" || !m.href || !/^https?:/.test(m.href)) return undefined;
+  return fetch(m.href, { credentials: "omit" })
+    .then((r) => (r.ok ? r.text() : null))
+    .catch(() => null);
 }
 
 function notifyUrlChange(details: { tabId: number; frameId: number }) {

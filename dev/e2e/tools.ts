@@ -307,6 +307,25 @@ try {
     await tool("eval", { tab, expression: "document.getElementById('tall').remove(); 0" });
   });
 
+  await check("color_scheme makes one tab dark: stylesheets, cross-origin ones, media attributes, matchMedia", async () => {
+    const url = fixture.replace("/tokens/", "/color-scheme/");
+    const { tab: cs } = await tool("tab_open", { url });
+    const report = async () => (await tool("eval", { tab: cs, expression: "JSON.parse(JSON.stringify(window.wrappedJSObject.__scheme()))" })).result;
+    const before = await report();
+    assert.equal(before.mediaSame, "light", JSON.stringify(before));
+    await tool("color_scheme", { tab: cs, scheme: "dark" });
+    await new Promise((r) => setTimeout(r, 1000)); // the cross-origin copy is fetched after load
+    const dark = await report();
+    for (const k of ["mediaSame", "mediaCross", "linkMedia", "lightDark", "jsAtStartup", "jsNow", "picture"]) {
+      assert.equal(dark[k], "dark", `${k}: ${JSON.stringify(dark)}`);
+    }
+    const shot = await rpc("tools/call", { name: "screenshot", arguments: { tab: cs, scale: 0.1 } });
+    assert.ok(shot.result.content.some((c: any) => c.type === "text" && /emulates the dark colour scheme/.test(c.text)));
+    await tool("color_scheme", { tab: cs, scheme: null });
+    assert.equal((await report()).mediaSame, "light");
+    await tool("tab_close", { tab: cs });
+  });
+
   await check("tab_navigate and tab_close", async () => {
     const r = await tool("tab_navigate", { tab, url: `http://127.0.0.1:${state.fixturesPort}/basic/` });
     assert.equal(r.title, "basic fixture");

@@ -490,7 +490,7 @@ Tools for **contractors** (every call carries a task token):
 - **Styles:**
   - `styles_reload`, which re-reads the task tree;
   - `draft_css(style_id, css)`, which applies CSS to the agent tab without writing files, for quick iteration;
-  - `color_scheme(tab, light|dark)`, which emulates the scheme in that tab alone and reloads it (R2). Screenshots of an emulating tab say the scheme is emulated.
+  - `color_scheme(tab, light|dark)`, which emulates the scheme in that tab alone and reloads it (R2). Screenshots of an emulating tab say the scheme is emulated. *Implemented:* two user scripts registered for every page, inert unless the tab's sessionStorage carries the marker; with it, a page-world script wraps `matchMedia` and a userScripts-world script rewrites `prefers-color-scheme` conditions in every sheet (atelier's too, as they change), media attributes, and rewritten copies of cross-origin sheets the background fetches, and forces `color-scheme`. On navigation to a new origin (the marker is per origin) the stylesheet part is injected again. A site's own stored theme switch isn't affected; that needs a throwaway container (§17).
 - **Checks:** `checks_run({passive, active})`, `lint`.
 - **Messages:** `message_post(to: supervisor|user|developers, body, attachments)`, `message_wait(timeout)`.
 

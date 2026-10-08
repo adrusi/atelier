@@ -37,3 +37,13 @@ export function onUserScriptConnect(): PortEvent | undefined {
 
 /** For permissions.request/contains; the @types don't list "userScripts". */
 export const USER_SCRIPTS_PERMISSION = { permissions: ["userScripts"] } as unknown as browser.permissions.Permissions;
+
+type MessageEvent = {
+  addListener(cb: (msg: unknown, sender: browser.runtime.MessageSender) => Promise<unknown> | undefined): void;
+  hasListener(cb: (msg: unknown, sender: browser.runtime.MessageSender) => Promise<unknown> | undefined): boolean;
+};
+
+/** runtime.onUserScriptMessage, likewise only present once permitted. */
+export function onUserScriptMessage(): MessageEvent | undefined {
+  return (browser.runtime as unknown as { onUserScriptMessage?: MessageEvent }).onUserScriptMessage;
+}

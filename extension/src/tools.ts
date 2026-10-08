@@ -7,6 +7,7 @@ import { cssFor } from "./matching";
 import * as page from "./pagefns";
 import type { Bundle } from "./proto/Bundle";
 import { RpcError } from "./rpc";
+import { emulateStyles, SCHEME_MARKER } from "./scheme";
 import { userScripts } from "./userscripts";
 
 export type ToolContext = {
@@ -182,6 +183,25 @@ async function fetchUnreadable(tabId: number): Promise<page.Fetched[]> {
   return out;
 }
 
+/** Colour schemes emulated per agent tab (tab/color_scheme). The marker in
+ * sessionStorage is per origin, so on each navigation the emulation is
+ * injected again, and the marker set for the loads after. */
+const schemes = new Map<number, "light" | "dark">();
+
+browser.webNavigation.onCommitted.addListener((d) => {
+  const scheme = schemes.get(d.tabId);
+  const us = userScripts();
+  if (d.frameId !== 0 || !scheme || !us) return;
+  void us
+    .execute({
+      target: { tabId: d.tabId },
+      injectImmediately: true,
+      js: [{ code: `try { sessionStorage.setItem(${JSON.stringify(SCHEME_MARKER)}, ${JSON.stringify(scheme)}); } catch {}\n(${emulateStyles})();` }],
+    })
+    .catch(() => {});
+});
+browser.tabs.onRemoved.addListener((id) => schemes.delete(id));
+
 /** Forced states per agent tab, so they can be redone when styles change:
  * force_state clones rules when it's called, and a later save would
  * otherwise not show up in the forced state. */
@@ -278,6 +298,8 @@ const handlers: Record<string, Handler> = {
     const notes: string[] = [];
     if (param<boolean>(params, "settleAnimations", "boolean", true)) await call(tab.id!, page.finishAnimations);
     await call(tab.id!, page.imagesReady, 3000);
+    const emulated = schemes.get(tab.id!);
+    if (emulated) notes.push(`This tab emulates the ${emulated} colour scheme (color_scheme); it isn't the user's setting.`);
     if (!tab.active && !toldHidden.has(tab.id!)) {
       notes.push(HIDDEN_NOTE);
       toldHidden.add(tab.id!);
@@ -406,6 +428,20 @@ const handlers: Record<string, Handler> = {
     const r = await call(tab.id!, page.shapeScan, scope, param<number>(params, "limit", "number", 40));
     if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${scope}\``);
     return r;
+  },
+
+  async "tab/color_scheme"(params, ctx) {
+    const tab = await agentTab(params);
+    const scheme = param<string | null>(params, "scheme", "string", null);
+    if (scheme !== null && scheme !== "light" && scheme !== "dark") throw new RpcError(INVALID_PARAMS, "`scheme` is light, dark or null");
+    if (scheme === null) schemes.delete(tab.id!);
+    else schemes.set(tab.id!, scheme);
+    await run(tab.id!, scheme === null
+      ? `try { sessionStorage.removeItem(${JSON.stringify(SCHEME_MARKER)}); } catch {} 0`
+      : `try { sessionStorage.setItem(${JSON.stringify(SCHEME_MARKER)}, ${JSON.stringify(scheme)}); } catch {} 0`);
+    // Pages decide their scheme as they load, so emulation needs a fresh load.
+    await browser.tabs.reload(tab.id!);
+    return afterLoad(tab.id!, params, ctx, await settled(tab.id!));
   },
 
   async "page/force_state"(params) {
