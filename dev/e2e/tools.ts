@@ -321,6 +321,21 @@ try {
     await tool("eval", { tab, expression: "document.getElementById('tall').remove(); 0" });
   });
 
+  await check("color_scheme says what it can't emulate, and only when the page has it", async () => {
+    const { tab: gaps } = await tool("tab_open", { url: fixture.replace("/tokens/", "/scheme-frames/") });
+    const r = await tool("color_scheme", { tab: gaps, scheme: "dark" });
+    assert.equal(r.notEmulated?.frames, 1, JSON.stringify(r));
+    assert.match(r.notEmulated?.svgImages?.[0] ?? "", /adaptive\.svg$/, JSON.stringify(r));
+    const shot = await rpc("tools/call", { name: "screenshot", arguments: { tab: gaps } });
+    const text = shot.result.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
+    assert.match(text, /Not emulated on this page: 1 frame/, text);
+    await tool("tab_close", { tab: gaps });
+    // The color-scheme fixture's SVG images don't carry scheme rules: nothing to say.
+    const { tab: clean } = await tool("tab_open", { url: fixture.replace("/tokens/", "/color-scheme/") });
+    assert.equal((await tool("color_scheme", { tab: clean, scheme: "dark" })).notEmulated, undefined);
+    await tool("tab_close", { tab: clean });
+  });
+
   await check("color_scheme makes one tab dark: stylesheets, cross-origin ones, media attributes, matchMedia", async () => {
     const url = fixture.replace("/tokens/", "/color-scheme/");
     const { tab: cs } = await tool("tab_open", { url });

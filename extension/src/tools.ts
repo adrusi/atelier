@@ -194,6 +194,39 @@ async function fetchUnreadable(tabId: number): Promise<void> {
   if (out.length) await call(tabId, "provideFetched", out);
 }
 
+/** Whether each SVG image carries its own prefers-color-scheme rules, by URL. */
+const adaptiveSvg = new Map<string, boolean>();
+
+/** What colour-scheme emulation can't reach in the tab, said plainly, or
+ * null if there's nothing (ARCHITECTURE.md: limits are reported). */
+async function schemeGaps(tabId: number): Promise<{ frames?: number; svgImages?: string[]; note: string } | null> {
+  const gaps = (await call(tabId, "emulationGaps")) as { frames: number; svgImages: string[] };
+  const adaptive: string[] = [];
+  for (const url of gaps.svgImages) {
+    let known = adaptiveSvg.get(url);
+    if (known === undefined) {
+      try {
+        const r = await fetch(url, { credentials: "omit" });
+        known = r.ok && /prefers-color-scheme/.test(await r.text());
+      } catch {
+        known = false;
+      }
+      adaptiveSvg.set(url, known);
+      if (adaptiveSvg.size > 500) adaptiveSvg.delete(adaptiveSvg.keys().next().value!);
+    }
+    if (known) adaptive.push(url);
+  }
+  if (!gaps.frames && !adaptive.length) return null;
+  const parts: string[] = [];
+  if (gaps.frames) parts.push(`${gaps.frames} frame(s) (iframes keep the browser's real scheme)`);
+  if (adaptive.length) parts.push(`${adaptive.length} SVG image(s) with their own prefers-color-scheme rules, which follow the browser's real setting`);
+  return {
+    ...(gaps.frames ? { frames: gaps.frames } : {}),
+    ...(adaptive.length ? { svgImages: adaptive.slice(0, 5) } : {}),
+    note: `Not emulated on this page: ${parts.join("; ")}. They show the user's actual scheme, not the emulated one; judge them by another means, or say what you couldn't check.`,
+  };
+}
+
 /** Colour schemes emulated per agent tab (tab/color_scheme). The marker in
  * sessionStorage is per origin, so on each navigation the emulation is
  * injected again, and the marker set for the loads after. */
@@ -316,7 +349,11 @@ const handlers: Record<string, Handler> = {
     if (param<boolean>(params, "settleAnimations", "boolean", true)) await call(tab.id!, "finishAnimations");
     await call(tab.id!, "imagesReady", 3000);
     const emulated = agentTabs.get(tab.id!)?.scheme;
-    if (emulated) notes.push(`This tab emulates the ${emulated} colour scheme (color_scheme); it isn't the user's setting.`);
+    if (emulated) {
+      notes.push(`This tab emulates the ${emulated} colour scheme (color_scheme); it isn't the user's setting.`);
+      const gaps = await schemeGaps(tab.id!).catch(() => null);
+      if (gaps) notes.push(gaps.note);
+    }
     if (!tab.active && !toldHidden.has(tab.id!)) {
       notes.push(HIDDEN_NOTE);
       toldHidden.add(tab.id!);
@@ -457,7 +494,9 @@ const handlers: Record<string, Handler> = {
       : `try { sessionStorage.setItem(${JSON.stringify(SCHEME_MARKER)}, ${JSON.stringify(scheme)}); } catch {} 0`);
     // Pages decide their scheme as they load, so emulation needs a fresh load.
     await browser.tabs.reload(tab.id!);
-    return afterLoad(tab.id!, params, ctx, await settled(tab.id!));
+    const loaded = await afterLoad(tab.id!, params, ctx, await settled(tab.id!));
+    const gaps = scheme === null ? null : await schemeGaps(tab.id!);
+    return gaps ? { ...loaded, notEmulated: gaps } : loaded;
   },
 
   async "page/force_state"(params) {

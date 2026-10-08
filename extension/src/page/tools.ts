@@ -559,3 +559,23 @@ export function shapeScan(scope: string | null, limit: number) {
     ...(all.length > limit ? { note: `${all.length} groups in all; showing the largest. Narrow with scope.` } : {}),
   };
 }
+
+/** What colour-scheme emulation can't reach on this page: frames (emulation
+ * runs in the top document only), and SVG images, which follow the
+ * browser's real preference if they carry their own prefers-color-scheme
+ * rules (the background fetches these candidates to check). */
+export function emulationGaps(): { frames: number; svgImages: string[] } {
+  const urls = new Set<string>();
+  const add = (u: string) => {
+    if (u && /^data:image\/svg|\.svg([?#]|$)/i.test(u)) urls.add(u);
+  };
+  for (const img of core.queryAll("img") as HTMLImageElement[]) add(img.currentSrc || img.src);
+  const PROPS = ["background-image", "mask-image", "list-style-image", "border-image-source", "content"];
+  for (const [el] of core.elements().slice(0, 5000)) {
+    for (const pseudo of [null, "::before", "::after"]) {
+      const cs = getComputedStyle(el, pseudo);
+      for (const p of PROPS) for (const m of cs.getPropertyValue(p).matchAll(/url\("([^"]+)"\)/g)) add(m[1]);
+    }
+  }
+  return { frames: core.queryAll("iframe, frame").length, svgImages: [...urls].slice(0, 40) };
+}
