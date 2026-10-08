@@ -49,6 +49,18 @@ export function emulateStyles() {
   const root = document.documentElement;
   if (!forced || !root || root.hasAttribute("data-atelier-scheme")) return;
   root.setAttribute("data-atelier-scheme", forced);
+  // The marker is the page's; the background has the truth. A tab that
+  // shouldn't be emulating (a copy of an agent tab) drops it and reloads.
+  void (browser.runtime.sendMessage({ type: "scheme" }) as Promise<string | null>).then(
+    (wanted) => {
+      if (wanted === forced) return;
+      try {
+        sessionStorage.removeItem("atelier:scheme");
+      } catch {}
+      location.reload();
+    },
+    () => {},
+  );
 
   const TRUE = "(min-width: 0px)";
   const FALSE = "(max-width: 0px) and (min-width: 1px)";

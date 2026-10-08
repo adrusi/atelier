@@ -116,9 +116,9 @@ simply finishes it, and runs the hooks it missed.
 | Task trees, calls, proposals, hook files, logs | daemon | the task's state | pruning: kept while useful, then removed |
 | Spawned sessions | daemon | a record of the launch | startup: a launch counts until it times out |
 | Registered user scripts | background | the bundle | every bundle load (already a diff) |
-| Agent tabs, their bindings and emulation | background | tab values (`sessions.setTabValue`, which survive session restore) | startup and periodic: tabs from a past session are closed |
-| Throwaway containers | background | the tabs that use them (tab values) and a list in `storage.local` | startup and periodic: containers no tab needs are removed |
-| Page-side markers (sessionStorage) | page runtime | the background's tab state | each shim connection: the background tells the page its state, and stale markers are cleared |
+| Agent tabs, their bindings and emulation | background (`agenttabs.ts`) | records in `storage.session`, and a tab value (`sessions.setTabValue`, restored with the tab) carrying the browser session's epoch | startup, a few seconds after tabs appear, and every 5 minutes: tabs with an earlier epoch are closed; copies (current epoch, not ours) lose the value and are the user's |
+| Throwaway containers | background (`containers.ts`) | the session's list in `storage.session`, and the tabs that use them | with agent tabs, and when a tab closes: unlisted containers are removed with their tabs, listed ones once no tab uses them |
+| Page-side markers (sessionStorage) | page runtime | the background's tab state | the source marker on each shim connection (the background sends the tab's binding); the scheme marker on each load (the page asks); stale ones are dropped |
 
 A resource that isn't in this table doesn't exist yet. Adding one means
 adding a row: who owns it, where its desired state is, and what reconciles it.
@@ -154,9 +154,9 @@ adding a row: who owns it, where its desired state is, and what reconciles it.
 
 In order, each step leaving everything working:
 
-1. **State and recovery**: landing intents and startup recovery, with crash
-   tests; tab values and reconcile for agent tabs, containers and markers;
-   pruning. (The daemon's store and the background's resources.)
+1. **State and recovery** (done): landing intents and startup recovery, with
+   crash tests; tab values and reconcile for agent tabs, containers and
+   markers; pruning. (The daemon's store and the background's resources.)
 2. **The page runtime**: move `pagefns.ts`, `shim.ts` and `scheme.ts` into
    `page/` on top of `page/core` (scopes, sheets, rules, elements); the
    existing e2e tests are the safety net; add the "only core touches the

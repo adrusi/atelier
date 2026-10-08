@@ -18,7 +18,7 @@ import type { JournalEntry } from "./proto/JournalEntry";
 import type { Task } from "./proto/Task";
 import { cssFor } from "./matching";
 import { Rpc } from "./rpc";
-import * as containers from "./containers";
+import * as agentTabs from "./agenttabs";
 import * as tools from "./tools";
 import { emulateMatchMedia, emulateStyles } from "./scheme";
 import { onUserScriptConnect, onUserScriptMessage, type UserScript, userScripts } from "./userscripts";
@@ -362,10 +362,16 @@ function listenToShims() {
   if (messages && !messages.hasListener(onUserScriptRequest)) messages.addListener(onUserScriptRequest);
 }
 
-/** Requests from page scripts: the text of a cross-origin stylesheet, which
- * the page can't read but the extension can fetch (scheme.ts). */
-function onUserScriptRequest(msg: unknown): Promise<unknown> | undefined {
+/** Requests from page scripts (scheme.ts): the text of a cross-origin
+ * stylesheet, which the page can't read but the extension can fetch; and
+ * which colour scheme the tab should emulate, if any, so a page holding a
+ * stale marker (a duplicated agent tab, say) can drop it. */
+function onUserScriptRequest(msg: unknown, sender: browser.runtime.MessageSender): Promise<unknown> | undefined {
   const m = msg as { type?: string; href?: string };
+  if (m?.type === "scheme") {
+    const tabId = sender.tab?.id;
+    return agentTabs.ready.then(() => (tabId === undefined ? null : (agentTabs.get(tabId)?.scheme ?? null)));
+  }
   if (m?.type !== "fetch-css" || !m.href || !/^https?:/.test(m.href)) return undefined;
   return fetch(m.href, { credentials: "omit" })
     .then((r) => (r.ok ? r.text() : null))
@@ -637,5 +643,5 @@ browser.alarms.onAlarm.addListener((alarm) => {
 });
 
 listenToShims();
-void containers.sweep();
+void agentTabs.reconcile();
 void connect();

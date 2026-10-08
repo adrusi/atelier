@@ -4,13 +4,20 @@
 // dismissed notice) stays in the container, which is removed when its last
 // tab closes. Site storage (localStorage, IndexedDB) isn't copied: settings
 // kept there start at the site's defaults.
+//
+// The containers made in this browser session are listed in session storage.
+// One that isn't listed is left from an earlier session (Firefox keeps
+// containers, and may restore their tabs), and sweep removes it with any tabs
+// still in it; a listed one is removed once no tab uses it.
 
 const NAME = "atelier (throwaway)";
 
-/** Throwaway containers by tab, for cleanup and for describing tabs. */
-const throwaways = new Map<number, string>();
+const made: Promise<Set<string>> = browser.storage.session
+  .get("throwaways")
+  .then((v) => new Set((v.throwaways as string[] | undefined) ?? []));
 
-export const isThrowaway = (tabId: number) => throwaways.has(tabId);
+/** Containers just made, whose tab may not be open yet. */
+const opening = new Set<string>();
 
 /** The part of a hostname cookies for the site can be set on: the last two
  * labels, or three where the second-to-last is short (example.co.uk).
@@ -27,6 +34,11 @@ function siteOf(host: string): string {
 export async function fork(url: string, from = "firefox-default"): Promise<{ cookieStoreId: string; copied: number }> {
   const identity = await browser.contextualIdentities.create({ name: NAME, color: "purple", icon: "fence" });
   const store = identity.cookieStoreId;
+  const list = await made;
+  list.add(store);
+  await browser.storage.session.set({ throwaways: [...list] });
+  opening.add(store);
+  setTimeout(() => opening.delete(store), 30_000);
   let copied = 0;
   let host: string;
   try {
@@ -56,28 +68,24 @@ export async function fork(url: string, from = "firefox-default"): Promise<{ coo
   return { cookieStoreId: store, copied };
 }
 
-export function remember(tabId: number, cookieStoreId: string) {
-  throwaways.set(tabId, cookieStoreId);
-}
-
-/** Removes a throwaway container once no tab uses it. */
-async function release(cookieStoreId: string) {
-  if ((await browser.tabs.query({ cookieStoreId })).length) return;
-  await browser.contextualIdentities.remove(cookieStoreId).catch(() => {});
-}
-
-browser.tabs.onRemoved.addListener((tabId) => {
-  const store = throwaways.get(tabId);
-  if (!store) return;
-  throwaways.delete(tabId);
-  void release(store);
-});
-
-/** Leftovers from before a restart: throwaway containers with no tabs. */
+/** Removes throwaway containers nothing needs: those no tab uses, and those
+ * left from an earlier session, with their tabs. */
 export async function sweep() {
+  let found: browser.contextualIdentities.ContextualIdentity[];
   try {
-    for (const c of await browser.contextualIdentities.query({ name: NAME })) await release(c.cookieStoreId);
+    found = await browser.contextualIdentities.query({ name: NAME });
   } catch {
-    // Containers turned off: nothing to sweep.
+    return; // containers turned off: nothing to sweep
+  }
+  const list = await made;
+  for (const c of found) {
+    const tabs = await browser.tabs.query({ cookieStoreId: c.cookieStoreId });
+    if (list.has(c.cookieStoreId) && (tabs.length || opening.has(c.cookieStoreId))) continue;
+    if (tabs.length) {
+      console.info(`atelier: closing ${tabs.length} tab(s) in a throwaway container from an earlier session`);
+      await browser.tabs.remove(tabs.map((t) => t.id!)).catch(() => {});
+    }
+    await browser.contextualIdentities.remove(c.cookieStoreId).catch(() => {});
+    if (list.delete(c.cookieStoreId)) await browser.storage.session.set({ throwaways: [...list] });
   }
 }

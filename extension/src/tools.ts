@@ -9,6 +9,7 @@ import type { Bundle } from "./proto/Bundle";
 import { RpcError } from "./rpc";
 import * as containers from "./containers";
 import { emulateStyles, SCHEME_MARKER } from "./scheme";
+import * as agentTabs from "./agenttabs";
 import { userScripts } from "./userscripts";
 
 export type ToolContext = {
@@ -42,15 +43,8 @@ const NO_SUCH_SOURCE = -32031;
 const sourceError = (task: string | null, e: unknown) =>
   new RpcError(NO_SUCH_SOURCE, `can't show task ${task}'s tree: ${e instanceof Error ? e.message : e}`);
 
-// Agent tabs, kept in session storage so they survive the background restarting.
-const agentTabs = new Set<number>();
-const loaded = browser.storage.session.get("agentTabs").then((v) => {
-  for (const id of (v.agentTabs as number[] | undefined) ?? []) agentTabs.add(id);
-});
-const saveTabs = () => browser.storage.session.set({ agentTabs: [...agentTabs] });
-browser.tabs.onRemoved.addListener((id) => {
-  if (agentTabs.delete(id)) void saveTabs();
-});
+// Agent tabs, and what's set up in them: agenttabs.ts.
+const loaded = agentTabs.ready;
 
 function param<T>(params: any, name: string, type: string, fallback?: T): T {
   const v = params?.[name];
@@ -68,14 +62,13 @@ async function agentTab(params: any): Promise<browser.tabs.Tab> {
   if (!agentTabs.has(id)) {
     throw new RpcError(
       NOT_AN_AGENT_TAB,
-      `tab ${id} isn't one of atelier's agent tabs (open one with tab_open; agent tools never touch the user's own tabs). Agent tabs: ${[...agentTabs].join(", ") || "none"}`,
+      `tab ${id} isn't one of atelier's agent tabs (open one with tab_open; agent tools never touch the user's own tabs). Agent tabs: ${agentTabs.ids().join(", ") || "none"}`,
     );
   }
   try {
     return await browser.tabs.get(id);
   } catch {
-    agentTabs.delete(id);
-    void saveTabs();
+    await agentTabs.forget(id);
     throw new RpcError(NOT_AN_AGENT_TAB, `tab ${id} has been closed`);
   }
 }
@@ -139,7 +132,7 @@ function describeTab(tab: browser.tabs.Tab, ctx: ToolContext) {
     status: tab.status,
     visible: Boolean(tab.active),
     ...(task ? { task } : {}),
-    ...(containers.isThrowaway(tab.id!) ? { throwaway: true } : {}),
+    ...(agentTabs.get(tab.id!)?.throwaway ? { throwaway: true } : {}),
   };
 }
 
@@ -195,10 +188,9 @@ async function fetchUnreadable(tabId: number): Promise<page.Fetched[]> {
 /** Colour schemes emulated per agent tab (tab/color_scheme). The marker in
  * sessionStorage is per origin, so on each navigation the emulation is
  * injected again, and the marker set for the loads after. */
-const schemes = new Map<number, "light" | "dark">();
-
-browser.webNavigation.onCommitted.addListener((d) => {
-  const scheme = schemes.get(d.tabId);
+browser.webNavigation.onCommitted.addListener(async (d) => {
+  await loaded;
+  const scheme = agentTabs.get(d.tabId)?.scheme;
   const us = userScripts();
   if (d.frameId !== 0 || !scheme || !us) return;
   void us
@@ -209,7 +201,6 @@ browser.webNavigation.onCommitted.addListener((d) => {
     })
     .catch(() => {});
 });
-browser.tabs.onRemoved.addListener((id) => schemes.delete(id));
 
 /** Forced states per agent tab, so they can be redone when styles change:
  * force_state clones rules when it's called, and a later save would
@@ -249,9 +240,7 @@ const handlers: Record<string, Handler> = {
     }
     // Bound before anything loads, so the first load already shows the task's tree.
     const tab = await browser.tabs.create({ url: "about:blank", active: false, ...(container ? { cookieStoreId: container.cookieStoreId } : {}) });
-    if (container) containers.remember(tab.id!, container.cookieStoreId);
-    agentTabs.add(tab.id!);
-    await saveTabs();
+    await agentTabs.add(tab.id!, container ? { throwaway: container.cookieStoreId } : {});
     if (task !== null) {
       try {
         await ctx.bind(tab.id!, task);
@@ -292,15 +281,14 @@ const handlers: Record<string, Handler> = {
 
   async "tab/list"(_params, ctx) {
     await loaded;
-    const tabs = await Promise.all([...agentTabs].map((id) => browser.tabs.get(id).catch(() => null)));
+    const tabs = await Promise.all(agentTabs.ids().map((id) => browser.tabs.get(id).catch(() => null)));
     return { tabs: tabs.filter((t): t is browser.tabs.Tab => Boolean(t)).map((t) => describeTab(t, ctx)) };
   },
 
   async "tab/close"(params) {
     const tab = await agentTab(params);
     await browser.tabs.remove(tab.id!);
-    agentTabs.delete(tab.id!);
-    await saveTabs();
+    await agentTabs.forget(tab.id!);
     return { closed: tab.id };
   },
 
@@ -318,7 +306,7 @@ const handlers: Record<string, Handler> = {
     const notes: string[] = [];
     if (param<boolean>(params, "settleAnimations", "boolean", true)) await call(tab.id!, page.finishAnimations);
     await call(tab.id!, page.imagesReady, 3000);
-    const emulated = schemes.get(tab.id!);
+    const emulated = agentTabs.get(tab.id!)?.scheme;
     if (emulated) notes.push(`This tab emulates the ${emulated} colour scheme (color_scheme); it isn't the user's setting.`);
     if (!tab.active && !toldHidden.has(tab.id!)) {
       notes.push(HIDDEN_NOTE);
@@ -454,8 +442,7 @@ const handlers: Record<string, Handler> = {
     const tab = await agentTab(params);
     const scheme = param<string | null>(params, "scheme", "string", null);
     if (scheme !== null && scheme !== "light" && scheme !== "dark") throw new RpcError(INVALID_PARAMS, "`scheme` is light, dark or null");
-    if (scheme === null) schemes.delete(tab.id!);
-    else schemes.set(tab.id!, scheme);
+    await agentTabs.update(tab.id!, { scheme: scheme ?? undefined });
     await run(tab.id!, scheme === null
       ? `try { sessionStorage.removeItem(${JSON.stringify(SCHEME_MARKER)}); } catch {} 0`
       : `try { sessionStorage.setItem(${JSON.stringify(SCHEME_MARKER)}, ${JSON.stringify(scheme)}); } catch {} 0`);
