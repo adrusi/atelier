@@ -151,18 +151,20 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
     Tool {
         name: "theme_propose",
         method: "",
-        description: "Change one of the theme's own files, which you never edit in the tree. \
-            file: notes.md (the theme's design notes) is for calls about applying the theme that every site \
-            should share: what counts as \"current\", how far a header strip runs, how figures lose their frames. \
-            Add one when you settle such a call, so agents on other sites make it the same way; it lands at once \
-            (the user reviews it afterwards, and can undo it). file: THEME.md (the default) is the user's own \
-            description of the look they want, in their voice: propose to it only what they'd say about what they \
-            want (a value, a taste, a gap in what they said), not how it was applied; it waits for them to \
-            accept, edit or decline. Neither is for limits of atelier or the browser: those go in the service's \
-            notes.md and your summary, so they don't outlive the fix. Keep it short, in the file's own voice and \
-            place, and say in `why` what it comes from. Edits apply to the file as it is now: each `find` must \
-            match its current text exactly, once (if it doesn't, the error includes the current text); an edit \
-            without `find` appends.",
+        description: "Change one of the theme's two files, which you never edit in the tree; they're like a \
+            design team's brief and its decision log. THEME.md (the default) is the brief: the look and its \
+            principles, in general terms. Agents may have drafted much of it, but the user signs off on every \
+            change, so a proposal waits for them to accept, edit or decline. Propose to it when the theme itself \
+            is unclear, contradicts itself or leaves out something general, or to state a principle you've found \
+            the user cares about. notes.md is the log: how the theme was worked out in particular situations, and \
+            why (what counts as \"current\" when a link jumps to an anchor; how wide a header strip runs on a \
+            one-column site). Add to it when you settle a call other sites will meet, so their agents can decide \
+            the same way, or differently on purpose; it lands at once, and the user reviews it afterwards. If \
+            unsure which: would the user want to approve it before it applies everywhere? Then THEME.md. Neither \
+            is for limits of atelier or the browser: those go in the service's notes.md and your summary, so \
+            they don't outlive the fix. Keep it short, in the file's own voice and place, and say in `why` what \
+            it comes from. Each `find` must match the file's current text exactly, once (if it doesn't, the \
+            error includes the current text); an edit without `find` appends.",
         schema: || {
             json!({ "type": "object", "properties": {
                 "summary": { "type": "string", "description": "What changes, in a line." },
@@ -206,8 +208,9 @@ How a session goes:
 2. Claim a task with task_claim. It gives you the brief, and a working copy of my styles (the task's tree) \
 to edit with your file tools. Tabs you open with tab_open show the tree's styles, so you can see your work \
 in my real browser, logged in where I am, without it reaching my own tabs.
-3. Read the theme (themes/<theme>/THEME.md in the tree) before anything else: it's what I want things to look \
-like, in my words. Then the service's notes.md and existing styles, if it has them.
+3. Read the theme (themes/<theme>/THEME.md in the tree) before anything else: it's the look I'm after. Then \
+its design notes (themes/<theme>/notes.md), how it's been worked out on other sites, and the service's \
+notes.md and existing styles, if it has them.
 4. Do the work, checking it in the browser as you go. When it's done, submit it with task_submit and a \
 summary. It lands in my styles at once, and I can undo it.
 5. Then the next task, until the queue is empty. Tell me briefly what landed, what you assumed, and \
@@ -817,21 +820,31 @@ fn brief(
     if exists(&theme_md) {
         let _ = writeln!(
             out,
-            "- {theme_md}: what the user wants things to look like, in their words."
-        );
-    }
-    let theme_notes = format!("themes/{theme}/notes.md");
-    if exists(&theme_notes) {
-        let _ = writeln!(
-            out,
-            "- {theme_notes}: the theme's design notes, calls about applying it that every site shares. \
-             Follow them, so this site matches the others; where one doesn't fit here, say why in your summary."
+            "- {theme_md}: the theme: the look and the principles behind it, in general terms. Agents may \
+             have drafted much of it, but the user signs off on every change, so it's what they want."
         );
     } else {
         let _ = writeln!(
             out,
             "- There's no {theme_md}, so the theme isn't written down. Ask the user what they want, or work \
              from the existing styles and say what you inferred."
+        );
+    }
+    let theme_notes = format!("themes/{theme}/notes.md");
+    if exists(&theme_notes) {
+        let _ = writeln!(
+            out,
+            "- {theme_notes}: the theme's design notes: how it's been worked out on particular sites (the \
+             situations that came up, what was decided, and why). Treat them as precedent, not rules: where \
+             your situation is the same, decide the same way, so sites stay consistent; where it genuinely \
+             differs, do what fits it, and add the distinction to the notes. Together the two are like a design \
+             team's brief and its decision log."
+        );
+    } else {
+        let _ = writeln!(
+            out,
+            "- The theme has no design notes yet ({theme_notes}). When you settle how the theme applies to a \
+             situation other sites will meet too, start them with theme_propose (file: notes.md)."
         );
     }
     match &t.service {
@@ -902,9 +915,10 @@ fn brief(
         }
         out.push_str(
             "\nIf an answer settles something that will matter beyond this task, record it so nobody asks \
-             again: in the service's notes.md if it's about this site; if it's how the theme applies across \
-             sites, in the theme's design notes (theme_propose with file: notes.md); if it's what the user \
-             wants, propose it for THEME.md (unless a proposal below already covers it).\n",
+             again: in the service's notes.md if it's about this site; if it's how the theme applies to a kind \
+             of situation other sites will meet, in the theme's design notes (theme_propose with file: \
+             notes.md); if it changes what the theme itself is, propose it for THEME.md (unless a proposal \
+             below already covers it).\n",
         );
     }
     out.push_str(&pages_section(tree, t.service.as_deref()));
@@ -1180,3 +1194,58 @@ too) in variants/NAME/<option>.css beside the style file (just the rules that go
 with no @-moz-document around them), and give the call `variant: NAME`. The user can \
 then flip between the options live in their own tab, and picking another one writes it into the style \
 for you, even after the work has landed.\n";
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use atelier_proto::{TaskBrief, TaskKind, TaskState};
+
+    fn task(tree: &std::path::Path) -> Task {
+        Task {
+            id: "t1".into(),
+            kind: TaskKind::Create,
+            service: Some("site".into()),
+            theme: Some("t".into()),
+            brief: TaskBrief {
+                description: "Style the site".into(),
+                origin: None,
+                note: None,
+                container: None,
+                attachments: Vec::new(),
+            },
+            state: TaskState::Claimed,
+            lease: None,
+            tree: Some(tree.display().to_string()),
+            handoff: None,
+            created: 0,
+            updated: 0,
+            outcome: None,
+        }
+    }
+
+    fn brief_for(files: &[&str]) -> String {
+        let dir = tempfile::tempdir().unwrap();
+        let tree = dir.path().join("tree");
+        for f in files {
+            let p = tree.join(f);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, "x\n").unwrap();
+        }
+        brief(&task(&tree), &[], &[], &Default::default(), &[])
+    }
+
+    #[test]
+    fn the_reading_list_describes_the_theme_and_its_design_notes() {
+        let b = brief_for(&["themes/t/THEME.md"]);
+        assert!(b.contains("themes/t/THEME.md: the theme: the look"), "{b}");
+        assert!(b.contains("The theme has no design notes yet"), "{b}");
+        assert!(!b.contains("There's no themes/t/THEME.md"), "{b}");
+
+        let b = brief_for(&["themes/t/THEME.md", "themes/t/notes.md"]);
+        assert!(b.contains("Treat them as precedent, not rules"), "{b}");
+        assert!(!b.contains("no design notes yet"), "{b}");
+
+        let b = brief_for(&[]);
+        assert!(b.contains("There's no themes/t/THEME.md"), "{b}");
+    }
+}

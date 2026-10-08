@@ -1,8 +1,10 @@
 # tiled: design notes
 
-How the theme has been applied, so work on every site makes the same calls.
-THEME.md says what's wanted; these are interpretations of it that came up on
-particular sites and hold for all of them. Agents add to this file with
+How the theme has been worked out on particular sites: the situations that
+came up, what was decided, and why. THEME.md is the theme in general terms;
+these are precedents, not rules. Where a site's situation is the same,
+decide the same way, so sites stay consistent; where it genuinely differs,
+do what fits it, and add the distinction here. Agents add to this file with
 theme_propose (file: notes.md); the owner reviews additions in the inbox.
 
 ## Regions and panes
