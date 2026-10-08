@@ -78,6 +78,11 @@ from one place:
   shadow roots can't even be counted from the userScripts world
   (`openOrClosedShadowRoot` isn't there), so tools that walk the page say
   that they can't see them.
+- **Frames are documents of their own.** Each gets the runtime from its own
+  registrations, matched by its own URL, so styles, the shim's live updates
+  and colour-scheme emulation reach frames without the top document doing
+  anything. The inspection tools work on the top document; a framed page is
+  inspected by opening it in a tab of its own.
 
 **How the code expresses it.** The runtime is one bundle (built from
 `extension/src/page/index.ts`), installed once in a page's userScripts
@@ -180,8 +185,9 @@ In order, each step leaving everything working:
 3. **The fidelity harness** (done), first on `color_scheme`. Its first run
    found that emulation forced `color-scheme` on every page, darkening
    default text on pages that don't offer dark; emulation now narrows what
-   a page offers instead, as the browser does. Known gaps it shows: frames,
-   and SVG images with their own scheme rules (MDN's sidebar chevrons).
+   a page offers instead, as the browser does. The known gap it shows: SVG
+   images with their own scheme rules (MDN's sidebar chevrons). Frames,
+   first a gap, are now emulated, from the page's origin and others.
 4. **Width emulation** (done), as a media feature in the emulation layer,
    measured by the harness against `setViewport`: media queries (with
    calc() in them, which MDN and GitHub use for breakpoints), viewport units,

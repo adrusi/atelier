@@ -604,7 +604,7 @@ export function summarize(r: Report): string {
     lines.push(`  noise  left out, as it varied between two real loads: ${n.styles} style values, ${n.geometry} boxes, ${n.images} images, ${n.elements} elements, ${n.pixels} pixels`);
   }
   if (r.ignored.elements) lines.push(`  ignore left out as asked: ${r.ignored.elements} element(s) with their subtrees, ${r.ignored.pixels} pixels`);
-  if (r.elements.frames) lines.push(`  frames ${r.elements.frames} frame(s) not compared: atelier doesn't emulate inside frames; only the pixels show them`);
+  if (r.elements.frames) lines.push(`  frames ${r.elements.frames} frame(s): styles inside them aren't compared, only their pixels`);
   lines.push(`  pixels ${(r.pixels.ratio * 100).toFixed(3)}% differ (${r.files.diff})`);
   for (const p of r.pixels.in) lines.push(`         ${p.pixels} in ${p.element} (${Math.round(p.ofBox * 100)}% of its box)`);
   return lines.join("\n");

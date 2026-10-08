@@ -11,6 +11,16 @@ export type Features = {
   height?: number;
 };
 
+/** The features a document emulates: in a frame, only the colour scheme.
+ * A real dark preference reaches every frame; but a frame's viewport is its
+ * iframe's box, which the emulated page around it already lays out, so
+ * inside a frame the size is real and nothing about it is emulated. */
+export function forThisFrame(f: Features | null, inFrame: boolean): Features | null {
+  if (!f || !inFrame) return f;
+  const scheme = f["prefers-color-scheme"];
+  return scheme ? { "prefers-color-scheme": scheme } : null;
+}
+
 /** Always true, and always false: single parenthesized features, so they
  * can stand wherever the feature they replace stood (after `not`, say). */
 export const TRUE = "(min-width: 0px)";

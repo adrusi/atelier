@@ -134,6 +134,28 @@ try {
       assert.equal(await computed(".topbar", "backgroundColor"), "rgb(7, 8, 9)");
       assert.equal(await computed("main h1", "color"), "rgb(0, 255, 0)");
     });
+    await check("a style for a framed page applies inside its frames, from this origin and another, and live", async () => {
+      const FRAMES = path.join(owned, "services/fixtures/e2e/frames.user.css");
+      const port = state.fixturesPort;
+      const framed = (color: string) => `@-moz-document url("http://127.0.0.1:${port}/frames/frame.html"), url("http://localhost:${port}/frames/frame.html") {
+  #inner { color: ${color}; }
+}
+`;
+      write(FRAMES, framed("rgb(9, 9, 9)"));
+      await sleep(1500);
+      await load(`http://127.0.0.1:${port}/frames/`);
+      const frames = async () => {
+        const { contexts } = await bidi.send("browsingContext.getTree", { root: tab });
+        return contexts[0].children.map((c: { context: string }) => c.context) as string[];
+      };
+      const inner = async () =>
+        Promise.all((await frames()).map((c) => evaluate(bidi, c, "getComputedStyle(document.getElementById('inner')).color")));
+      assert.deepEqual(await eventually(inner, (v) => v.every((c) => c === "rgb(9, 9, 9)")), ["rgb(9, 9, 9)", "rgb(9, 9, 9)"]);
+      assert.notEqual(await computed("#outer", "color"), "rgb(9, 9, 9)", "the page around them isn't matched");
+      write(FRAMES, framed("rgb(8, 8, 8)"));
+      assert.deepEqual(await eventually(inner, (v) => v.every((c) => c === "rgb(8, 8, 8)")), ["rgb(8, 8, 8)", "rgb(8, 8, 8)"]);
+      fs.rmSync(FRAMES);
+    });
     await check("removing a style removes it from open pages", async () => {
       fs.rmSync(BASIC);
       const v = await eventually(() => js(`document.querySelectorAll("style[data-atelier]").length`), (v) => v === 0);

@@ -90,8 +90,9 @@ const TOOLS: &[Tool] = &[
             covers what follows the browser's preference: prefers-color-scheme in stylesheets (including \
             cross-origin ones and atelier's), media attributes, matchMedia, light-dark() and form controls. \
             A site's own theme switch (a setting it stores itself) isn't changed, so a site that ignores the \
-            browser's preference looks the same. Not emulated: inside frames, and SVG images with their own \
-            prefers-color-scheme rules; the result's notEmulated (and screenshots) say when a page has them. \
+            browser's preference looks the same. Frames are emulated too, though scripts that run first in a \
+            frame from another origin may see the real scheme; SVG images with their own prefers-color-scheme \
+            rules aren't. The result's notEmulated (and screenshots) say when a page has either. \
             The tab reloads, and stays emulated across navigations until you pass scheme: null. Screenshots \
             of it say so.",
         schema: || {

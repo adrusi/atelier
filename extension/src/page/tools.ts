@@ -567,8 +567,9 @@ export function shapeScan(scope: string | null, limit: number) {
   };
 }
 
-/** What colour-scheme emulation can't reach on this page: frames (emulation
- * runs in the top document only), and SVG images, which follow the
+/** Where colour-scheme emulation falls short on this page: frames from
+ * other origins (emulated, but injected as they load, so their earliest
+ * scripts may see the real scheme), and SVG images, which follow the
  * browser's real preference if they carry their own prefers-color-scheme
  * rules (the background fetches these candidates to check). */
 export function emulationGaps(): { frames: number; svgImages: string[] } {
@@ -584,7 +585,14 @@ export function emulationGaps(): { frames: number; svgImages: string[] } {
       for (const p of PROPS) for (const m of cs.getPropertyValue(p).matchAll(/url\("([^"]+)"\)/g)) add(m[1]);
     }
   }
-  return { frames: core.queryAll("iframe, frame").length, svgImages: [...urls].slice(0, 40) };
+  const crossOrigin = (core.queryAll("iframe[src], frame[src]") as HTMLIFrameElement[]).filter((f) => {
+    try {
+      return new URL(f.src, location.href).origin !== location.origin;
+    } catch {
+      return false;
+    }
+  }).length;
+  return { frames: crossOrigin, svgImages: [...urls].slice(0, 40) };
 }
 
 /** A selector of one of atelier's styles that Firefox can't use:

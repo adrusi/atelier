@@ -954,7 +954,10 @@ fn brief(
          CSS can't reach: inside a section, `@shadow <host selector> {{ … }}` holds CSS that goes into the open \
          shadow root of every element matching the selector, wherever it is. To look inside one, the page \
          tools take selectors like `mdn-code-example >>> .token` (the part after >>> is looked for in the \
-         host's shadow root; chainable). Closed shadow roots can't be reached.\n\
+         host's shadow root; chainable). Closed shadow roots can't be reached. A frame is a page of its own: \
+         a style applies inside it when its sections match the framed page's URL (not the page around it), so \
+         to style what's in a frame, match its URL; the page tools work on the top page, so to inspect a \
+         framed page, open its URL in a tab.\n\
          - services/<service>/service.toml: `description` (the site, in a few words), `summary` (what the \
          styles cover, for the user), and `[[prerequisites]]` for site settings a style depends on: \
          `description` (what the user should set, in their terms) and `check` (a CSS selector that matches \

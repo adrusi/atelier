@@ -17,7 +17,7 @@ export type UserScriptsApi = {
   getScripts(filter?: { ids?: string[] }): Promise<UserScript[]>;
   configureWorld(props: { messaging?: boolean; csp?: string }): Promise<void>;
   /** Runs code in an open tab's USER_SCRIPT world, the same world registered scripts use. */
-  execute(injection: { target: { tabId: number; allFrames?: boolean }; js: { code: string }[]; injectImmediately?: boolean }): Promise<unknown[]>;
+  execute(injection: { target: { tabId: number; frameIds?: number[]; allFrames?: boolean }; js: { code: string }[]; injectImmediately?: boolean }): Promise<unknown[]>;
 };
 
 /** The API, or undefined while the userScripts permission isn't granted. */

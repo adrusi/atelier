@@ -88,7 +88,7 @@ async function connect() {
       },
       sourceOf: (tabId) => bindings.get(tabId) ?? null,
       bind: bindTab,
-      hasShim: (tabId) => [...shimPorts].some((p) => p.sender?.tab?.id === tabId),
+      hasShim: (tabId) => [...shimPorts].some((p) => p.sender?.tab?.id === tabId && (p.sender?.frameId ?? 0) === 0),
       unmet: (tabId) => unmetByTab.get(tabId) ?? [],
       atelierDir: () => state.atelierDir,
       settle: async (source) => {
@@ -228,12 +228,12 @@ async function closeSource(source: string) {
 
 /** Bound tabs need a shim even on pages the owned directory has no style for
  * (the task may be styling a new site), so they get one on every load. */
-async function ensureShim(tabId: number) {
+async function ensureShim(tabId: number, frameId = 0) {
   const us = userScripts();
   if (!us) return;
   try {
     await us.execute({
-      target: { tabId },
+      target: { tabId, frameIds: [frameId] },
       injectImmediately: true,
       js: [{ code: ATELIER_PAGE }, { code: "__atelierPage.shim.attach();" }],
     });
@@ -278,15 +278,17 @@ async function applyBundle(bundle: Bundle) {
     js: [{ code: ATELIER_PAGE }, { code: `__atelierPage.shim.add(${JSON.stringify(style)});` }],
     runAt: "document_start",
     world: "USER_SCRIPT",
+    // Every document is matched by its own URL, frames included (as Stylus does).
+    allFrames: true,
   }));
   // Per-tab emulation (page/emulation.ts): inert unless a tab opts in with
   // its marker, and the runtime only runs where one does.
   wanted.push(
-    { id: "scheme:main", matches: ["<all_urls>"], js: [{ code: ATELIER_PAGE_MAIN }], runAt: "document_start", world: "MAIN" },
-    { id: "scheme:styles", matches: ["<all_urls>"], js: [{ code: emulationStub }], runAt: "document_start", world: "USER_SCRIPT" },
+    { id: "scheme:main", matches: ["<all_urls>"], js: [{ code: ATELIER_PAGE_MAIN }], runAt: "document_start", world: "MAIN", allFrames: true },
+    { id: "scheme:styles", matches: ["<all_urls>"], js: [{ code: emulationStub }], runAt: "document_start", world: "USER_SCRIPT", allFrames: true },
     // Tabs bound to a task's tree (SPEC §6.2), on pages the owned directory
     // has no style for: inert unless the page carries the binding marker.
-    { id: "bound:shim", matches: ["<all_urls>"], js: [{ code: boundStub }], runAt: "document_start", world: "USER_SCRIPT" },
+    { id: "bound:shim", matches: ["<all_urls>"], js: [{ code: boundStub }], runAt: "document_start", world: "USER_SCRIPT", allFrames: true },
   );
   const existing = new Map((await us.getScripts()).map((s) => [s.id, s]));
   const wantedIds = new Set(wanted.map((s) => s.id));
@@ -331,20 +333,24 @@ const emulationStub = `(() => {
 async function injectIntoOpenTabs(bundle: Bundle) {
   const us = userScripts();
   if (!us) return;
-  const withShim = new Set([...shimPorts].map((p) => p.sender?.tab?.id));
+  const withShim = new Set([...shimPorts].map((p) => `${p.sender?.tab?.id}/${p.sender?.frameId ?? 0}`));
   for (const tab of await browser.tabs.query({})) {
-    if (tab.id === undefined || withShim.has(tab.id) || bindings.has(tab.id) || !tab.url || !/^(https?|file):/.test(tab.url)) continue;
-    const url = tab.url;
-    const styles = bundle.styles.filter((s) => cssFor(s, url) !== null);
-    if (styles.length === 0) continue;
-    try {
-      await us.execute({
-        target: { tabId: tab.id },
-        js: [{ code: ATELIER_PAGE }, ...styles.map((s) => ({ code: `__atelierPage.shim.add(${JSON.stringify(s)});` }))],
-      });
-    } catch (e) {
-      // Restricted pages (e.g. addons.mozilla.org) refuse injection.
-      console.debug(`atelier: couldn't inject into tab ${tab.id}:`, e);
+    if (tab.id === undefined || bindings.has(tab.id)) continue;
+    // Each document, frames included, by its own URL.
+    const frames = (await browser.webNavigation.getAllFrames({ tabId: tab.id }).catch(() => null)) ?? [];
+    for (const frame of frames) {
+      if (withShim.has(`${tab.id}/${frame.frameId}`) || !/^(https?|file):/.test(frame.url)) continue;
+      const styles = bundle.styles.filter((s) => cssFor(s, frame.url) !== null);
+      if (styles.length === 0) continue;
+      try {
+        await us.execute({
+          target: { tabId: tab.id, frameIds: [frame.frameId] },
+          js: [{ code: ATELIER_PAGE }, ...styles.map((s) => ({ code: `__atelierPage.shim.add(${JSON.stringify(s)});` }))],
+        });
+      } catch (e) {
+        // Restricted pages (e.g. addons.mozilla.org) refuse injection.
+        console.debug(`atelier: couldn't inject into tab ${tab.id} frame ${frame.frameId}:`, e);
+      }
     }
   }
 }
@@ -402,9 +408,8 @@ function onUserScriptRequest(msg: unknown, sender: browser.runtime.MessageSender
 }
 
 function notifyUrlChange(details: { tabId: number; frameId: number }) {
-  if (details.frameId !== 0) return;
   for (const port of shimPorts) {
-    if (port.sender?.tab?.id === details.tabId) port.postMessage({ type: "url" });
+    if (port.sender?.tab?.id === details.tabId && (port.sender?.frameId ?? 0) === details.frameId) port.postMessage({ type: "url" });
   }
 }
 
@@ -419,9 +424,9 @@ browser.webNavigation.onReferenceFragmentUpdated.addListener(notifyUrlChange);
 // A second injection finds the runtime and shim already there.
 for (const event of [browser.webNavigation.onCommitted, browser.webNavigation.onDOMContentLoaded]) {
   event.addListener((details) => {
-    if (details.frameId !== 0) return;
+    // Frames too: they show the tab's task's styles, by their own URLs.
     void bindingsLoaded.then(() => {
-      if (bindings.has(details.tabId)) void ensureShim(details.tabId);
+      if (bindings.has(details.tabId)) void ensureShim(details.tabId, details.frameId);
     });
   });
 }

@@ -225,12 +225,12 @@ async function schemeGaps(tabId: number): Promise<{ frames?: number; svgImages?:
   }
   if (!gaps.frames && !adaptive.length) return null;
   const parts: string[] = [];
-  if (gaps.frames) parts.push(`${gaps.frames} frame(s) (iframes keep the browser's real scheme)`);
+  if (gaps.frames) parts.push(`${gaps.frames} frame(s) from other origins (emulated as they load, so scripts that run first in them may see the real scheme)`);
   if (adaptive.length) parts.push(`${adaptive.length} SVG image(s) with their own prefers-color-scheme rules, which follow the browser's real setting`);
   return {
     ...(gaps.frames ? { frames: gaps.frames } : {}),
     ...(adaptive.length ? { svgImages: adaptive.slice(0, 5) } : {}),
-    note: `Not emulated on this page: ${parts.join("; ")}. They show the user's actual scheme, not the emulated one; judge them by another means, or say what you couldn't check.`,
+    note: `Not fully emulated on this page: ${parts.join("; ")}. Parts of them may show the user's actual scheme, not the emulated one; judge them by another means, or say what you couldn't check.`,
   };
 }
 
@@ -247,10 +247,13 @@ browser.webNavigation.onCommitted.addListener(async (d) => {
   await loaded;
   const features = agentTabs.features(d.tabId);
   const us = userScripts();
-  if (d.frameId !== 0 || !features || !us) return;
+  if (!features || !us) return;
+  // Frames too: a same-origin frame sees the marker itself, but one from
+  // another origin has storage of its own, so its first load gets it here
+  // (emulation.ts keeps only the colour scheme in a frame).
   void us
     .execute({
-      target: { tabId: d.tabId },
+      target: { tabId: d.tabId, frameIds: [d.frameId] },
       injectImmediately: true,
       js: [{ code: `${markerCode(features)}\n${ATELIER_PAGE}\n__atelierPage.emulation.start();` }],
     })

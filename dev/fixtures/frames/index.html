@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Frames, for styles inside them (each document is matched by its own
+       URL, as Stylus does): the same page framed from this origin and from
+       another. -->
+  <title>frames fixture</title>
+  <style>iframe { width: 300px; height: 80px; border: 1px solid #888; }</style>
+</head>
+<body>
+  <p id="outer">The page around the frames</p>
+  <iframe id="same" src="frame.html"></iframe>
+  <iframe id="cross" src="{{ALT_ORIGIN}}/frames/frame.html"></iframe>
+  <iframe id="full" src="frame.html" style="width: 100%"></iframe>
+</body>
+</html>

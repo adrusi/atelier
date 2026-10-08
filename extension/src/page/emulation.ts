@@ -14,15 +14,25 @@
 
 import * as core from "./core";
 import { EMULATION_MARKER } from "./markers";
-import { type Features, mentions, rewriteMedia, rewriteMediaInCss } from "./media";
+import { type Features, forThisFrame, mentions, rewriteMedia, rewriteMediaInCss } from "./media";
 
 export type { Features };
 
-/** The features the tab's marker asks for, if any. */
+/** Whether this document is in a frame. */
+const inFrame = () => {
+  try {
+    return window.top !== window;
+  } catch {
+    return true;
+  }
+};
+
+/** The features the tab's marker asks this document to emulate, if any
+ * (in a frame, only the colour scheme: forThisFrame). */
 export function fromMarker(): Features | null {
   try {
     const f = JSON.parse(sessionStorage.getItem(EMULATION_MARKER) ?? "null") as Features | null;
-    return f && typeof f === "object" && Object.keys(f).length ? f : null;
+    return forThisFrame(f && typeof f === "object" && Object.keys(f).length ? f : null, inFrame());
   } catch {
     return null;
   }
@@ -97,7 +107,7 @@ export function start() {
   // shouldn't be emulating this (a copy of an agent tab) drops it and reloads.
   void (browser.runtime.sendMessage({ type: "emulation" }) as Promise<Features | null>).then(
     (wanted) => {
-      if (canonical(wanted) === canonical(features)) return;
+      if (canonical(forThisFrame(wanted, inFrame())) === canonical(features)) return;
       try {
         if (wanted) sessionStorage.setItem(EMULATION_MARKER, JSON.stringify(wanted));
         else sessionStorage.removeItem(EMULATION_MARKER);

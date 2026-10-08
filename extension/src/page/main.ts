@@ -6,7 +6,7 @@
 // it runs in the page's own world on every page; it reads the same marker.
 
 import { EMULATION_MARKER } from "./markers";
-import { type Features, mentions, rewriteMedia } from "./media";
+import { type Features, forThisFrame, mentions, rewriteMedia } from "./media";
 
 let features: Features | null = null;
 try {
@@ -14,7 +14,14 @@ try {
 } catch {
   // Storage blocked, or no marker: nothing to emulate.
 }
-if (features && typeof features === "object") {
+let framed = true;
+try {
+  framed = window.top !== window;
+} catch {
+  // A cross-origin parent: a frame.
+}
+features = forThisFrame(features && typeof features === "object" ? features : null, framed);
+if (features) {
   const f = features;
   const original = window.matchMedia.bind(window);
   window.matchMedia = (query: string) => original(mentions(query, f) ? rewriteMedia(query, f) : query);

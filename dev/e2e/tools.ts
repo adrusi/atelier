@@ -377,7 +377,7 @@ try {
     assert.match(r.notEmulated?.svgImages?.[0] ?? "", /adaptive\.svg$/, JSON.stringify(r));
     const shot = await rpc("tools/call", { name: "screenshot", arguments: { tab: gaps } });
     const text = shot.result.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
-    assert.match(text, /Not emulated on this page: 1 frame/, text);
+    assert.match(text, /Not fully emulated on this page: 1 frame\(s\) from other origins/, text);
     await tool("tab_close", { tab: gaps });
     // The color-scheme fixture's SVG images don't carry scheme rules: nothing to say.
     const { tab: clean } = await tool("tab_open", { url: fixture.replace("/tokens/", "/color-scheme/") });

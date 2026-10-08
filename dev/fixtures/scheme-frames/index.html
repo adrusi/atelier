@@ -2,10 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <!-- Known gaps in atelier's colour-scheme emulation (SPEC §10): frames,
-       and SVG images with their own scheme rules, aren't emulated. The
-       fidelity harness should see those two differ while the page around
-       them matches (dev/e2e/fidelity.ts). -->
+  <!-- Frames (from this origin and another), which colour-scheme
+       emulation reaches, and SVG images with their own scheme rules, which
+       it doesn't (SPEC §10): the fidelity harness should see the image
+       differ while the rest matches (dev/e2e/fidelity.ts). -->
   <title>scheme-frames fixture</title>
   <style>
     @media (prefers-color-scheme: dark) { body { background: rgb(20, 20, 30); color: rgb(230, 230, 230); } }
@@ -15,6 +15,7 @@
 <body>
   <p>The page around the frame</p>
   <iframe src="frame.html"></iframe>
+  <iframe src="{{ALT_ORIGIN}}/scheme-frames/frame.html"></iframe>
   <p>An SVG image with its own scheme rules: <img src="adaptive.svg" alt="" width="40" height="40"></p>
 </body>
 </html>

@@ -4,8 +4,8 @@
 // emulation, in both directions, and at real viewport sizes and atelier's
 // emulation of them, and they must match. Two controls keep the
 // harness honest: without emulation it must see differences, and the known
-// gaps (frames, SVG images with their own scheme rules) must still show, so
-// fixing one is noticed and this test updated.
+// gap (SVG images with their own scheme rules) must still show, so fixing
+// it is noticed and this test updated.
 //
 // Build first (`cargo build`, `(cd extension && npm run build)`), then from a
 // `nix develop` shell:  node dev/e2e/fidelity.ts
@@ -70,7 +70,7 @@ await withInstance("light", async (name, fixture) => {
   await check("viewport emulation matches a real viewport, at phone, tablet and wide sizes", async () => {
     const sizes = [{ width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1600, height: 900 }];
     for (const size of sizes) {
-      for (const f of ["/responsive/", "/responsive-gaps/", "/responsive-gaps/long.html"]) {
+      for (const f of ["/responsive/", "/responsive-gaps/", "/responsive-gaps/long.html", "/frames/"]) {
         const r = await compare(name, fixture(f), { feature: "viewport", ...size });
         assert.ok(isClean(r), summarize(r));
       }
@@ -93,12 +93,12 @@ await withInstance("light", async (name, fixture) => {
     assert.ok(r.geometry.resized > 10, summarize(r));
   });
 
-  await check("the known gaps still show: frames, and SVG images with their own scheme rules", async () => {
+  await check("frames from this origin and another are emulated; the known gap (SVG images with their own scheme rules) still shows", async () => {
     const r = await compare(name, fixture("/scheme-frames/"), dark);
-    assert.equal(r.elements.frames, 1, summarize(r));
+    assert.equal(r.elements.frames, 2, summarize(r));
     assert.deepEqual(r.styles, [], "the page around them matches");
     const where = r.pixels.in.map((p) => p.element).join(" ");
-    assert.match(where, /iframe/, summarize(r));
+    assert.doesNotMatch(where, /iframe/, summarize(r));
     assert.match(where, /img/, summarize(r));
   });
 });
