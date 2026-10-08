@@ -42,8 +42,10 @@ export function pageState(): { visibility: string; width: number; height: number
 
 /** The element's box in document coordinates, or null if nothing matches. */
 export function rectOf(selector: string): { x: number; y: number; width: number; height: number } | null {
-  const el = ((globalThis as any).__atelierQuery as (s: string, all: boolean) => Element[])(selector, false)[0] ?? null;
-  if (!el) return null;
+  const all = ((globalThis as any).__atelierQuery as (s: string, all: boolean) => Element[])(selector, true);
+  if (!all.length) return null;
+  // The first match that's actually showing: pages often keep hidden copies (templates, other breakpoints).
+  const el = all.find((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; }) ?? all[0];
   const r = el.getBoundingClientRect();
   return { x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height };
 }
@@ -492,9 +494,11 @@ export function contrast(minRatio: number, limit: number) {
     getComputedStyle(document.documentElement).colorScheme.includes("dark")
     ? { r: 28, g: 27, b: 34, a: 1 }
     : { r: 255, g: 255, b: 255, a: 1 };
+  // Up the tree, across shadow boundaries: from the top of a shadow tree to its host.
+  const up = (e: Element): Element | null => e.parentElement ?? ((e.getRootNode() as ShadowRoot).host ?? null);
   const background = (el: Element): RGBA | null => {
     const layers: RGBA[] = [];
-    for (let e: Element | null = el; e; e = e.parentElement) {
+    for (let e: Element | null = el; e; e = up(e)) {
       const cs = getComputedStyle(e);
       if (cs.backgroundImage !== "none") return null;
       const bg = parse(cs.backgroundColor);
@@ -513,7 +517,9 @@ export function contrast(minRatio: number, limit: number) {
       for (const c of [...e.classList].slice(0, 2)) p += `.${c}`;
       parts.unshift(p);
     }
-    return parts.join(" > ");
+    const root = el.getRootNode();
+    const host = root instanceof ShadowRoot ? `${root.host.tagName.toLowerCase()} >>> ` : "";
+    return host + parts.join(" > ");
   };
 
   const seen = new Set<Element>();
@@ -521,42 +527,55 @@ export function contrast(minRatio: number, limit: number) {
   let checked = 0;
   let unknown = 0;
   let disabled = 0;
-  const walker = document.createTreeWalker(document.body ?? document.documentElement, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const el = node.parentElement;
-    if (!el || seen.has(el) || !node.textContent?.trim()) continue;
-    seen.add(el);
-    const cs = getComputedStyle(el);
-    if (cs.visibility !== "visible" || !el.getClientRects().length) continue;
-    // WCAG exempts disabled controls; sites dim them on purpose.
-    if (el.closest(':disabled, [aria-disabled="true"]')) {
-      disabled++;
-      continue;
+  // The page's text, and the text in open shadow roots (web components).
+  const roots: Node[] = [document.body ?? document.documentElement];
+  const collect = (r: ParentNode) => {
+    for (const e of r.querySelectorAll("*")) {
+      if (e.shadowRoot) {
+        roots.push(e.shadowRoot);
+        collect(e.shadowRoot);
+      }
     }
-    checked++;
-    const bg = background(el);
-    if (!bg) {
-      unknown++;
-      continue;
-    }
-    const fg = parse(cs.color);
-    if (!fg) continue;
-    const text = over(fg, bg);
-    const [hi, lo] = [lum(text), lum(bg)].sort((a, b) => b - a);
-    const ratio = (hi + 0.05) / (lo + 0.05);
-    const size = parseFloat(cs.fontSize);
-    const bold = Number(cs.fontWeight) >= 700;
-    const threshold = size >= 24 || (bold && size >= 18.66) ? Math.min(3, minRatio) : minRatio;
-    if (ratio < threshold) {
-      failures.push({
-        element: describe(el),
-        text: node.textContent.trim().slice(0, 60),
-        color: hex(text),
-        background: hex(bg),
-        ratio: Math.round(ratio * 100) / 100,
-        fontSize: cs.fontSize,
-        fontWeight: cs.fontWeight,
-      });
+  };
+  collect(document);
+  for (const root of roots) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const el = node.parentElement;
+      if (!el || seen.has(el) || !node.textContent?.trim()) continue;
+      seen.add(el);
+      const cs = getComputedStyle(el);
+      if (cs.visibility !== "visible" || !el.getClientRects().length) continue;
+      // WCAG exempts disabled controls; sites dim them on purpose.
+      if (el.closest(':disabled, [aria-disabled="true"]')) {
+        disabled++;
+        continue;
+      }
+      checked++;
+      const bg = background(el);
+      if (!bg) {
+        unknown++;
+        continue;
+      }
+      const fg = parse(cs.color);
+      if (!fg) continue;
+      const text = over(fg, bg);
+      const [hi, lo] = [lum(text), lum(bg)].sort((a, b) => b - a);
+      const ratio = (hi + 0.05) / (lo + 0.05);
+      const size = parseFloat(cs.fontSize);
+      const bold = Number(cs.fontWeight) >= 700;
+      const threshold = size >= 24 || (bold && size >= 18.66) ? Math.min(3, minRatio) : minRatio;
+      if (ratio < threshold) {
+        failures.push({
+          element: describe(el),
+          text: node.textContent.trim().slice(0, 60),
+          color: hex(text),
+          background: hex(bg),
+          ratio: Math.round(ratio * 100) / 100,
+          fontSize: cs.fontSize,
+          fontWeight: cs.fontWeight,
+        });
+      }
     }
   }
   failures.sort((a: any, b: any) => a.ratio - b.ratio);

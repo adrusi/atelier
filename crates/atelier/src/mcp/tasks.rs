@@ -1123,7 +1123,9 @@ the user's hooks.\n\
 - When a limit of atelier or the browser stops you (a part of the page your styles can't reach, a tool \
 that can't see something), that's a limit to fix, not a decision about the look: say so in your summary \
 and notes.md, and in feedback on the tools, rather than proposing it for THEME.md or quietly lowering \
-the bar.\n\n\
+the bar. In notes, mark it as a limit, with the date (\"Limit, as of 2026-10: …\"), and the other way \
+round, treat limits you find recorded in notes as possibly lifted since: atelier changes (it can now \
+style inside open shadow roots, for one), so check before relying on one.\n\n\
 For a this-or-that question about part of a style, show the user both. Quickest: screenshots of each \
 (screenshot's extraCss shows a variant without editing files; attach: true saves it for task_ask). \
 Better, when the choice matters: mark the part in the style file with the comments \

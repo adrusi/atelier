@@ -288,6 +288,9 @@ try {
     assert.equal(inner["outline-color"], "rgb(1, 2, 3)", JSON.stringify(inner));
     const why = await tool("matched_rules", { tab: cards, selector: "x-widget >>> .inner", property: "outline-color" });
     assert.ok(why.rules.some((x: any) => x.sheet === "atelier: shadow"), JSON.stringify(why));
+    // contrast_scan reads text inside shadow roots, against the backgrounds outside.
+    const contrast = await tool("contrast_scan", { tab: cards });
+    assert.ok(contrast.failures.some((x: any) => x.element.startsWith("x-widget >>> ") && x.text === "faint text"), JSON.stringify(contrast.failures));
     // type_text reaches a text field inside a web component's shadow root.
     const typed = await tool("type_text", { tab: cards, selector: "x-widget", text: "grid" });
     assert.deepEqual([typed.value, typed.inShadowRootOf], ["grid", "x-widget"]);
