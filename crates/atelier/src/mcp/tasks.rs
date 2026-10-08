@@ -909,7 +909,11 @@ fn brief(
          url(), url-prefix(), domain() and regexp() (a JavaScript regular expression for the whole URL). Every \
          file in the folder is loaded, in name order. It's plain CSS as Firefox reads it, so nesting works; there's \
          no preprocessor. Remote url()s are refused, except Google Fonts, since a stylesheet can leak what's on \
-         the page through the URLs it loads.\n\
+         the page through the URLs it loads. Web components keep their insides in shadow roots, which page \
+         CSS can't reach: inside a section, `@shadow <host selector> {{ … }}` holds CSS that goes into the open \
+         shadow root of every element matching the selector, wherever it is. To look inside one, the page \
+         tools take selectors like `mdn-code-example >>> .token` (the part after >>> is looked for in the \
+         host's shadow root; chainable). Closed shadow roots can't be reached.\n\
          - services/<service>/service.toml: `description` (the site, in a few words), `summary` (what the \
          styles cover, for the user), and `[[prerequisites]]` for site settings a style depends on: \
          `description` (what the user should set, in their terms) and `check` (a CSS selector that matches \

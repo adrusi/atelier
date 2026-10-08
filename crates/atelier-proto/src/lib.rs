@@ -224,6 +224,21 @@ pub struct CompiledSection {
     /// Empty means the section applies everywhere the style does.
     pub matchers: Vec<Matcher>,
     pub css: String,
+    /// CSS for shadow roots (`@shadow host { … }` blocks), which page CSS
+    /// can't reach: the shim puts it into the open shadow root of every
+    /// element matching `host`, wherever it is.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(as = "Option<Vec<ShadowCss>>", optional)]
+    pub shadow: Vec<ShadowCss>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ShadowCss {
+    /// A selector for the shadow hosts.
+    pub host: String,
+    pub css: String,
 }
 
 /// An `@-moz-document` matcher (SPEC §5.3).

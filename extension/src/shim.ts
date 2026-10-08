@@ -18,7 +18,7 @@
 // and pages can clear it, so whenever the shim connects the background also
 // sends the styles for the tab's actual source, and those always win.
 
-import { cssFor, locksDarkReader } from "./matching";
+import { cssFor, locksDarkReader, shadowFor } from "./matching";
 import type { CompiledStyle } from "./proto/CompiledStyle";
 
 type Message = { type: "bundle"; styles: CompiledStyle[] } | { type: "url" } | { type: "bind"; source: string | null };
@@ -112,6 +112,7 @@ class Shim {
     if (lock) this.addLock();
     this.keepLast();
     this.observe();
+    this.renderShadow(href);
     // Sites often set the classes a check looks for from scripts in <head>,
     // so check once the document has been parsed.
     if (document.readyState === "loading") {
@@ -120,6 +121,97 @@ class Shim {
       this.checkPrerequisites();
     }
   }
+
+// -------------------------------------------------------------------------
+  // Shadow roots (SPEC §6.1): page CSS can't reach inside a web component's
+  // shadow root, so `@shadow host { … }` blocks go into the open shadow root
+  // of each element matching `host`, wherever it is (in the page, or inside
+  // another shadow root), as a <style> kept last there.
+
+  private shadowBlocks: { host: string; css: string; id: string }[] = [];
+  private shadowStyles = new Map<ShadowRoot, HTMLStyleElement>();
+  private shadowObservers = new WeakSet<Node>();
+  private shadowPending = false;
+  private shadowWatching = false;
+
+  private renderShadow(href: string) {
+    this.shadowBlocks = this.order.flatMap((id) => shadowFor(this.styles.get(id)!, href).map((b) => ({ ...b, id })));
+    if (this.shadowBlocks.length && !this.shadowWatching) {
+      this.shadowWatching = true;
+      // Components often attach their shadow roots when their element is
+      // defined, which changes nothing in the page that an observer would see.
+      for (const b of this.shadowBlocks) {
+        for (const tag of b.host.match(/^[a-z][a-z0-9]*-[a-z0-9-]*$/) ?? []) {
+          customElements.whenDefined(tag).then(() => this.scheduleShadow(), () => {});
+        }
+      }
+      document.addEventListener("DOMContentLoaded", () => this.scheduleShadow(), { once: true });
+      addEventListener("load", () => this.scheduleShadow(), { once: true });
+    }
+    this.applyShadow();
+  }
+
+  /** Once per batch of changes. A microtask, not a timer: background tabs
+   * (agent tabs among them) throttle timers to a second or more. */
+  private scheduleShadow() {
+    if (this.shadowPending) return;
+    this.shadowPending = true;
+    queueMicrotask(() => {
+      this.shadowPending = false;
+      this.applyShadow();
+    });
+  }
+
+  private applyShadow() {
+    if (!this.shadowBlocks.length && !this.shadowStyles.size) return;
+    const wanted = new Map<ShadowRoot, string[]>();
+    const visit = (root: Document | ShadowRoot) => {
+      this.watch(root);
+      for (const b of this.shadowBlocks) {
+        let hosts: Element[] = [];
+        try {
+          hosts = [...root.querySelectorAll(b.host)];
+        } catch {
+          // An invalid selector matches nothing.
+        }
+        for (const host of hosts) {
+          if (!host.shadowRoot) continue;
+          const list = wanted.get(host.shadowRoot) ?? [];
+          if (!list.includes(b.css)) list.push(b.css);
+          wanted.set(host.shadowRoot, list);
+        }
+      }
+      for (const el of root.querySelectorAll("*")) if (el.shadowRoot) visit(el.shadowRoot);
+    };
+    visit(document);
+    for (const [root, css] of wanted) {
+      let el = this.shadowStyles.get(root);
+      if (!el) {
+        el = document.createElement("style");
+        el.setAttribute("data-atelier", "shadow");
+        this.shadowStyles.set(root, el);
+      }
+      const text = css.join("\n");
+      if (el.textContent !== text) el.textContent = text;
+      if (root.lastElementChild !== el) root.append(el);
+    }
+    for (const [root, el] of this.shadowStyles) {
+      if (!wanted.has(root)) {
+        el.remove();
+        this.shadowStyles.delete(root);
+      }
+    }
+  }
+
+  /** Rescans when a root's content changes: new hosts, or our style removed. */
+  private watch(root: Document | ShadowRoot) {
+    if (this.shadowObservers.has(root)) return;
+    this.shadowObservers.add(root);
+    new MutationObserver(() => {
+      if (this.shadowBlocks.length) this.scheduleShadow();
+    }).observe(root instanceof Document ? root.documentElement : root, { childList: true, subtree: true });
+  }
+
 
   /** Tells the background which applying styles' prerequisites aren't met
    * here (SPEC §5.2), so the user hears about it rather than seeing a style

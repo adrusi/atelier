@@ -42,7 +42,7 @@ export function pageState(): { visibility: string; width: number; height: number
 
 /** The element's box in document coordinates, or null if nothing matches. */
 export function rectOf(selector: string): { x: number; y: number; width: number; height: number } | null {
-  const el = document.querySelector(selector);
+  const el = ((globalThis as any).__atelierQuery as (s: string, all: boolean) => Element[])(selector, false)[0] ?? null;
   if (!el) return null;
   const r = el.getBoundingClientRect();
   return { x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height };
@@ -59,7 +59,7 @@ export function query(selector: string, limit: number, maxLength: number) {
     }
     return parts.join(" > ");
   };
-  const els = [...document.querySelectorAll(selector)];
+  const els = ((globalThis as any).__atelierQuery as (s: string, all: boolean) => Element[])(selector, true);
   return {
     count: els.length,
     elements: els.slice(0, limit).map((el) => {
@@ -70,7 +70,7 @@ export function query(selector: string, limit: number, maxLength: number) {
 }
 
 export function computed(selector: string, properties: string[] | null) {
-  const el = document.querySelector(selector);
+  const el = ((globalThis as any).__atelierQuery as (s: string, all: boolean) => Element[])(selector, false)[0] ?? null;
   if (!el) return null;
   const cs = getComputedStyle(el);
   const props = properties?.length
@@ -250,7 +250,7 @@ export function matchedRules(selector: string, property: string | null, limit: n
       return null;
     }
   };
-  const el = document.querySelector(selector);
+  const el = ((globalThis as any).__atelierQuery as (s: string, all: boolean) => Element[])(selector, false)[0] ?? null;
   if (!el) return null;
 
   const splitTop = (s: string): string[] => {
@@ -403,7 +403,9 @@ export function matchedRules(selector: string, property: string | null, limit: n
       }
     }
   };
-  for (const s of [...document.styleSheets, ...document.adoptedStyleSheets]) {
+  // An element inside a shadow root is styled by that root's sheets, not the page's.
+  const home = el.getRootNode() as Document | ShadowRoot;
+  for (const s of [...home.styleSheets, ...home.adoptedStyleSheets]) {
     const owner = s.ownerNode as Element | null;
     const atelier = owner?.getAttribute?.("data-atelier");
     const forced = owner?.getAttribute?.("data-atelier-force");
@@ -576,7 +578,7 @@ export function forceState(selector: string, states: string[]) {
   if (!states.length) return { cleared: true };
   const unknown = states.filter((s) => !KNOWN.includes(s));
   if (unknown.length) return { error: `unknown states: ${unknown.join(", ")}; known: ${KNOWN.join(", ")}` };
-  const el = document.querySelector(selector);
+  const el = ((globalThis as any).__atelierQuery as (s: string, all: boolean) => Element[])(selector, false)[0] ?? null;
   if (!el) return null;
 
   const pattern = new RegExp(`:(${states.map((s) => s.replace(/-/g, "\\-")).join("|")})(?![\\w-])`, "g");
@@ -639,7 +641,7 @@ export async function imagesReady(timeoutMs: number) {
 export async function waitForSelector(selector: string, timeoutMs: number) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (document.querySelector(selector)) return true;
+    if (((globalThis as any).__atelierQuery as (s: string, all: boolean) => Element[])(selector, false).length) return true;
     await new Promise((r) => setTimeout(r, 100));
   }
   return false;
@@ -781,3 +783,18 @@ export function unreadableSheets(): { href: string; media: string }[] {
   return out;
 }
 
+
+/** Elements matching a selector. `host >>> inner` (chainable) looks for
+ * `inner` inside the open shadow root of each `host`. Installed as
+ * globalThis.__atelierQuery before each page function runs (tools.ts). */
+export function deepQuery(selector: string, all: boolean): Element[] {
+  const parts = selector.split(">>>").map((p) => p.trim());
+  let scopes: (Document | ShadowRoot)[] = [document];
+  for (let i = 0; i < parts.length; i++) {
+    const found: Element[] = [];
+    for (const scope of scopes) found.push(...scope.querySelectorAll(parts[i]));
+    if (i === parts.length - 1) return all ? found : found.slice(0, 1);
+    scopes = found.map((e) => e.shadowRoot).filter((r): r is ShadowRoot => r !== null);
+  }
+  return [];
+}

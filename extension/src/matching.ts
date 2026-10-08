@@ -54,3 +54,8 @@ export function cssFor(style: CompiledStyle, href: string): string | null {
 export function locksDarkReader(style: CompiledStyle, href: string): boolean {
   return style.darkReaderLock && style.sections.some((s) => s.matchers.length > 0 && sectionApplies(s, href));
 }
+
+/** A style's CSS for shadow roots on this page (`@shadow` blocks). */
+export function shadowFor(style: CompiledStyle, href: string): { host: string; css: string }[] {
+  return style.sections.filter((s) => sectionApplies(s, href)).flatMap((s) => s.shadow ?? []);
+}

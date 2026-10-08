@@ -47,6 +47,15 @@ pub enum VarKind {
 pub struct Section {
     pub matchers: Vec<Matcher>,
     pub css: String,
+    /// CSS for shadow roots, from `@shadow` blocks (taken out of `css`).
+    pub shadow: Vec<Shadow>,
+}
+
+/// CSS for the open shadow roots of the elements matching `host`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Shadow {
+    pub host: String,
+    pub css: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -125,9 +134,11 @@ pub fn parse(source: &str) -> Result<UserStyle, ParseError> {
         }
 
         global.push_str(&strip_range(source, copied_to, at, &meta_range));
+        let (css, shadow) = extract_shadow(&source[open + 1..close], source, Some(open + 1))?;
         sections.push(Section {
             matchers,
-            css: source[open + 1..close].trim().to_string(),
+            css,
+            shadow,
         });
         copied_to = close + 1;
         scanner.seek(close + 1);
@@ -135,15 +146,71 @@ pub fn parse(source: &str) -> Result<UserStyle, ParseError> {
     global.push_str(&strip_range(source, copied_to, source.len(), &meta_range));
 
     if !is_blank_css(&global) {
+        let (css, shadow) = extract_shadow(&global, source, None)?;
         sections.insert(
             0,
             Section {
                 matchers: Vec::new(),
-                css: global.trim().to_string(),
+                css,
+                shadow,
             },
         );
     }
     Ok(UserStyle { meta, sections })
+}
+
+/// Takes the `@shadow <host selector> { … }` blocks out of a section's CSS
+/// (SPEC §6.1): CSS for the shadow roots of the elements matching the
+/// selector, which page CSS can't reach. Returns the rest of the CSS and the
+/// blocks. `base` is where `css` starts in `source`, for error lines.
+fn extract_shadow(
+    css: &str,
+    source: &str,
+    base: Option<usize>,
+) -> Result<(String, Vec<Shadow>), ParseError> {
+    let err = |at: usize, message: &str| match base {
+        Some(b) => error(source, b + at, message),
+        None => ParseError {
+            message: message.to_string(),
+            line: None,
+        },
+    };
+    let mut rest = String::new();
+    let mut blocks = Vec::new();
+    let mut scanner = Scanner::new(css);
+    let mut copied_to = 0;
+    while let Some(at) = scanner.next_top_level_at_rule() {
+        let keyword_end = at
+            + scanner
+                .rest_from(at)
+                .find([' ', '\t', '\n', '{'])
+                .unwrap_or(0);
+        if !css[at..keyword_end].eq_ignore_ascii_case("@shadow") {
+            continue;
+        }
+        let open = scanner
+            .find_top_level_brace(keyword_end)
+            .ok_or_else(|| err(at, "`@shadow` needs a host selector and a `{` block"))?;
+        let close = scanner
+            .find_matching_brace(open)
+            .ok_or_else(|| err(open, "unclosed `@shadow` block"))?;
+        let host = css[keyword_end..open].trim();
+        if host.is_empty() {
+            return Err(err(
+                at,
+                "`@shadow` needs the selector of the element whose shadow root it styles, e.g. `@shadow mdn-code-example { … }`",
+            ));
+        }
+        rest.push_str(&css[copied_to..at]);
+        blocks.push(Shadow {
+            host: host.to_string(),
+            css: css[open + 1..close].trim().to_string(),
+        });
+        copied_to = close + 1;
+        scanner.seek(close + 1);
+    }
+    rest.push_str(&css[copied_to..]);
+    Ok((rest.trim().to_string(), blocks))
 }
 
 /// `source[from..to]`, minus the metadata comment if it falls inside.
@@ -735,6 +802,31 @@ mod tests {
             [Matcher::Regexp(r"https://(www\.)?example\.net/.*".into())]
         );
         assert!(style.sections[2].css.starts_with("@media"));
+    }
+
+    #[test]
+    fn shadow_blocks_come_out_of_the_section_css() {
+        let style = parse(
+            "@-moz-document domain(\"example.com\") {\n  p { color: red; }\n  @shadow x-card, x-panel > x-inner {\n    .box { border-radius: 0; }\n  }\n  a { color: blue; }\n}\n",
+        )
+        .unwrap();
+        let s = &style.sections[0];
+        assert!(
+            !s.css.contains("@shadow")
+                && s.css.contains("p { color: red; }")
+                && s.css.contains("a { color: blue; }")
+        );
+        assert_eq!(
+            s.shadow,
+            [Shadow {
+                host: "x-card, x-panel > x-inner".into(),
+                css: ".box { border-radius: 0; }".into()
+            }]
+        );
+        let bad =
+            parse("@-moz-document domain(\"a.example\") {\n\n  @shadow { p {} }\n}\n").unwrap_err();
+        assert_eq!(bad.line, Some(3));
+        assert!(bad.message.contains("needs the selector"));
     }
 
     #[test]

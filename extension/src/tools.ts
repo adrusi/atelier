@@ -126,7 +126,7 @@ async function run(tabId: number, code: string): Promise<unknown> {
 
 /** Calls one of pagefns.ts in the page with JSON arguments. */
 const call = (tabId: number, fn: (...args: any[]) => unknown, ...args: unknown[]) =>
-  run(tabId, `(${fn})(...${JSON.stringify(args)})`);
+  run(tabId, `globalThis.__atelierQuery = ${page.deepQuery};\n(${fn})(...${JSON.stringify(args)})`);
 
 function describeTab(tab: browser.tabs.Tab, ctx: ToolContext) {
   const task = ctx.sourceOf(tab.id!);

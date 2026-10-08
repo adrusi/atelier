@@ -21,7 +21,7 @@ fs.writeFileSync(path.join(owned, "atelier.toml"), 'theme = "e2e"\n');
 // A style for the fixture, so matched_rules and styles_status have something of ours to see.
 fs.writeFileSync(
   path.join(owned, "services/fixtures/e2e/tokens.user.css"),
-  `/* ==UserStyle==\n@name tokens fixture\n==/UserStyle== */\n@-moz-document url-prefix("http://127.0.0.1:") {\n  .note { font-weight: 600; & a.button { letter-spacing: 1px; } }\n}\n`,
+  `/* ==UserStyle==\n@name tokens fixture\n==/UserStyle== */\n@-moz-document url-prefix("http://127.0.0.1:") {\n  .note { font-weight: 600; & a.button { letter-spacing: 1px; } }\n  @shadow x-widget { .inner { outline: 2px solid rgb(1, 2, 3); } }\n}\n`,
 );
 
 // One prerequisite the fixture meets, one it doesn't.
@@ -283,6 +283,11 @@ try {
     assert.ok(r.probablyRoundByNature.some((g: any) => g.selector === "span.avatar"));
     assert.ok(!r.controls.some((g: any) => g.selector === "button.ghost"), "a transparent border isn't a frame");
     assert.ok(r.boxes.some((g: any) => g.selector === "x-widget › div.inner" && g.features.includes("rounded 6px")), JSON.stringify(r.boxes));
+    // @shadow styles reach inside the component, and the tools follow with >>>.
+    const inner = await tool("computed_style", { tab: cards, selector: "x-widget >>> .inner", properties: ["outline-color"] });
+    assert.equal(inner["outline-color"], "rgb(1, 2, 3)", JSON.stringify(inner));
+    const why = await tool("matched_rules", { tab: cards, selector: "x-widget >>> .inner", property: "outline-color" });
+    assert.ok(why.rules.some((x: any) => x.sheet === "atelier: shadow"), JSON.stringify(why));
     // type_text reaches a text field inside a web component's shadow root.
     const typed = await tool("type_text", { tab: cards, selector: "x-widget", text: "grid" });
     assert.deepEqual([typed.value, typed.inShadowRootOf], ["grid", "x-widget"]);

@@ -328,6 +328,14 @@ fn compile(
         .map(|s| CompiledSection {
             matchers: s.matchers.iter().map(to_proto).collect(),
             css: s.css.clone(),
+            shadow: s
+                .shadow
+                .iter()
+                .map(|b| atelier_proto::ShadowCss {
+                    host: b.host.clone(),
+                    css: b.css.clone(),
+                })
+                .collect(),
         })
         .collect();
     let name = style.meta.name.clone().unwrap_or_else(|| {
@@ -413,7 +421,12 @@ fn lint_remote_urls(style: &UserStyle, source: &str) -> Vec<(Option<usize>, Stri
     style
         .sections
         .iter()
-        .flat_map(|s| remote_urls_in(&s.css))
+        .flat_map(|s| {
+            std::iter::once(s.css.as_str())
+                .chain(s.shadow.iter().map(|b| b.css.as_str()))
+                .flat_map(remote_urls_in)
+                .collect::<Vec<_>>()
+        })
         .filter(|url| seen.insert(url.clone()))
         .map(|url| {
             (
