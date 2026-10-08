@@ -1,7 +1,8 @@
-// The page shim (SPEC §6.1; spike R1). It runs in the userScripts world at
-// document_start in every page some style is registered for. Each style's
-// registration runs this file and then `__atelier.add(<style>)`, so a style's
-// CSS is in the page before first paint.
+// The page shim (SPEC §6.1; spike R1): applying styles. It's part of the page
+// runtime (index.ts), which runs in the userScripts world at document_start
+// in every page some style is registered for. Each style's registration runs
+// the runtime and then `__atelierPage.shim.add(<style>)`, so a style's CSS is
+// in the page before first paint.
 //
 // Styles live in <style> elements kept as the last children of <html>, in
 // bundle order, so they win ties with the page's own stylesheets, and put back
@@ -18,12 +19,12 @@
 // and pages can clear it, so whenever the shim connects the background also
 // sends the styles for the tab's actual source, and those always win.
 
-import { cssFor, locksDarkReader, shadowFor } from "./matching";
-import type { CompiledStyle } from "./proto/CompiledStyle";
+import { cssFor, locksDarkReader, shadowFor } from "../matching";
+import type { CompiledStyle } from "../proto/CompiledStyle";
+import * as core from "./core";
+import { SOURCE_MARKER as MARKER } from "./markers";
 
 type Message = { type: "bundle"; styles: CompiledStyle[] } | { type: "url" } | { type: "bind"; source: string | null };
-
-const MARKER = "atelier:source";
 
 function readMarker(): string | null {
   try {
@@ -35,7 +36,7 @@ function readMarker(): string | null {
 
 type Unmet = { style: string; description: string };
 
-class Shim {
+export class Shim {
   private order: string[] = [];
   private styles = new Map<string, CompiledStyle>();
   private elements = new Map<string, HTMLStyleElement>();
@@ -126,64 +127,42 @@ class Shim {
   // Shadow roots (SPEC §6.1): page CSS can't reach inside a web component's
   // shadow root, so `@shadow host { … }` blocks go into the open shadow root
   // of each element matching `host`, wherever it is (in the page, or inside
-  // another shadow root), as a <style> kept last there.
+  // another shadow root), as a <style> kept last there. Which roots exist,
+  // and when they change, is core's to know.
 
   private shadowBlocks: { host: string; css: string; id: string }[] = [];
   private shadowStyles = new Map<ShadowRoot, HTMLStyleElement>();
-  private shadowObservers = new WeakSet<Node>();
-  private shadowPending = false;
   private shadowWatching = false;
 
   private renderShadow(href: string) {
     this.shadowBlocks = this.order.flatMap((id) => shadowFor(this.styles.get(id)!, href).map((b) => ({ ...b, id })));
     if (this.shadowBlocks.length && !this.shadowWatching) {
       this.shadowWatching = true;
-      // Components often attach their shadow roots when their element is
-      // defined, which changes nothing in the page that an observer would see.
-      for (const b of this.shadowBlocks) {
-        for (const tag of b.host.match(/^[a-z][a-z0-9]*-[a-z0-9-]*$/) ?? []) {
-          customElements.whenDefined(tag).then(() => this.scheduleShadow(), () => {});
-        }
-      }
-      document.addEventListener("DOMContentLoaded", () => this.scheduleShadow(), { once: true });
-      addEventListener("load", () => this.scheduleShadow(), { once: true });
+      core.watch(() => this.applyShadow());
     }
     this.applyShadow();
-  }
-
-  /** Once per batch of changes. A microtask, not a timer: background tabs
-   * (agent tabs among them) throttle timers to a second or more. */
-  private scheduleShadow() {
-    if (this.shadowPending) return;
-    this.shadowPending = true;
-    queueMicrotask(() => {
-      this.shadowPending = false;
-      this.applyShadow();
-    });
   }
 
   private applyShadow() {
     if (!this.shadowBlocks.length && !this.shadowStyles.size) return;
     const wanted = new Map<ShadowRoot, string[]>();
-    const visit = (root: Document | ShadowRoot) => {
-      this.watch(root);
+    for (const scope of core.scopes()) {
       for (const b of this.shadowBlocks) {
         let hosts: Element[] = [];
         try {
-          hosts = [...root.querySelectorAll(b.host)];
+          hosts = [...scope.querySelectorAll(b.host)];
         } catch {
           // An invalid selector matches nothing.
         }
         for (const host of hosts) {
-          if (!host.shadowRoot) continue;
-          const list = wanted.get(host.shadowRoot) ?? [];
+          const root = core.shadowRootOf(host);
+          if (!root) continue;
+          const list = wanted.get(root) ?? [];
           if (!list.includes(b.css)) list.push(b.css);
-          wanted.set(host.shadowRoot, list);
+          wanted.set(root, list);
         }
       }
-      for (const el of root.querySelectorAll("*")) if (el.shadowRoot) visit(el.shadowRoot);
-    };
-    visit(document);
+    }
     for (const [root, css] of wanted) {
       let el = this.shadowStyles.get(root);
       if (!el) {
@@ -203,16 +182,6 @@ class Shim {
     }
   }
 
-  /** Rescans when a root's content changes: new hosts, or our style removed. */
-  private watch(root: Document | ShadowRoot) {
-    if (this.shadowObservers.has(root)) return;
-    this.shadowObservers.add(root);
-    new MutationObserver(() => {
-      if (this.shadowBlocks.length) this.scheduleShadow();
-    }).observe(root instanceof Document ? root.documentElement : root, { childList: true, subtree: true });
-  }
-
-
   /** Tells the background which applying styles' prerequisites aren't met
    * here (SPEC §5.2), so the user hears about it rather than seeing a style
    * that seems to do nothing. */
@@ -226,7 +195,7 @@ class Shim {
         if (!p.check) continue;
         let met = true;
         try {
-          met = document.querySelector(p.check) !== null;
+          met = core.find(p.check) !== null;
         } catch {
           // An invalid selector can't tell us anything.
         }
@@ -294,6 +263,3 @@ class Shim {
     if (document.readyState !== "loading") this.checkPrerequisites();
   }
 }
-
-const g = globalThis as unknown as { __atelier?: Shim };
-g.__atelier ??= new Shim();

@@ -4,11 +4,11 @@
 // user's own tabs.
 
 import { cssFor } from "./matching";
-import * as page from "./pagefns";
+import type { PageRuntime } from "./page/index";
 import type { Bundle } from "./proto/Bundle";
 import { RpcError } from "./rpc";
 import * as containers from "./containers";
-import { emulateStyles, SCHEME_MARKER } from "./scheme";
+import { SCHEME_MARKER } from "./page/markers";
 import * as agentTabs from "./agenttabs";
 import { userScripts } from "./userscripts";
 
@@ -119,9 +119,18 @@ async function run(tabId: number, code: string): Promise<unknown> {
   return r?.result;
 }
 
-/** Calls one of pagefns.ts in the page with JSON arguments. */
-const call = (tabId: number, fn: (...args: any[]) => unknown, ...args: unknown[]) =>
-  run(tabId, `globalThis.__atelierQuery = ${page.deepQuery};\n(${fn})(...${JSON.stringify(args)})`);
+declare const ATELIER_PAGE: string;
+
+type PageTools = PageRuntime["tools"];
+const MISSING = "atelier: no page runtime";
+
+/** Calls one of the page runtime's tools (page/tools.ts) with JSON
+ * arguments, injecting the runtime first if the page doesn't have it yet. */
+async function call<K extends keyof PageTools>(tabId: number, name: K, ...args: Parameters<PageTools[K]>): Promise<unknown> {
+  const invoke = `__atelierPage.tools.${name}(...${JSON.stringify(args)})`;
+  const r = await run(tabId, `globalThis.__atelierPage ? ${invoke} : ${JSON.stringify(MISSING)}`);
+  return r === MISSING ? run(tabId, `${ATELIER_PAGE}\n${invoke}`) : r;
+}
 
 function describeTab(tab: browser.tabs.Tab, ctx: ToolContext) {
   const task = ctx.sourceOf(tab.id!);
@@ -145,7 +154,7 @@ async function waitFor(tabId: number, params: any): Promise<string | null> {
   const selector = param<string | null>(params, "waitFor", "string", null);
   if (!selector) return null;
   const ms = param<number>(params, "waitForMs", "number", 10_000);
-  const found = await call(tabId, page.waitForSelector, selector, ms);
+  const found = await call(tabId, "waitForSelector", selector, ms);
   return found
     ? null
     : `\`${selector}\` matched nothing within ${ms / 1000}s: either the page renders it later, or it doesn't match this page (try query).`;
@@ -161,12 +170,12 @@ async function afterLoad(tabId: number, params: any, ctx: ToolContext, slow: str
  * since they're refetched when evicted. */
 const fetchedSheets = new Map<string, string>();
 
-/** Fetches the stylesheets a page can't read itself (cross-origin, no CORS),
- * so css_tokens and matched_rules can see their rules. The extension's
- * host permissions aren't bound by CORS. */
-async function fetchUnreadable(tabId: number): Promise<page.Fetched[]> {
-  const sheets = ((await call(tabId, page.unreadableSheets)) as { href: string; media: string }[]).slice(0, 20);
-  const out: page.Fetched[] = [];
+/** Fetches the stylesheets a page can't read itself (cross-origin, no CORS)
+ * and gives the page copies, so css_tokens and matched_rules see their rules
+ * in their place. The extension's host permissions aren't bound by CORS. */
+async function fetchUnreadable(tabId: number): Promise<void> {
+  const sheets = ((await call(tabId, "unreadableSheets")) as { href: string; media: string }[]).slice(0, 20);
+  const out: { href: string; media: string; text: string }[] = [];
   for (const sh of sheets) {
     let text = fetchedSheets.get(sh.href);
     if (text === undefined) {
@@ -182,7 +191,7 @@ async function fetchUnreadable(tabId: number): Promise<page.Fetched[]> {
     }
     if (text) out.push({ ...sh, text });
   }
-  return out;
+  if (out.length) await call(tabId, "provideFetched", out);
 }
 
 /** Colour schemes emulated per agent tab (tab/color_scheme). The marker in
@@ -197,7 +206,7 @@ browser.webNavigation.onCommitted.addListener(async (d) => {
     .execute({
       target: { tabId: d.tabId },
       injectImmediately: true,
-      js: [{ code: `try { sessionStorage.setItem(${JSON.stringify(SCHEME_MARKER)}, ${JSON.stringify(scheme)}); } catch {}\n(${emulateStyles})();` }],
+      js: [{ code: `try { sessionStorage.setItem(${JSON.stringify(SCHEME_MARKER)}, ${JSON.stringify(scheme)}); } catch {}\n${ATELIER_PAGE}\n__atelierPage.emulation.start();` }],
     })
     .catch(() => {});
 });
@@ -212,7 +221,7 @@ export async function reapplyForcedStates() {
   await new Promise((r) => setTimeout(r, 300)); // let the shims swap their styles first
   for (const [tabId, f] of forced) {
     try {
-      await call(tabId, page.forceState, f.selector, f.states);
+      await call(tabId, "forceState", f.selector, f.states);
     } catch {
       forced.delete(tabId);
     }
@@ -298,14 +307,14 @@ const handlers: Record<string, Handler> = {
     await ctx.settle(ctx.sourceOf(tab.id!) ?? undefined);
     await new Promise((r) => setTimeout(r, 150));
     const extraCss = param<string | null>(params, "extraCss", "string", null);
-    if (extraCss !== null) await call(tab.id!, page.extraCss, extraCss);
+    if (extraCss !== null) await call(tab.id!, "extraCss", extraCss);
     const selector = param<string | null>(params, "selector", "string", null);
     const full = param<boolean>(params, "fullPage", "boolean", false);
     const format = param<string>(params, "format", "string", "png");
     if (format !== "png" && format !== "jpeg") throw new RpcError(INVALID_PARAMS, "`format` must be png or jpeg");
     const notes: string[] = [];
-    if (param<boolean>(params, "settleAnimations", "boolean", true)) await call(tab.id!, page.finishAnimations);
-    await call(tab.id!, page.imagesReady, 3000);
+    if (param<boolean>(params, "settleAnimations", "boolean", true)) await call(tab.id!, "finishAnimations");
+    await call(tab.id!, "imagesReady", 3000);
     const emulated = agentTabs.get(tab.id!)?.scheme;
     if (emulated) notes.push(`This tab emulates the ${emulated} colour scheme (color_scheme); it isn't the user's setting.`);
     if (!tab.active && !toldHidden.has(tab.id!)) {
@@ -315,7 +324,7 @@ const handlers: Record<string, Handler> = {
 
     let rect: { x: number; y: number; width: number; height: number } | undefined;
     if (selector) {
-      const r = (await call(tab.id!, page.rectOf, selector)) as typeof rect | null;
+      const r = (await call(tab.id!, "rectOf", selector)) as typeof rect | null;
       if (!r) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\``);
       if (r!.width === 0 || r!.height === 0) throw new RpcError(PAGE_ERROR, `\`${selector}\` matches an element with no size (hidden?)`);
       // A very tall element (a long sidebar's contents) makes an unreadable
@@ -327,7 +336,7 @@ const handlers: Record<string, Handler> = {
       }
       rect = r;
     } else if (full) {
-      const s = (await call(tab.id!, page.pageState)) as { width: number; height: number };
+      const s = (await call(tab.id!, "pageState")) as { width: number; height: number };
       const maxHeight = param<number>(params, "maxHeight", "number", 4000);
       rect = { x: 0, y: 0, width: s.width, height: Math.min(s.height, maxHeight) };
       if (s.height > maxHeight) notes.push(`The page is ${s.height}px tall; captured the top ${maxHeight}px (raise maxHeight, or capture elements with \`selector\`).`);
@@ -343,7 +352,7 @@ const handlers: Record<string, Handler> = {
         ...(scale !== 1 ? { scale } : {}),
       });
     } finally {
-      if (extraCss !== null) await call(tab.id!, page.extraCss, null);
+      if (extraCss !== null) await call(tab.id!, "extraCss", null);
     }
     const [header, data] = dataUrl.split(",", 2);
     return { mimeType: header.slice(5).split(";")[0], data, notes };
@@ -358,7 +367,7 @@ const handlers: Record<string, Handler> = {
   async "page/type"(params) {
     const tab = await agentTab(params);
     const selector = param<string>(params, "selector", "string");
-    const r = await call(tab.id!, page.fill, selector, param<string>(params, "text", "string"), param<boolean>(params, "submit", "boolean", false));
+    const r = await call(tab.id!, "fill", selector, param<string>(params, "text", "string"), param<boolean>(params, "submit", "boolean", false));
     if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\`, in the page or its open shadow roots`);
     if ((r as { error?: string }).error) throw new RpcError(PAGE_ERROR, (r as { error: string }).error);
     await new Promise((res) => setTimeout(res, 300)); // let the page react
@@ -369,7 +378,7 @@ const handlers: Record<string, Handler> = {
     const tab = await agentTab(params);
     return call(
       tab.id!,
-      page.query,
+      "query",
       param<string>(params, "selector", "string"),
       param<number>(params, "limit", "number", 10),
       param<number>(params, "maxLength", "number", 500),
@@ -379,23 +388,23 @@ const handlers: Record<string, Handler> = {
   async "page/computed"(params) {
     const tab = await agentTab(params);
     const selector = param<string>(params, "selector", "string");
-    const r = await call(tab.id!, page.computed, selector, params?.properties ?? null);
+    const r = await call(tab.id!, "computed", selector, params?.properties ?? null);
     if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\``);
     return r;
   },
 
   async "page/tokens"(params) {
     const tab = await agentTab(params);
+    await fetchUnreadable(tab.id!);
     const maxChars = param<number>(params, "maxChars", "number", 30_000);
     const r = (await call(
       tab.id!,
-      page.tokens,
+      "tokens",
       param<string | null>(params, "filter", "string", null),
       param<number>(params, "limit", "number", 200),
       param<boolean>(params, "usage", "boolean", true),
       param<string | null>(params, "scope", "string", null),
       param<boolean>(params, "verbose", "boolean", false),
-      await fetchUnreadable(tab.id!),
     )) as { total: number; shown: number; tokens: unknown[]; note?: string };
     // Big design systems define thousands of tokens; past the budget, show
     // fewer and say how to narrow it, rather than flooding the agent.
@@ -410,14 +419,14 @@ const handlers: Record<string, Handler> = {
 
   async "page/matched_rules"(params) {
     const tab = await agentTab(params);
+    await fetchUnreadable(tab.id!);
     const selector = param<string>(params, "selector", "string");
     const r = await call(
       tab.id!,
-      page.matchedRules,
+      "matchedRules",
       selector,
       param<string | null>(params, "property", "string", null),
       param<number>(params, "limit", "number", 30),
-      await fetchUnreadable(tab.id!),
     );
     if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\``);
     return r;
@@ -426,14 +435,14 @@ const handlers: Record<string, Handler> = {
   async "page/contrast"(params) {
     const tab = await agentTab(params);
     // Colours mid-transition (just after a hover, or a colour-scheme switch) aren't the ones to judge.
-    await call(tab.id!, page.finishAnimations);
-    return call(tab.id!, page.contrast, param<number>(params, "minRatio", "number", 4.5), param<number>(params, "limit", "number", 40));
+    await call(tab.id!, "finishAnimations");
+    return call(tab.id!, "contrast", param<number>(params, "minRatio", "number", 4.5), param<number>(params, "limit", "number", 40));
   },
 
   async "page/shapes"(params) {
     const tab = await agentTab(params);
     const scope = param<string | null>(params, "scope", "string", null);
-    const r = await call(tab.id!, page.shapeScan, scope, param<number>(params, "limit", "number", 40));
+    const r = await call(tab.id!, "shapeScan", scope, param<number>(params, "limit", "number", 40));
     if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${scope}\``);
     return r;
   },
@@ -456,7 +465,7 @@ const handlers: Record<string, Handler> = {
     const selector = param<string>(params, "selector", "string");
     const states = params?.states ?? [];
     if (!Array.isArray(states)) throw new RpcError(INVALID_PARAMS, "`states` must be an array");
-    const r = (await call(tab.id!, page.forceState, selector, states)) as any;
+    const r = (await call(tab.id!, "forceState", selector, states)) as any;
     if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\``);
     if (r.error) throw new RpcError(INVALID_PARAMS, r.error);
     if (states.length) forced.set(tab.id!, { selector, states });

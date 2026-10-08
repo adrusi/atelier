@@ -30,7 +30,8 @@
       constructor() {
         super();
         this.attachShadow({ mode: "open" }).innerHTML =
-          '<div class="inner" style="border-radius: 6px; background: #ffffff; padding: 8px">In a shadow root <input class="field"> <span class="faint" style="color: #dddddd">faint text</span></div>';
+          '<style>:host { --widget-accent: rgb(10, 20, 30); } .tag { color: rgb(0, 0, 0); } .tag:hover { color: rgb(0, 128, 0); } @media (prefers-color-scheme: dark) { .tag { color: rgb(255, 255, 255); } }</style>' +
+          '<div class="inner" style="border-radius: 6px; background: #ffffff; padding: 8px">In a shadow root <input class="field"> <span class="faint" style="color: #dddddd">faint text</span> <span class="tag">tag</span></div>';
       }
     });
   </script>

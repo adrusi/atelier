@@ -18,6 +18,8 @@ crates/
   atelier-proto/    # wire-protocol types (SPEC §4.1); `cargo test -p atelier-proto` regenerates
                     # the TypeScript bindings in extension/src/proto/ (committed; don't edit by hand)
 extension/          # the WebExtension (TypeScript, esbuild, web-ext; MV3)
+  src/page/         # the page runtime: atelier's code inside pages (ARCHITECTURE.md);
+                    # only page/core.ts reaches into the page's structure (`npm run check`)
 kit/                # agent kit: MCP prompts, skills, authoring guidance
 dev/
   atelier-dev.ts    # the dev-environment script (below); dev/bin/atelier-dev runs it

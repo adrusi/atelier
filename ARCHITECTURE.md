@@ -72,19 +72,24 @@ from one place:
   (`matchMedia`, `innerWidth`) driven by the same settings. Adding a
   feature means adding it to the set, not writing another walker.
 - **Limits are reported, not silent.** Closed shadow roots and cross-origin
-  frames can't be reached. The scope registry counts what it couldn't
-  enter, and tool results include it ("2 closed shadow roots weren't
-  checked"), so neither agents nor we mistake "nothing found" for "nothing
-  there".
+  frames can't be reached, and stylesheets may not be readable. What can be
+  counted is included in tool results (unreadable sheets, by name), so
+  neither agents nor we mistake "nothing found" for "nothing there". Closed
+  shadow roots can't even be counted from the userScripts world
+  (`openOrClosedShadowRoot` isn't there), so tools that walk the page say
+  that they can't see them.
 
 **How the code expresses it.** The runtime is one bundle (built from
-`extension/src/page/`), injected once into a page's userScripts world and
-reused; tools call into it, instead of each tool being a self-contained
-function serialised into the page. Only `page/core` touches `document`,
-`styleSheets`, `adoptedStyleSheets` or `shadowRoot` directly, and a test
-fails if anything else does. The page-world part (the `matchMedia` and
-`innerWidth` overrides) stays minimal and reads its settings from the same
-place.
+`extension/src/page/index.ts`), installed once in a page's userScripts
+world as `__atelierPage` and reused: style registrations run it and call
+`shim.add`, and tools call `tools.<name>` by name, injecting it first only
+where it's missing. `page/core.ts` is the page model; `shim.ts`,
+`tools.ts` and `emulation.ts` are built on it. Only core reaches into the
+page's structure (`styleSheets`, `adoptedStyleSheets`, shadow roots,
+`cssRules`, document-wide queries), and `npm run check` fails if anything
+else does (`extension/check-layering.ts`). The page-world part
+(`page/main.ts`, the `matchMedia` override) stays minimal, is built on its
+own, and reads the same marker.
 
 ## State and recovery
 
@@ -157,10 +162,11 @@ In order, each step leaving everything working:
 1. **State and recovery** (done): landing intents and startup recovery, with
    crash tests; tab values and reconcile for agent tabs, containers and
    markers; pruning. (The daemon's store and the background's resources.)
-2. **The page runtime**: move `pagefns.ts`, `shim.ts` and `scheme.ts` into
-   `page/` on top of `page/core` (scopes, sheets, rules, elements); the
-   existing e2e tests are the safety net; add the "only core touches the
-   DOM" test.
+2. **The page runtime** (done): `pagefns.ts`, `shim.ts` and `scheme.ts`
+   moved into `page/` on top of `page/core` (scopes, sheets, rules,
+   elements), with the layering check. Moving them extended css_tokens,
+   force_state and colour-scheme emulation to shadow roots, which they
+   hadn't reached.
 3. **The fidelity harness**, first on `color_scheme`.
 4. **Width emulation**, as a media feature in the emulation layer, measured
    by the harness.

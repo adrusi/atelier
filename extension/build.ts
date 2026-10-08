@@ -1,7 +1,9 @@
 // Builds the extension into dist/. `node build.ts --watch` rebuilds on change.
 //
-// The page shim (src/shim.ts) is built first, as a self-contained script whose
-// text is inlined into the background, which registers it as a user script.
+// The page runtime (src/page/, ARCHITECTURE.md) is built first, as two
+// self-contained scripts whose text is inlined into the background: the
+// runtime proper (page/index.ts), which the background registers and injects
+// into pages' userScripts world, and its small page-world half (page/main.ts).
 //
 // Only the dev flavor exists so far. Dev builds use their own extension ID and
 // native host name so they can never be mistaken for a real install
@@ -24,12 +26,14 @@ const src = path.join(root, "src");
 const dist = path.join(root, "dist");
 const STATIC = ["onboarding.html", "popup.html", "inbox.html", "ui.css"];
 
-async function buildShim(): Promise<string> {
+async function buildPage(entry: string): Promise<string> {
   const r = await esbuild.build({
-    entryPoints: [path.join(src, "shim.ts")],
+    entryPoints: [path.join(src, "page", entry)],
     bundle: true,
     format: "iife",
     target: "firefox140",
+    // Parsed on every page it's registered for, so kept small.
+    minify: true,
     write: false,
   });
   return r.outputFiles[0].text;
@@ -51,7 +55,8 @@ async function options(): Promise<esbuild.BuildOptions> {
     sourcemap: "inline",
     define: {
       ATELIER_NATIVE_HOST: JSON.stringify(flavor.nativeHost),
-      ATELIER_SHIM: JSON.stringify(await buildShim()),
+      ATELIER_PAGE: JSON.stringify(await buildPage("index.ts")),
+      ATELIER_PAGE_MAIN: JSON.stringify(await buildPage("main.ts")),
     },
     logLevel: "info",
   };

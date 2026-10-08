@@ -5,7 +5,7 @@
   "scripts": {
     "build": "node build.ts",
     "watch": "node build.ts --watch",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit && node check-layering.ts"
   },
   "devDependencies": {
     "@types/firefox-webext-browser": "^143.0.0",

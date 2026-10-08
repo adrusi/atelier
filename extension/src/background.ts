@@ -1,8 +1,9 @@
 // Background script. It keeps a connection to the daemon through the native
 // host (which also keeps this background resident; spike R4), fetches the
 // bundle of compiled styles, and registers one user script per style that
-// runs the page shim (shim.ts). When the bundle changes it updates the
-// registrations and pushes the new bundle to pages that are already open.
+// runs the page runtime (page/), whose shim applies them. When the bundle
+// changes it updates the registrations and pushes the new bundle to pages
+// that are already open.
 // Agent tabs can be bound to a task's tree instead (SPEC §6.2); those get
 // that tree's bundle, fetched and kept up to date the same way.
 
@@ -20,12 +21,14 @@ import { cssFor } from "./matching";
 import { Rpc } from "./rpc";
 import * as agentTabs from "./agenttabs";
 import * as tools from "./tools";
-import { emulateMatchMedia, emulateStyles } from "./scheme";
+import { SCHEME_MARKER } from "./page/markers";
 import { onUserScriptConnect, onUserScriptMessage, type UserScript, userScripts } from "./userscripts";
 
 declare const ATELIER_NATIVE_HOST: string;
 /** The compiled page shim, inlined by build.ts. */
-declare const ATELIER_SHIM: string;
+/** The page runtime (page/index.ts) and its page-world half (page/main.ts), built by build.ts. */
+declare const ATELIER_PAGE: string;
+declare const ATELIER_PAGE_MAIN: string;
 
 /** Must match atelier_proto::PROTOCOL_VERSION. */
 const PROTOCOL_VERSION = 1;
@@ -232,7 +235,7 @@ async function ensureShim(tabId: number) {
     await us.execute({
       target: { tabId },
       injectImmediately: true,
-      js: [{ code: ATELIER_SHIM }, { code: "__atelier.attach();" }],
+      js: [{ code: ATELIER_PAGE }, { code: "__atelierPage.shim.attach();" }],
     });
   } catch (e) {
     console.debug(`atelier: couldn't inject into bound tab ${tabId}:`, e);
@@ -272,14 +275,15 @@ async function applyBundle(bundle: Bundle) {
   const wanted: UserScript[] = bundle.styles.map((style) => ({
     id: scriptId(style.id),
     matches: style.patterns,
-    js: [{ code: ATELIER_SHIM }, { code: `__atelier.add(${JSON.stringify(style)});` }],
+    js: [{ code: ATELIER_PAGE }, { code: `__atelierPage.shim.add(${JSON.stringify(style)});` }],
     runAt: "document_start",
     world: "USER_SCRIPT",
   }));
-  // Per-tab colour-scheme emulation (scheme.ts): inert unless a tab opts in.
+  // Per-tab emulation (page/emulation.ts): inert unless a tab opts in with
+  // its marker, and the runtime only runs where one does.
   wanted.push(
-    { id: "scheme:main", matches: ["<all_urls>"], js: [{ code: `(${emulateMatchMedia})();` }], runAt: "document_start", world: "MAIN" },
-    { id: "scheme:styles", matches: ["<all_urls>"], js: [{ code: `(${emulateStyles})();` }], runAt: "document_start", world: "USER_SCRIPT" },
+    { id: "scheme:main", matches: ["<all_urls>"], js: [{ code: ATELIER_PAGE_MAIN }], runAt: "document_start", world: "MAIN" },
+    { id: "scheme:styles", matches: ["<all_urls>"], js: [{ code: emulationStub }], runAt: "document_start", world: "USER_SCRIPT" },
   );
   const existing = new Map((await us.getScripts()).map((s) => [s.id, s]));
   const wantedIds = new Set(wanted.map((s) => s.id));
@@ -302,6 +306,13 @@ async function applyBundle(bundle: Bundle) {
   void tools.reapplyForcedStates();
 }
 
+/** Starts the page runtime's emulation in a page whose marker asks for it. */
+const emulationStub = `(() => {
+  try { if (!sessionStorage.getItem(${JSON.stringify(SCHEME_MARKER)})) return; } catch { return; }
+  ${ATELIER_PAGE}
+  __atelierPage.emulation.start();
+})();`;
+
 /** Registered scripts only run on page loads, so pages that were already open
  * (when a style was added, or when the extension started) have no shim. Give
  * them one if some style now applies; it then gets live updates like any other. */
@@ -317,7 +328,7 @@ async function injectIntoOpenTabs(bundle: Bundle) {
     try {
       await us.execute({
         target: { tabId: tab.id },
-        js: [{ code: ATELIER_SHIM }, ...styles.map((s) => ({ code: `__atelier.add(${JSON.stringify(s)});` }))],
+        js: [{ code: ATELIER_PAGE }, ...styles.map((s) => ({ code: `__atelierPage.shim.add(${JSON.stringify(s)});` }))],
       });
     } catch (e) {
       // Restricted pages (e.g. addons.mozilla.org) refuse injection.
@@ -362,7 +373,7 @@ function listenToShims() {
   if (messages && !messages.hasListener(onUserScriptRequest)) messages.addListener(onUserScriptRequest);
 }
 
-/** Requests from page scripts (scheme.ts): the text of a cross-origin
+/** Requests from page scripts (page/emulation.ts): the text of a cross-origin
  * stylesheet, which the page can't read but the extension can fetch; and
  * which colour scheme the tab should emulate, if any, so a page holding a
  * stale marker (a duplicated agent tab, say) can drop it. */
