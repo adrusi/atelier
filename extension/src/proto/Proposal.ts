@@ -29,4 +29,9 @@ note: string | null,
 /**
  * The journal entry, once accepted.
  */
-journal: bigint | null, created: bigint, decided: bigint | null, };
+journal: bigint | null, created: bigint, decided: bigint | null, 
+/**
+ * For additions to the design notes, which land without waiting:
+ * whether the user has looked at it since.
+ */
+reviewed: boolean, };

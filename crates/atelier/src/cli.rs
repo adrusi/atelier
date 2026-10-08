@@ -514,15 +514,30 @@ pub fn tasks(dir: Option<&str>, args: &[String]) -> ExitCode {
         (Some("proposals"), _) => client
             .call(
                 atelier_proto::theme_method::PROPOSALS,
-                json!({ "open": true }),
+                json!({ "open": false }),
             )
             .map(|v| {
                 for p in v.as_array().into_iter().flatten() {
+                    // Waiting for a decision, or a design note waiting to be looked at.
+                    let note = p["path"].as_str().is_some_and(|s| s.ends_with("/notes.md"));
+                    let waiting = if note {
+                        p["state"] == "accepted" && p["reviewed"] != true
+                    } else {
+                        p["state"] == "open"
+                    };
+                    if !waiting {
+                        continue;
+                    }
                     println!(
-                        "{}  {}: {}",
+                        "{}  {}: {}{}",
                         p["id"].as_str().unwrap_or("?"),
                         p["path"].as_str().unwrap_or("?"),
-                        p["summary"].as_str().unwrap_or("")
+                        p["summary"].as_str().unwrap_or(""),
+                        if note {
+                            "  (added; review keep|undo)"
+                        } else {
+                            ""
+                        }
                     );
                 }
                 Value::Null
@@ -533,6 +548,17 @@ pub fn tasks(dir: Option<&str>, args: &[String]) -> ExitCode {
                 json!({ "id": id, "accept": d == "accept", "note": arg(3) }),
             ),
             _ => return fail("usage: atelier decide PROPOSAL accept|decline [NOTE]"),
+        },
+        (Some("review"), Some(id)) => match arg(2) {
+            Some(r @ ("keep" | "undo")) => client.call(
+                atelier_proto::theme_method::REVIEW,
+                json!({ "id": id, "undo": r == "undo" }),
+            ),
+            _ => {
+                return fail(
+                    "usage: atelier review PROPOSAL keep|undo (an addition to the design notes)",
+                );
+            }
         },
         (Some("stage"), stage) => {
             client.call(atelier_proto::call_method::STAGE, json!({ "stage": stage }))

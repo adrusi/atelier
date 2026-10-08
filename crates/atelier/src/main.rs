@@ -29,9 +29,12 @@ usage: atelier [--dir DIR] <command>
   calls                 questions and calls from agents, waiting for an answer
   answer BATCH [JSON]   answer a batch: JSON [{\"choice\": …, \"note\": …}, …] per call;
                         calls left out keep the agent's choice
-  proposals             proposed changes to THEME.md, waiting for you
+  proposals             proposed changes to THEME.md, and additions to the design
+                        notes, waiting for you
   decide PROPOSAL accept|decline [NOTE]
                         accept (land) or decline a proposal
+  review PROPOSAL keep|undo
+                        keep or undo an addition to the design notes
   stage [forming|settled]
                         the active theme's stage (SPEC §9.5), set if given
   session start [--force]
@@ -79,7 +82,7 @@ fn main() -> ExitCode {
         "status" => cli::status(dir.as_deref()),
         "lint" => cli::lint(dir.as_deref()),
         "task" | "undo" | "journal" | "session" | "calls" | "answer" | "stage" | "proposals"
-        | "decide" => {
+        | "decide" | "review" => {
             args.insert(0, command.clone());
             cli::tasks(dir.as_deref(), &args)
         }

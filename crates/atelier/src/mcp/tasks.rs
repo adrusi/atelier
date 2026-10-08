@@ -142,7 +142,8 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
                     "scope": { "type": "string", "enum": ["site", "theme"], "description": "Default site." },
                     "wait": { "type": "string", "enum": ["record", "review", "block"] },
                     "variant": { "type": "string", "description": "For choosing between versions of part of a style: the name the style file marks it with (see the tool description). Options and choice then come from the variant files." },
-                    "screenshots": { "type": "array", "items": { "type": "string" } }
+                    "screenshots": { "type": "array", "items": { "type": "string" },
+                        "description": "Image files: relative to the task's tree, or absolute (as screenshot's attach: true returns them)." }
                 }, "required": ["question"] } }
             }, "required": ["calls"] })
         },
@@ -150,24 +151,25 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
     Tool {
         name: "theme_propose",
         method: "",
-        description: "Propose a change to THEME.md, the user's own description of the look they want. You never \
-            edit THEME.md yourself; the user sees your proposal as a diff in the browser and accepts it (perhaps \
-            after editing it), or declines it with a note. Propose when something settles a question for the theme \
-            as a whole: a gap or contradiction you found, or an interpretation you settled on, so the next agent \
-            doesn't have to work it out again. It needn't wait for an answer: propose your interpretation as soon \
-            as you've settled on one, and the user confirms or corrects it. THEME.md says what the user wants, not \
-            what's possible today: where a limit of atelier or the browser stopped you, say so in notes.md and your \
-            summary rather than writing the limit into the theme, so it doesn't outlive the fix. Write it in \
-            THEME.md's own voice and place (it's the user's \
-            document, and reads as theirs), keep it short, and say in `why` what it comes from. Edits apply to \
-            THEME.md as it is now: each `find` must match its current text exactly, once (if it doesn't, the \
-            error includes the current text); an edit without `find` appends.",
+        description: "Change one of the theme's own files, which you never edit in the tree. \
+            file: notes.md (the theme's design notes) is for calls about applying the theme that every site \
+            should share: what counts as \"current\", how far a header strip runs, how figures lose their frames. \
+            Add one when you settle such a call, so agents on other sites make it the same way; it lands at once \
+            (the user reviews it afterwards, and can undo it). file: THEME.md (the default) is the user's own \
+            description of the look they want, in their voice: propose to it only what they'd say about what they \
+            want (a value, a taste, a gap in what they said), not how it was applied; it waits for them to \
+            accept, edit or decline. Neither is for limits of atelier or the browser: those go in the service's \
+            notes.md and your summary, so they don't outlive the fix. Keep it short, in the file's own voice and \
+            place, and say in `why` what it comes from. Edits apply to the file as it is now: each `find` must \
+            match its current text exactly, once (if it doesn't, the error includes the current text); an edit \
+            without `find` appends.",
         schema: || {
             json!({ "type": "object", "properties": {
                 "summary": { "type": "string", "description": "What changes, in a line." },
+                "file": { "type": "string", "enum": ["THEME.md", "notes.md"], "description": "Default THEME.md." },
                 "why": { "type": "string", "description": "What it comes from: the user's answer, the sites where it came up." },
                 "edits": { "type": "array", "items": { "type": "object", "properties": {
-                    "find": { "type": "string", "description": "Text in THEME.md to replace (exactly, once). Omit to append." },
+                    "find": { "type": "string", "description": "Text in the file to replace (exactly, once). Omit to append." },
                     "replace": { "type": "string" }
                 }, "required": ["replace"] } },
                 "task": task_prop()
@@ -456,16 +458,29 @@ impl Server {
             atelier_proto::theme_method::PROPOSALS,
             json!({ "open": false }),
         )?)?;
+        // When the tree was copied: design notes added since aren't in it.
+        let copied = task
+            .tree
+            .as_deref()
+            .and_then(|t| std::path::Path::new(t).parent())
+            .and_then(|d| std::fs::metadata(d.join("base.json")).ok())
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_millis() as u64);
         let proposals: Vec<_> = proposals
             .into_iter()
             .filter(|p| Some(&p.theme) == task.theme.as_ref())
             .filter(|p| {
-                matches!(
-                    p.state,
-                    atelier_proto::ProposalState::Open | atelier_proto::ProposalState::Declined
-                )
+                if p.path.ends_with("/notes.md") {
+                    p.state == atelier_proto::ProposalState::Accepted && p.created >= copied
+                } else {
+                    matches!(
+                        p.state,
+                        atelier_proto::ProposalState::Open | atelier_proto::ProposalState::Declined
+                    )
+                }
             })
-            .take(8)
+            .take(12)
             .collect();
         Ok(brief(&task, &changes, &batches, &stats, &proposals))
     }
@@ -666,8 +681,17 @@ impl Server {
             .or_else(|| (self.held.len() == 1).then(|| self.held.keys().next().unwrap().clone()));
         let p: atelier_proto::Proposal = parse(self.daemon_call(
             atelier_proto::theme_method::PROPOSE,
-            json!({ "edits": args.get("edits"), "summary": args.get("summary"), "why": args.get("why"), "task": task }),
+            json!({ "edits": args.get("edits"), "summary": args.get("summary"), "why": args.get("why"), "task": task,
+                    "file": args.get("file").and_then(Value::as_str).unwrap_or("THEME.md") }),
         )?)?;
+        if p.path.ends_with("/notes.md") {
+            return Ok(format!(
+                "Added to the theme's design notes ({}, journal entry {}). Your tree's copy predates it; \
+                 other agents' briefs include it from now on.",
+                p.path,
+                p.journal.unwrap_or_default()
+            ));
+        }
         Ok(format!(
             "Proposed ({}). The user will see it as a diff in the inbox and accept, edit or decline it; \
              until then THEME.md is unchanged, so don't count on it in this task. Briefs show pending and \
@@ -795,6 +819,14 @@ fn brief(
             out,
             "- {theme_md}: what the user wants things to look like, in their words."
         );
+    }
+    let theme_notes = format!("themes/{theme}/notes.md");
+    if exists(&theme_notes) {
+        let _ = writeln!(
+            out,
+            "- {theme_notes}: the theme's design notes, calls about applying it that every site shares. \
+             Follow them, so this site matches the others; where one doesn't fit here, say why in your summary."
+        );
     } else {
         let _ = writeln!(
             out,
@@ -870,16 +902,25 @@ fn brief(
         }
         out.push_str(
             "\nIf an answer settles something that will matter beyond this task, record it so nobody asks \
-             again: in the service's notes.md if it's about this site; if it's about the theme, propose it for \
-             THEME.md with theme_propose (unless a proposal below already covers it).\n",
+             again: in the service's notes.md if it's about this site; if it's how the theme applies across \
+             sites, in the theme's design notes (theme_propose with file: notes.md); if it's what the user \
+             wants, propose it for THEME.md (unless a proposal below already covers it).\n",
         );
     }
     out.push_str(&pages_section(tree, t.service.as_deref()));
     out.push_str(HOW_TO_WORK);
     out.push_str(&asking(&theme_stage(tree, theme), stats));
     if !proposals.is_empty() {
-        out.push_str("\n## Proposed changes to THEME.md\n\n");
+        out.push_str("\n## Proposed changes to the theme\n\n");
         for p in proposals {
+            if p.path.ends_with("/notes.md") {
+                let _ = writeln!(
+                    out,
+                    "- Added to the design notes (in the owned directory; your tree may predate it): {}",
+                    p.summary
+                );
+                continue;
+            }
             match p.state {
                 atelier_proto::ProposalState::Open => {
                     let _ = writeln!(out, "- Waiting for the user: {}", p.summary);
@@ -968,8 +1009,9 @@ fn asking(stage: &str, stats: &atelier_proto::CallStats) -> String {
              than deciding quietly: gather calls, and at a natural checkpoint (a first pass, with screenshots) \
              send them with task_ask, saying what you'd choose. Calls about the theme as a whole are the most \
              valuable thing a session on a forming theme produces, because every later site benefits: post \
-             them even when nothing blocks you, and propose THEME.md wording (theme_propose) for the \
-             interpretations you settled on, so the user can confirm or correct them. Most can be for the record (you go ahead; a \
+             them even when nothing blocks you, and record the interpretations you settled on in the theme's \
+             design notes (theme_propose with file: notes.md), so other sites follow them and the user can \
+             correct them. Most can be for the record (you go ahead; a \
              different answer reopens it); keep review for the ones where the options would mean substantially \
              different work.\n",
         );
@@ -1130,6 +1172,7 @@ For a this-or-that question about part of a style, show the user both. Quickest:
 (screenshot's extraCss shows a variant without editing files; attach: true saves it for task_ask). \
 Better, when the choice matters: mark the part in the style file with the comments \
 `/* atelier:variant NAME */` and `/* atelier:end NAME */` around your choice, put each option's CSS (yours \
-too) in variants/NAME/<option>.css beside the style file, and give the call `variant: NAME`. The user can \
+too) in variants/NAME/<option>.css beside the style file (just the rules that go between the markers, \
+with no @-moz-document around them), and give the call `variant: NAME`. The user can \
 then flip between the options live in their own tab, and picking another one writes it into the style \
 for you, even after the work has landed.\n";

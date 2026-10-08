@@ -178,6 +178,23 @@ try {
     assert.match(await tool("task_info"), /Declined by the user: No rounded corners anywhere \(they said: Small radii are fine\)/);
   });
 
+  await check("a design note lands at once, shows in later briefs, and the user can undo it", async () => {
+    const before = await tool("task_info");
+    const out = await tool("theme_propose", {
+      file: "notes.md",
+      summary: "Anchor targets count as current",
+      edits: [{ replace: "- What a link has jumped to counts as current.\n" }],
+    });
+    assert.match(out, /^Added to the theme's design notes \(themes\/e2e\/notes\.md, journal entry \d+\)/);
+    const notes = path.join(owned, "themes/e2e/notes.md");
+    assert.match(fs.readFileSync(notes, "utf8"), /jumped to counts as current/);
+    assert.doesNotMatch(before, /Added to the design notes/);
+    assert.match(await tool("task_info"), /Added to the design notes \(in the owned directory; your tree may predate it\): Anchor targets count as current/);
+    const id = atelier("proposals").match(/^(\S+)\s+themes\/e2e\/notes\.md: Anchor targets count as current\s+\(added; review keep\|undo\)$/m)![1];
+    atelier("review", id, "undo");
+    assert.ok(!fs.existsSync(notes), "undone");
+  });
+
   await check("assumptions made at landing come back as calls; changing one queues a revise", async () => {
     const tree = (await tool("task_info")).match(/The task's tree is (\S+): /)![1];
     fs.appendFileSync(path.join(tree, STYLE), "/* calmer */\n");

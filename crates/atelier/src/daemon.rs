@@ -1366,6 +1366,29 @@ fn theme_call(state: &State, method_name: &str, params: Value) -> Result<Value, 
                 ))?;
             let proposal = store.propose(&theme, p, now).map_err(failed)?;
             changed(&proposal);
+            // Design notes land at once: the same hook as any landing.
+            if let Some(seq) = proposal.journal
+                && let Some(e) = store
+                    .journal()
+                    .ok()
+                    .and_then(|j| j.into_iter().find(|e| e.seq == seq))
+            {
+                let task = proposal.task.as_deref().and_then(|t| store.get(t).ok());
+                run_hook(state, "on_land", task.as_ref(), e.seq, &e.summary, &e.files);
+            }
+            Ok(json!(proposal))
+        }
+        th::REVIEW => {
+            let id = params
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or((wire::code::INVALID_PARAMS, "`id` is required".to_string()))?;
+            let undo = params.get("undo").and_then(Value::as_bool).unwrap_or(false);
+            let (proposal, entry) = store.review(id, undo, now).map_err(failed)?;
+            changed(&proposal);
+            if let Some(e) = &entry {
+                run_hook(state, "on_undo", None, e.seq, &e.summary, &e.files);
+            }
             Ok(json!(proposal))
         }
         th::PROPOSALS => {

@@ -457,8 +457,9 @@ browser.runtime.onMessage.addListener((msg: unknown) => {
   const v = msg as { type?: string; key?: string; task?: string | null; url?: string; file?: string; name?: string; css?: string };
   if (v?.type === "variant" && v.key && v.url && v.file && v.name && v.css !== undefined)
     return showVariant({ key: v.key, task: v.task ?? null, url: v.url, file: v.file, name: v.name, css: v.css });
-  const d = msg as { type?: string; id?: string; accept?: boolean; note?: string; text?: string };
+  const d = msg as { type?: string; id?: string; accept?: boolean; note?: string; text?: string; undo?: boolean };
   if (d?.type === "decide" && d.id) return daemon().call<Proposal>("theme/decide", { id: d.id, accept: Boolean(d.accept), note: d.note ?? null, text: d.text ?? null });
+  if (d?.type === "review" && d.id) return daemon().call<Proposal>("theme/review", { id: d.id, undo: Boolean(d.undo) });
   if (i?.type === "stage") return daemon().call("call/stage", i.stage ? { stage: i.stage } : {});
   if (i?.type === "open-inbox") return browser.tabs.create({ url: browser.runtime.getURL("inbox.html") }).then(() => true);
   return undefined;

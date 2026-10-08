@@ -181,7 +181,46 @@ function diffView(before: string, after: string) {
   return pre;
 }
 
+/** An addition to the design notes the user hasn't looked at yet. */
+const unreviewedNote = (p: Proposal) => p.path.endsWith("/notes.md") && p.state === "accepted" && !p.reviewed;
+
+/** An addition to the theme's design notes: in effect already, so the user
+ * keeps it or undoes it. */
+function noteCard(p: Proposal) {
+  const card = h(
+    "section",
+    { class: "batch proposal" },
+    h("header", {}, h("span", { class: "site", textContent: p.path }), h("span", { class: "what", textContent: p.summary })),
+    h("p", {
+      class: "wait",
+      textContent: !p.reviewed
+        ? "An agent added this to your theme's design notes, so other sites follow the same call. It's in effect; undo it if it's wrong."
+        : p.note ?? "Kept.",
+    }),
+    p.why ? h("p", { class: "summary", textContent: p.why }) : null,
+    diffView(p.before, p.after),
+  );
+  if (p.reviewed) return card;
+  const status = h("span", { class: "sent", role: "status" } as Partial<HTMLSpanElement>);
+  const review = (undo: boolean) => async () => {
+    try {
+      await browser.runtime.sendMessage({ type: "review", id: p.id, undo });
+      status.textContent = undo ? "Undone." : "Kept.";
+      setTimeout(() => void render(true), 1200);
+    } catch (e) {
+      status.textContent = e instanceof Error ? e.message : String(e);
+    }
+  };
+  const keep = h("button", { type: "button", textContent: "Keep" });
+  keep.addEventListener("click", review(false));
+  const undo = h("button", { type: "button", textContent: "Undo" });
+  undo.addEventListener("click", review(true));
+  card.append(h("footer", {}, keep, undo, status));
+  return card;
+}
+
 function proposalCard(p: Proposal) {
+  if (p.path.endsWith("/notes.md")) return noteCard(p);
   const open = p.state === "open";
   const card = h(
     "section",
@@ -263,7 +302,7 @@ async function render(force = false) {
     return;
   }
   // Re-render only when the batches change, so answers being typed survive.
-  const key = JSON.stringify([inbox.batches.map((b) => [b.id, b.state]), inbox.proposals.map((p) => [p.id, p.state]), inbox.stage]);
+  const key = JSON.stringify([inbox.batches.map((b) => [b.id, b.state]), inbox.proposals.map((p) => [p.id, p.state, p.reviewed]), inbox.stage]);
   if (key === shown && !force) return;
   shown = key;
 
@@ -273,11 +312,11 @@ async function render(force = false) {
   // Blocking first, then review, then calls for the record.
   const rank = { block: 0, review: 1, record: 2 } as const;
   open.sort((a, b) => rank[a.wait] - rank[b.wait]);
-  const openProposals = inbox.proposals.filter((p) => p.state === "open");
+  const openProposals = inbox.proposals.filter((p) => p.state === "open" || unreviewedNote(p));
   el("open").replaceChildren(...openProposals.map(proposalCard), ...open.map((b) => batchCard(b, inbox.tasks[b.task], true)));
   el("empty").hidden = open.length + openProposals.length > 0;
   const answered = inbox.batches.filter((b) => b.state === "answered");
-  const decided = inbox.proposals.filter((p) => p.state !== "open");
+  const decided = inbox.proposals.filter((p) => p.state !== "open" && !unreviewedNote(p));
   el("answered-heading").hidden = answered.length + decided.length === 0;
   el("answered").replaceChildren(...decided.map(proposalCard), ...answered.map((b) => batchCard(b, inbox.tasks[b.task], false)));
 

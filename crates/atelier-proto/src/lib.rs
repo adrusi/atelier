@@ -318,6 +318,10 @@ pub mod theme_method {
     pub const PROPOSALS: &str = "theme/proposals";
     /// [`DecideParams`] → [`Proposal`]. Accepting lands it, with a journal entry.
     pub const DECIDE: &str = "theme/decide";
+    /// `{ "id": string, "undo": bool }` → [`Proposal`]: the user has looked at
+    /// an addition to the design notes (which landed at once), and keeps it
+    /// or undoes it.
+    pub const REVIEW: &str = "theme/review";
     /// Notification from the daemon: a [`Proposal`] was made or decided.
     pub const CHANGED: &str = "theme/changed";
 }
@@ -774,6 +778,10 @@ pub struct Proposal {
     pub journal: Option<u64>,
     pub created: u64,
     pub decided: Option<u64>,
+    /// For additions to the design notes, which land without waiting:
+    /// whether the user has looked at it since.
+    #[serde(default)]
+    pub reviewed: bool,
 }
 
 /// One edit to the current text: replace `find` (which must occur exactly
@@ -791,12 +799,31 @@ pub struct TextEdit {
 #[serde(rename_all = "camelCase")]
 #[ts(export)]
 pub struct ProposeParams {
+    /// Which of the theme's files: THEME.md (the user's, so the proposal
+    /// waits for them), or notes.md (design notes: lands at once).
+    #[serde(default)]
+    #[ts(optional, as = "Option<ThemeFile>")]
+    pub file: ThemeFile,
     pub edits: Vec<TextEdit>,
     pub summary: String,
     #[serde(default)]
     pub why: Option<String>,
     #[serde(default)]
     pub task: Option<String>,
+}
+
+/** A theme's own files that agents can propose changes to. */
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[ts(export)]
+pub enum ThemeFile {
+    /// What the user wants, in their words: changes wait for them.
+    #[default]
+    #[serde(rename = "THEME.md")]
+    Theme,
+    /// Design notes: how the theme has been applied (calls, conventions),
+    /// so work on every site is consistent. Changes land at once.
+    #[serde(rename = "notes.md")]
+    Notes,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
