@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- A known gap in viewport emulation: on a page taller than the
+       viewport, a position: fixed element anchored to the bottom sits at
+       the bottom of the document, not of the emulated viewport. -->
+  <title>responsive-gaps: a long page</title>
+  <style>
+    body { margin: 0; font: 16px sans-serif; }
+    section { height: 600px; border-bottom: 1px solid rgb(200, 200, 200); padding: 12px; }
+    #bottom-bar { position: fixed; left: 0; right: 0; bottom: 0; background: rgb(40, 40, 40); color: white; padding: 8px; }
+  </style>
+</head>
+<body>
+  <section>One</section><section>Two</section><section>Three</section>
+  <div id="bottom-bar">A fixed bar along the bottom of a long page</div>
+</body>
+</html>

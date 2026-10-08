@@ -182,5 +182,11 @@ In order, each step leaving everything working:
    default text on pages that don't offer dark; emulation now narrows what
    a page offers instead, as the browser does. Known gaps it shows: frames,
    and SVG images with their own scheme rules (MDN's sidebar chevrons).
-4. **Width emulation**, as a media feature in the emulation layer, measured
-   by the harness.
+4. **Width emulation** (done), as a media feature in the emulation layer,
+   measured by the harness against `setViewport`: media queries (with
+   calc() in them, which MDN and GitHub use for breakpoints), viewport units,
+   the root's percentage heights, matchMedia and the viewport's size as
+   scripts see it. The root is sized to the emulated viewport, with an
+   identity transform, so `position: fixed` elements lay out in it; while
+   the page is scrolled they're moved by the scroll offset. The fixtures,
+   MDN (ad slots left out) and GitHub match pixel for pixel at phone width.

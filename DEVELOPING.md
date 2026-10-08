@@ -127,7 +127,7 @@ the daemon start real daemons against temporary directories.
 
 ### The fidelity harness
 
-`node dev/fidelity.ts [--scheme dark|light] [--ignore SELECTOR]... URL...`
+`node dev/fidelity.ts [--scheme dark|light | --viewport WxH] [--ignore SELECTOR]... [--scroll Y] URL...`
 renders each page for real and through atelier's emulation in one dev
 instance, and prints what differs: computed styles per property, the root's
 custom properties, layout (resized, or only moved), which image a
@@ -138,6 +138,9 @@ and `report.json` go to `$XDG_RUNTIME_DIR/atelier-dev/fidelity-reports/`.
 Real pages are loaded twice, and what varies between loads is left out as
 noise; `--ignore` leaves out what varies on every load (ad slots).
 `--no-emulation` is the control: everything emulation should fix, unfixed.
+For `--viewport`, the truth is a tab given that size with BiDi's
+`setViewport`, and the emulated tab keeps a different real size; `--scroll`
+compares the pages scrolled down that far.
 
 ### Fixture sites
 

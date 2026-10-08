@@ -8,7 +8,7 @@ import type { PageRuntime } from "./page/index";
 import type { Bundle } from "./proto/Bundle";
 import { RpcError } from "./rpc";
 import * as containers from "./containers";
-import { SCHEME_MARKER } from "./page/markers";
+import { EMULATION_MARKER } from "./page/markers";
 import * as agentTabs from "./agenttabs";
 import { userScripts } from "./userscripts";
 
@@ -145,6 +145,9 @@ function describeTab(tab: browser.tabs.Tab, ctx: ToolContext) {
   };
 }
 
+const VIEWPORT_NOTE =
+  "it's a desktop window of that size, not a phone: hover styles still apply, there's no touch, and meta viewport and text inflation don't apply.";
+
 const HIDDEN_NOTE =
   "This tab is in the background, where Firefox doesn't run animation frames: content drawn with requestAnimationFrame (canvases, some JS animations) may be missing or stale. CSS animations were fast-forwarded to their end state.";
 
@@ -227,22 +230,36 @@ async function schemeGaps(tabId: number): Promise<{ frames?: number; svgImages?:
   };
 }
 
-/** Colour schemes emulated per agent tab (tab/color_scheme). The marker in
- * sessionStorage is per origin, so on each navigation the emulation is
- * injected again, and the marker set for the loads after. */
+/** Code that sets (or clears) a tab's emulation marker. */
+const markerCode = (features: unknown) =>
+  features
+    ? `try { sessionStorage.setItem(${JSON.stringify(EMULATION_MARKER)}, ${JSON.stringify(JSON.stringify(features))}); } catch {}`
+    : `try { sessionStorage.removeItem(${JSON.stringify(EMULATION_MARKER)}); } catch {}`;
+
+/** Media features emulated per agent tab (color_scheme, viewport). The
+ * marker in sessionStorage is per origin, so on each navigation the
+ * emulation is injected again, and the marker set for the loads after. */
 browser.webNavigation.onCommitted.addListener(async (d) => {
   await loaded;
-  const scheme = agentTabs.get(d.tabId)?.scheme;
+  const features = agentTabs.features(d.tabId);
   const us = userScripts();
-  if (d.frameId !== 0 || !scheme || !us) return;
+  if (d.frameId !== 0 || !features || !us) return;
   void us
     .execute({
       target: { tabId: d.tabId },
       injectImmediately: true,
-      js: [{ code: `try { sessionStorage.setItem(${JSON.stringify(SCHEME_MARKER)}, ${JSON.stringify(scheme)}); } catch {}\n${ATELIER_PAGE}\n__atelierPage.emulation.start();` }],
+      js: [{ code: `${markerCode(features)}\n${ATELIER_PAGE}\n__atelierPage.emulation.start();` }],
     })
     .catch(() => {});
 });
+
+/** Applies a tab's recorded emulation: pages decide their layout and scheme
+ * as they load, so it takes a fresh load. */
+async function reloadEmulated(tabId: number, params: any, ctx: ToolContext) {
+  await run(tabId, `${markerCode(agentTabs.features(tabId))} 0`);
+  await browser.tabs.reload(tabId);
+  return afterLoad(tabId, params, ctx, await settled(tabId));
+}
 
 /** Forced states per agent tab, so they can be redone when styles change:
  * force_state clones rules when it's called, and a later save would
@@ -348,6 +365,9 @@ const handlers: Record<string, Handler> = {
     const notes: string[] = [];
     if (param<boolean>(params, "settleAnimations", "boolean", true)) await call(tab.id!, "finishAnimations");
     await call(tab.id!, "imagesReady", 3000);
+    await call(tab.id!, "syncEmulation");
+    const viewport = agentTabs.get(tab.id!)?.viewport;
+    if (viewport) notes.push(`This tab lays out as if its viewport were ${viewport.width}×${viewport.height} (viewport); ${VIEWPORT_NOTE}`);
     const emulated = agentTabs.get(tab.id!)?.scheme;
     if (emulated) {
       notes.push(`This tab emulates the ${emulated} colour scheme (color_scheme); it isn't the user's setting.`);
@@ -377,6 +397,11 @@ const handlers: Record<string, Handler> = {
       const maxHeight = param<number>(params, "maxHeight", "number", 4000);
       rect = { x: 0, y: 0, width: s.width, height: Math.min(s.height, maxHeight) };
       if (s.height > maxHeight) notes.push(`The page is ${s.height}px tall; captured the top ${maxHeight}px (raise maxHeight, or capture elements with \`selector\`).`);
+      if (viewport) rect.width = viewport.width;
+    } else if (viewport) {
+      // The emulated viewport, at the current scroll position.
+      const s = (await call(tab.id!, "pageState")) as { scrollY: number };
+      rect = { x: 0, y: s.scrollY, width: viewport.width, height: viewport.height };
     }
     const scale = param<number>(params, "scale", "number", 1);
     if (scale <= 0 || scale > 8) throw new RpcError(INVALID_PARAMS, "`scale` must be between 0 and 8");
@@ -489,14 +514,26 @@ const handlers: Record<string, Handler> = {
     const scheme = param<string | null>(params, "scheme", "string", null);
     if (scheme !== null && scheme !== "light" && scheme !== "dark") throw new RpcError(INVALID_PARAMS, "`scheme` is light, dark or null");
     await agentTabs.update(tab.id!, { scheme: scheme ?? undefined });
-    await run(tab.id!, scheme === null
-      ? `try { sessionStorage.removeItem(${JSON.stringify(SCHEME_MARKER)}); } catch {} 0`
-      : `try { sessionStorage.setItem(${JSON.stringify(SCHEME_MARKER)}, ${JSON.stringify(scheme)}); } catch {} 0`);
-    // Pages decide their scheme as they load, so emulation needs a fresh load.
-    await browser.tabs.reload(tab.id!);
-    const loaded = await afterLoad(tab.id!, params, ctx, await settled(tab.id!));
+    const loaded = await reloadEmulated(tab.id!, params, ctx);
     const gaps = scheme === null ? null : await schemeGaps(tab.id!);
     return gaps ? { ...loaded, notEmulated: gaps } : loaded;
+  },
+
+  async "tab/viewport"(params, ctx) {
+    const tab = await agentTab(params);
+    const width = param<number | null>(params, "width", "number", null);
+    const height = param<number | null>(params, "height", "number", null);
+    if (width === null) {
+      await agentTabs.update(tab.id!, { viewport: undefined });
+    } else {
+      if (width < 200 || width > 4000) throw new RpcError(INVALID_PARAMS, "`width` is in CSS pixels, between 200 and 4000");
+      const h = height ?? Math.round(width * (width < 600 ? 2.16 : 0.75));
+      if (h < 200 || h > 4000) throw new RpcError(INVALID_PARAMS, "`height` is in CSS pixels, between 200 and 4000");
+      await agentTabs.update(tab.id!, { viewport: { width, height: h } });
+    }
+    const loaded = await reloadEmulated(tab.id!, params, ctx);
+    const viewport = agentTabs.get(tab.id!)?.viewport;
+    return viewport ? { ...loaded, viewport, note: VIEWPORT_NOTE } : loaded;
   },
 
   async "page/force_state"(params) {

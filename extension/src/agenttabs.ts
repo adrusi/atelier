@@ -12,13 +12,23 @@
 // becomes the user's.
 
 import * as containers from "./containers";
+import type { Features } from "./page/media";
 
 export type AgentTab = {
   /** The throwaway container the tab was opened in. */
   throwaway?: string;
   /** The colour scheme emulated in the tab (tab/color_scheme). */
   scheme?: "light" | "dark";
+  /** The viewport size emulated in the tab (tab/viewport). */
+  viewport?: { width: number; height: number };
 };
+
+/** The media features a tab emulates (page/media.ts), or null. */
+export function features(id: number): Features | null {
+  const r = records.get(id);
+  if (!r?.scheme && !r?.viewport) return null;
+  return { ...(r.scheme ? { "prefers-color-scheme": r.scheme } : {}), ...(r.viewport ?? {}) };
+}
 
 const TAB_VALUE = "atelier";
 

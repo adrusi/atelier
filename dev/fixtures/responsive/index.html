@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- The ways a page responds to its viewport's size, for the fidelity
+       harness (dev/fidelity.ts): it compares this page at a real viewport
+       size (BiDi's setViewport) with atelier's in-page emulation of it. -->
+  <title>responsive fixture</title>
+  <link rel="stylesheet" href="wide.css" media="(min-width: 900px)">
+  <link rel="stylesheet" href="{{ALT_ORIGIN}}/responsive/cross.css">
+  <style>
+    body { margin: 0; font: 16px/1.4 sans-serif; }
+    header { position: sticky; top: 0; background: rgb(30, 60, 120); color: white; padding: 8px 16px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; padding: 8px; }
+    .grid div { background: rgb(220, 230, 240); padding: 12px; }
+    #mq-min { color: rgb(0, 0, 0); }
+    @media (min-width: 600px) { #mq-min { color: rgb(0, 128, 0); } }
+    @media (max-width: 37.49em) { #mq-em { font-weight: 700; } }
+    @media (width >= 768px) { #mq-range { text-decoration: underline; } }
+    @media (400px < width < 1000px) { #mq-between { background: rgb(255, 230, 200); } }
+    @media screen and (orientation: portrait) { #mq-orientation { border-left: 6px solid rgb(200, 0, 0); } }
+    @media not (min-width: 600px) { #mq-not { font-style: italic; } }
+    #units { width: 50vw; height: 10vh; background: rgb(240, 200, 220); }
+    #units-calc { width: calc(100vw - 64px); min-height: 2svh; background: rgb(200, 240, 220); }
+    #percent { width: 80%; background: rgb(250, 250, 200); }
+    .card-holder { container-type: inline-size; }
+    @container (min-width: 500px) { .card { display: flex; gap: 12px; } }
+    nav { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; }
+    nav a { white-space: nowrap; }
+    .shell { max-width: 1100px; margin: 0 auto; }
+  </style>
+  <script src="responsive.js"></script>
+</head>
+<body>
+  <header>A sticky header</header>
+  <nav><a href="#">Home</a><a href="#">Products</a><a href="#">Documentation</a><a href="#">Pricing</a><a href="#">Blog</a><a href="#">Company</a></nav>
+  <div class="shell">
+    <p id="mq-min">min-width: 600px</p>
+    <p id="mq-em">max-width in em</p>
+    <p id="mq-range">range syntax</p>
+    <p id="mq-between">a range with two ends</p>
+    <p id="mq-orientation">orientation</p>
+    <p id="mq-not">a negated condition</p>
+    <p id="link-media">a &lt;link media&gt; stylesheet</p>
+    <p id="cross">a cross-origin stylesheet's media query</p>
+    <p id="script">a class set from matchMedia and innerWidth</p>
+    <div id="units">50vw × 10vh</div>
+    <div id="units-calc">calc(100vw - 64px)</div>
+    <div id="percent">80% of its container</div>
+    <div id="inline" style="width: 25vw; background: rgb(200, 200, 255)">inline 25vw</div>
+    <picture>
+      <source srcset="wide.svg" media="(min-width: 700px)">
+      <img id="picture" src="narrow.svg" alt="" width="60" height="30">
+    </picture>
+    <div class="grid"><div>One</div><div>Two</div><div>Three</div><div>Four</div><div>Five</div></div>
+    <div class="card-holder"><div class="card"><span>A container query</span><span>lays this out in a row when there's room</span></div></div>
+    <x-sized></x-sized>
+  </div>
+</body>
+</html>

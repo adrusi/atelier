@@ -9,8 +9,11 @@
 // Ground truth for the colour scheme is Firefox's own per-tab override
 // (BrowsingContext.prefersColorSchemeOverride, what devtools uses), reached
 // through BiDi's chrome scope, which needs an instance started with
-// --system-access. Both tabs are background tabs of the same size, in the
-// same browser, loading the same URL.
+// --system-access; for a viewport size, it's BiDi's setViewport. The tabs
+// are background tabs in the same browser, loading the same URL: for a
+// colour scheme all the same size; for a viewport, the emulated tab keeps
+// a different real size (so emulation has work to do), and its screenshot
+// is clipped to the emulated viewport.
 //
 // Real pages vary from one load to the next (ads, rotating content, clocks),
 // so the real page is loaded twice, and whatever differs between those two
@@ -18,9 +21,9 @@
 // on every load but not between two (ad slots, typically) can be left out
 // with --ignore: matching elements, their subtrees and their pixels.
 //
-//   node dev/fidelity.ts [--instance NAME] [--scheme dark|light]
+//   node dev/fidelity.ts [--instance NAME] [--scheme dark|light | --viewport 390x844]
 //                        [--size 1280x800] [--out DIR] [--no-emulation]
-//                        [--ignore SELECTOR]... URL...
+//                        [--ignore SELECTOR]... [--scroll Y] URL...
 //
 // Without --instance it starts its own (with the fixture server, so
 // fixtures can be named as /color-scheme/ etc.) and stops it afterwards.
@@ -35,7 +38,12 @@ import path from "node:path";
 import { type Bidi, Bidi as BidiClient, evaluate } from "./bidi.ts";
 import * as png from "./png.ts";
 
-export type Emulation = { feature: "prefers-color-scheme"; value: "light" | "dark" };
+export type Emulation =
+  | { feature: "prefers-color-scheme"; value: "light" | "dark" }
+  | { feature: "viewport"; width: number; height: number };
+
+const describeEmulation = (e: Emulation) =>
+  e.feature === "viewport" ? `viewport ${e.width}×${e.height}` : `${e.feature}: ${e.value}`;
 
 type Snapshot = {
   props: string[];
@@ -118,9 +126,9 @@ const snapshotCode = (ignore: string[]) => `(() => {
       const tag = el.tagName.toLowerCase();
       const n = (counts.get(tag) ?? 0) + 1;
       counts.set(tag, n);
-      // Ids with digits in them are usually generated afresh on each load.
-      const id = el.id && !/[0-9]/.test(el.id) ? "#" + el.id : "";
-      const p = prefix + "/" + tag + id + "[" + n + "]";
+      // By tag and position only: ids are often generated afresh on each
+      // load (React's, components' labels), which would break matching.
+      const p = prefix + "/" + tag + "[" + n + "]";
       record(el, p);
       if (el.shadowRoot) walk(el.shadowRoot, p + "::shadow");
       walk(el, p);
@@ -159,6 +167,26 @@ async function contextWithUrl(bidi: Bidi, suffix: string, timeoutMs = 15_000): P
     if (hit) return hit.context;
     if (Date.now() > deadline) throw new Error(`no tab showing …${suffix}`);
     await sleep(250);
+  }
+}
+
+/** Navigates or reloads, waiting for the load. A page that navigates
+ * itself while loading (a redirect in script, an emulation that corrects
+ * its marker) aborts the wait; then wait for whatever load replaced it. */
+async function load(bidi: Bidi, method: string, params: { context: string }) {
+  try {
+    await bidi.send(method, params);
+  } catch (e) {
+    if (!/NS_BINDING_ABORTED/.test((e as Error).message)) throw e;
+    const deadline = Date.now() + 20_000;
+    while (Date.now() < deadline) {
+      await sleep(250);
+      try {
+        if ((await evaluate(bidi, params.context, "document.readyState")) === "complete") return;
+      } catch {
+        // Between documents.
+      }
+    }
   }
 }
 
@@ -238,14 +266,39 @@ function diffPixels(truth: png.Image, emulated: png.Image, again: png.Image, mas
 
 /** Computed values that differ in ways that can't show, because of how
  * emulation works. Each says why; anything not listed here is a difference. */
-const EQUIVALENT: Record<string, { why: string; same: (truth: string, emulated: string, e: Emulation) => boolean }> = {
+/** What an equivalence check knows besides the two values. */
+type Context = { emulation: Emulation; element: string; scrollY: number };
+type Same = (truth: string, emulated: string, c: Context) => boolean;
+
+/** The root's box under viewport emulation: it's the emulated viewport's
+ * size, with an identity transform, to be the containing block that
+ * position: fixed elements lay out in; content overflows it as it would the
+ * viewport. Its own size, and the origins derived from it, differ. */
+const ROOT_BOX = "viewport emulation makes the root the emulated viewport's size, with an identity transform, as the containing block for position: fixed elements; the page overflows it as it would the viewport";
+const rootBox = (check: Same): { why: string; same: Same } => ({
+  why: ROOT_BOX,
+  same: (t, e, c) => c.emulation.feature === "viewport" && c.element === "html" && check(t, e, c),
+});
+
+const EQUIVALENT: Record<string, { why: string; same: Same }> = {
+  transform: rootBox((t, e) => t === "none" && e === "matrix(1, 0, 0, 1, 0, 0)"),
+  height: rootBox((_, e, { emulation: em }) => em.feature === "viewport" && e === `${em.height}px`),
+  "block-size": rootBox((_, e, { emulation: em }) => em.feature === "viewport" && e === `${em.height}px`),
+  translate: {
+    why: "viewport emulation moves position: fixed elements down by the scroll offset, to keep them in the emulated viewport as the page scrolls",
+    same: (t, e, c) => c.emulation.feature === "viewport" && t === "none" && e === `0px ${c.scrollY}px`,
+  },
+  "transform-origin": rootBox(() => true),
+  "perspective-origin": rootBox(() => true),
   "color-scheme": {
     why: "emulation narrows a page's offered schemes to the emulated one (light dark → dark); the scheme in use is the same",
-    same: (t, e, em) => {
+    same: (t, e, { emulation: em }) => {
       const used = (v: string) => {
         const w = v.split(/\s+/);
-        return w.includes(em.value) ? em.value : w.includes("light") ? "light" : w.includes("dark") ? "dark" : "light";
+        const value = em.feature === "prefers-color-scheme" ? em.value : "light";
+        return w.includes(value) ? value : w.includes("light") ? "light" : w.includes("dark") ? "dark" : "light";
       };
+      if (em.feature !== "prefers-color-scheme") return false;
       return used(t) === used(e);
     },
   },
@@ -277,6 +330,29 @@ function locatePixels(snap: Snapshot, m: { width: number; height: number; differ
   return out.map(({ area: _, ...o }) => o);
 }
 
+/** Whether two computed values are the same, allowing numbers to differ by
+ * up to 0.05 (sub-pixel rounding, which can't show). */
+function same(a: string, b: string): boolean {
+  if (a === b) return true;
+  const NUM = /-?\d*\.?\d+(?:e[-+]?\d+)?/gi;
+  if (a.replace(NUM, "#") !== b.replace(NUM, "#")) return false;
+  const x = a.match(NUM) ?? [];
+  const y = b.match(NUM) ?? [];
+  return x.length === y.length && x.every((n, i) => Math.abs(Number(n) - Number(y[i])) <= 0.05);
+}
+
+/** Custom properties keep viewport units as text (50vw), where viewport
+ * emulation has turned them into pixels of the emulated viewport (195px):
+ * the same value. As the emulation does it (page/emulation.ts). */
+const CUSTOM_UNITS = "custom properties keep viewport units as written (50vw); emulation has turned them into the emulated viewport's pixels (195px), the same value";
+function pxForViewportUnits(text: string, e: { width: number; height: number }): string {
+  return text.replace(/(-?\d*\.?\d+)([sld]?)(vw|vh|vmin|vmax|vi|vb)\b/gi, (_, n: string, _v: string, unit: string) => {
+    const u = unit.toLowerCase();
+    const base = u === "vw" || u === "vi" ? e.width : u === "vh" || u === "vb" ? e.height : u === "vmin" ? Math.min(e.width, e.height) : Math.max(e.width, e.height);
+    return `${Math.round(Number(n) * base * 100) / 10000}px`;
+  });
+}
+
 /** Every difference between two snapshots, by element. */
 function differences(a: Snapshot, b: Snapshot) {
   const byPath = new Map(b.elements.map((e) => [e.path, e]));
@@ -290,7 +366,7 @@ function differences(a: Snapshot, b: Snapshot) {
     if (!y) continue;
     compared++;
     x.values.forEach((value, i) => {
-      if (value !== y.values[i]) styles.push({ path: x.path, property: a.props[i], a: value, b: y.values[i] });
+      if (!same(value, y.values[i])) styles.push({ path: x.path, property: a.props[i], a: value, b: y.values[i] });
     });
     if (x.rect.length && x.rect.some((v, i) => Math.abs(v - y.rect[i]) > 0.5)) {
       const resized = Math.abs(x.rect[2] - y.rect[2]) > 0.5 || Math.abs(x.rect[3] - y.rect[3]) > 0.5;
@@ -312,7 +388,7 @@ function differences(a: Snapshot, b: Snapshot) {
   };
 }
 
-function compareSnapshots(truth: Snapshot, emulated: Snapshot, again: Snapshot, emulation: Emulation) {
+function compareSnapshots(truth: Snapshot, emulated: Snapshot, again: Snapshot, emulation: Emulation, scrollY = 0) {
   const real = differences(truth, emulated);
   const noise = differences(truth, again);
   const noisyStyles = new Set(noise.styles.map((d) => `${d.path}\n${d.property}`));
@@ -329,7 +405,7 @@ function compareSnapshots(truth: Snapshot, emulated: Snapshot, again: Snapshot, 
       counted.styles++;
       continue;
     }
-    if (EQUIVALENT[d.property]?.same(d.a, d.b, emulation)) {
+    if (EQUIVALENT[d.property]?.same(d.a, d.b, { emulation, element: d.path, scrollY })) {
       equivalent.set(d.property, (equivalent.get(d.property) ?? 0) + 1);
       continue;
     }
@@ -338,7 +414,11 @@ function compareSnapshots(truth: Snapshot, emulated: Snapshot, again: Snapshot, 
     if (s.examples.length < 3) s.examples.push({ element: d.path, truth: d.a, emulated: d.b });
     styles.set(d.property, s);
   }
-  const kept = real.geometry.filter((d) => !noisyGeometry.has(d.path) && !noisyElements.has(d.path));
+  // The root's own box under viewport emulation (ROOT_BOX).
+  const rootBoxed = (d: { path: string; b: number[] }) =>
+    emulation.feature === "viewport" && d.path === "html" && d.b[2] === emulation.width && d.b[3] === emulation.height;
+  for (const d of real.geometry) if (rootBoxed(d)) equivalent.set("(box)", (equivalent.get("(box)") ?? 0) + 1);
+  const kept = real.geometry.filter((d) => !noisyGeometry.has(d.path) && !noisyElements.has(d.path) && !rootBoxed(d));
   counted.geometry = real.geometry.length - kept.length;
   const geometry: Report["geometry"] = {
     resized: kept.filter((d) => d.resized).length,
@@ -363,9 +443,20 @@ function compareSnapshots(truth: Snapshot, emulated: Snapshot, again: Snapshot, 
     },
     noise: { ...counted, elements: noisyElements.size, pixels: 0 },
     ignored: { elements: truth.ignored.length, pixels: 0 },
-    equivalent: [...equivalent].map(([property, elements]) => ({ property, elements, why: EQUIVALENT[property].why })),
+    equivalent: [...equivalent].map(([property, elements]) => ({
+      property,
+      elements,
+      why: EQUIVALENT[property]?.why ?? (property === "custom properties" ? CUSTOM_UNITS : ROOT_BOX),
+    })),
     styles: [...styles].map(([property, s]) => ({ property, ...s })).sort((a, b) => b.elements - a.elements),
-    rootCustom: real.rootCustom.filter((d) => !noisyCustom.has(d.property)).map((d) => ({ property: d.property, truth: d.a, emulated: d.b })),
+    rootCustom: real.rootCustom
+      .filter((d) => !noisyCustom.has(d.property))
+      .filter((d) => {
+        if (emulation.feature !== "viewport" || pxForViewportUnits(d.a, emulation) !== d.b) return true;
+        equivalent.set("custom properties", (equivalent.get("custom properties") ?? 0) + 1);
+        return false;
+      })
+      .map((d) => ({ property: d.property, truth: d.a, emulated: d.b })),
     geometry,
     images,
   };
@@ -377,7 +468,7 @@ export async function compare(
   instance: string,
   url: string,
   emulation: Emulation,
-  opts: { width?: number; height?: number; out?: string; emulate?: boolean; ignore?: string[] } = {},
+  opts: { width?: number; height?: number; out?: string; emulate?: boolean; ignore?: string[]; scrollY?: number } = {},
 ): Promise<Report> {
   const state = JSON.parse(fs.readFileSync(path.join(RUNTIME, instance, "state.json"), "utf8"));
   const size = { width: opts.width ?? 1280, height: opts.height ?? 800 };
@@ -389,35 +480,60 @@ export async function compare(
 
   // The emulated tab: an agent tab, through atelier's own tools.
   const agentTab = atelier("tab/open", { url: `${base}#atelier-emulated` }).tab as number;
-  if (opts.emulate !== false) atelier("tab/color_scheme", { tab: agentTab, scheme: emulation.value });
+  if (opts.emulate !== false) {
+    if (emulation.feature === "viewport") atelier("tab/viewport", { tab: agentTab, width: emulation.width, height: emulation.height });
+    else atelier("tab/color_scheme", { tab: agentTab, scheme: emulation.value });
+  }
+  // The real tabs' size: the emulated one for a viewport (that's the truth).
+  const realSize = emulation.feature === "viewport" ? { width: emulation.width, height: emulation.height } : size;
+  // The emulated tab's: for a viewport, a different one, at least as tall.
+  const emulatedSize = emulation.feature === "viewport"
+    ? { width: emulation.width === size.width ? size.width + 200 : size.width, height: Math.max(size.height, emulation.height + 150) }
+    : size;
+  /** Makes a real tab real: the override for a scheme (size is set already). */
+  const makeReal = async (bidi: Bidi, suffix: string) => {
+    if (emulation.feature === "prefers-color-scheme") await overrideScheme(bidi, suffix, emulation.value);
+  };
 
   const bidi = await BidiClient.connect(state.bidiPort);
   try {
     await bidi.send("session.new", { capabilities: {} });
     // The truth: an ordinary tab, with Firefox's own override.
     const { context: truth } = await bidi.send("browsingContext.create", { type: "tab", background: true });
-    await bidi.send("browsingContext.setViewport", { context: truth, viewport: size });
-    await bidi.send("browsingContext.navigate", { context: truth, url: `${base}#atelier-truth`, wait: "complete" });
-    await overrideScheme(bidi, "#atelier-truth", emulation.value);
-    await bidi.send("browsingContext.reload", { context: truth, wait: "complete" });
+    await bidi.send("browsingContext.setViewport", { context: truth, viewport: realSize });
+    await load(bidi, "browsingContext.navigate", { context: truth, url: `${base}#atelier-truth`, wait: "complete" });
+    await makeReal(bidi, "#atelier-truth");
+    await load(bidi, "browsingContext.reload", { context: truth, wait: "complete" });
     // The real page again, for what varies between loads anyway.
     const { context: again } = await bidi.send("browsingContext.create", { type: "tab", background: true });
-    await bidi.send("browsingContext.setViewport", { context: again, viewport: size });
-    await bidi.send("browsingContext.navigate", { context: again, url: `${base}#atelier-again`, wait: "complete" });
-    await overrideScheme(bidi, "#atelier-again", emulation.value);
-    await bidi.send("browsingContext.reload", { context: again, wait: "complete" });
+    await bidi.send("browsingContext.setViewport", { context: again, viewport: realSize });
+    await load(bidi, "browsingContext.navigate", { context: again, url: `${base}#atelier-again`, wait: "complete" });
+    await makeReal(bidi, "#atelier-again");
+    await load(bidi, "browsingContext.reload", { context: again, wait: "complete" });
 
     // Loaded again at the same size as the others: pages lay out (and
     // scroll things into view) as they load.
     const emulated = await contextWithUrl(bidi, "#atelier-emulated");
-    await bidi.send("browsingContext.setViewport", { context: emulated, viewport: size });
-    await bidi.send("browsingContext.reload", { context: emulated, wait: "complete" });
+    await bidi.send("browsingContext.setViewport", { context: emulated, viewport: emulatedSize });
+    await load(bidi, "browsingContext.reload", { context: emulated, wait: "complete" });
     await sleep(1000); // late layout, the shims and the emulation's rescans
     for (const c of [truth, emulated, again]) await evaluate(bidi, c, SETTLE);
+    if (opts.scrollY) {
+      for (const c of [truth, emulated, again]) await evaluate(bidi, c, `scrollTo(0, ${opts.scrollY}), 0`);
+      // Background tabs get no scroll events; emulation's timer, throttled
+      // to about a second there, places fixed elements.
+      await sleep(1500);
+    }
     await sleep(300);
 
     const snap = async (c: string) => JSON.parse((await evaluate(bidi, c, snapshotCode(opts.ignore ?? []))) as string) as Snapshot;
-    const shot = async (c: string) => Buffer.from((await bidi.send("browsingContext.captureScreenshot", { context: c })).data, "base64");
+    const shot = async (c: string) => {
+      // The emulated viewport of the emulated tab: the top left of its document.
+      const clip = c === emulated && emulation.feature === "viewport"
+        ? { origin: "document", clip: { type: "box", x: 0, y: opts.scrollY ?? 0, width: emulation.width, height: emulation.height } }
+        : {};
+      return Buffer.from((await bidi.send("browsingContext.captureScreenshot", { context: c, ...clip })).data, "base64");
+    };
     const [truthSnap, emulatedSnap, againSnap] = [await snap(truth), await snap(emulated), await snap(again)];
     const [truthPng, emulatedPng, againPng] = [await shot(truth), await shot(emulated), await shot(again)];
     const files = { truth: path.join(out, "truth.png"), emulated: path.join(out, "emulated.png"), diff: path.join(out, "diff.png") };
@@ -428,7 +544,7 @@ export async function compare(
     fs.writeFileSync(files.diff, png.encode(pixels.diff));
 
     for (const c of [truth, again]) await bidi.send("browsingContext.close", { context: c }).catch(() => {});
-    const compared = compareSnapshots(truthSnap, emulatedSnap, againSnap, emulation);
+    const compared = compareSnapshots(truthSnap, emulatedSnap, againSnap, emulation, opts.scrollY ?? 0);
     compared.noise.pixels = pixels.noise;
     compared.ignored.pixels = pixels.ignored;
     const report: Report = {
@@ -465,7 +581,7 @@ export function isClean(r: Report, maxPixelRatio = 0.001): boolean {
 
 /** One line per finding, for people. */
 export function summarize(r: Report): string {
-  const lines = [`${r.url} (${r.emulation.feature}: ${r.emulation.value}, ${r.size.width}×${r.size.height})`];
+  const lines = [`${r.url} (${describeEmulation(r.emulation)}${r.emulation.feature === "viewport" ? "" : `, ${r.size.width}×${r.size.height}`})`];
   const clean = isClean(r);
   lines.push(`  ${r.elements.compared} elements compared${r.elements.truncated ? " (truncated)" : ""}; ${clean ? "no differences" : "differences:"}`);
   for (const s of r.styles.slice(0, 15)) {
@@ -480,7 +596,9 @@ export function summarize(r: Report): string {
   if (r.elements.onlyTruth.length || r.elements.onlyEmulated.length) {
     lines.push(`  dom    only real: ${r.elements.onlyTruth.length}, only emulated: ${r.elements.onlyEmulated.length}`);
   }
-  for (const q of r.equivalent) lines.push(`  same   ${q.property} differs on ${q.elements} element(s) but renders the same: ${q.why}`);
+  const byWhy = new Map<string, string[]>();
+  for (const q of r.equivalent) byWhy.set(q.why, [...(byWhy.get(q.why) ?? []), `${q.property} (${q.elements})`]);
+  for (const [why, props] of byWhy) lines.push(`  same   ${props.join(", ")} differ but render the same: ${why}`);
   const n = r.noise;
   if (n.styles || n.geometry || n.images || n.elements || n.pixels) {
     lines.push(`  noise  left out, as it varied between two real loads: ${n.styles} style values, ${n.geometry} boxes, ${n.images} images, ${n.elements} elements, ${n.pixels} pixels`);
@@ -496,24 +614,31 @@ if (import.meta.main) {
   const args = process.argv.slice(2);
   let instance: string | undefined;
   let scheme: "light" | "dark" = "dark";
+  let viewport: { width: number; height: number } | null = null;
   let width = 1280;
   let height = 800;
   let out: string | undefined;
   let emulate = true;
   const ignore: string[] = [];
+  let scrollY = 0;
   const urls: string[] = [];
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--instance") instance = args[++i];
     else if (a === "--scheme") scheme = args[++i] as "light" | "dark";
+    else if (a === "--viewport") {
+      const [w, h] = args[++i].split("x").map(Number);
+      viewport = { width: w, height: h };
+    }
     else if (a === "--size") [width, height] = args[++i].split("x").map(Number);
     else if (a === "--out") out = path.resolve(args[++i]);
     else if (a === "--no-emulation") emulate = false;
     else if (a === "--ignore") ignore.push(args[++i]);
+    else if (a === "--scroll") scrollY = Number(args[++i]);
     else urls.push(a);
   }
   if (!urls.length) {
-    console.error("usage: node dev/fidelity.ts [--instance NAME] [--scheme dark|light] [--size WxH] [--out DIR] [--no-emulation] [--ignore SELECTOR]... URL...");
+    console.error("usage: node dev/fidelity.ts [--instance NAME] [--scheme dark|light | --viewport WxH] [--size WxH] [--out DIR] [--no-emulation] [--ignore SELECTOR]... [--scroll Y] URL...");
     process.exit(2);
   }
   const own = !instance;
@@ -531,7 +656,8 @@ if (import.meta.main) {
     for (const u of urls) {
       // Fixture paths (/color-scheme/) are served by the instance's fixture server.
       const url = u.startsWith("/") ? `http://127.0.0.1:${state.fixturesPort}${u}` : u;
-      const r = await compare(instance!, url, { feature: "prefers-color-scheme", value: scheme }, { width, height, out, emulate, ignore });
+      const emulation: Emulation = viewport ? { feature: "viewport", ...viewport } : { feature: "prefers-color-scheme", value: scheme };
+      const r = await compare(instance!, url, emulation, { width, height, out, emulate, ignore, scrollY });
       console.error(summarize(r));
       reports.push(r);
     }

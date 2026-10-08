@@ -5,5 +5,5 @@
 
 /** The task whose tree a bound tab shows (shim.ts). */
 export const SOURCE_MARKER = "atelier:source";
-/** "light" or "dark" in a tab emulating a colour scheme (emulation.ts). */
-export const SCHEME_MARKER = "atelier:scheme";
+/** The media features a tab emulates, as JSON (emulation.ts, media.ts). */
+export const EMULATION_MARKER = "atelier:emulate";

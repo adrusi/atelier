@@ -21,7 +21,7 @@ import { cssFor } from "./matching";
 import { Rpc } from "./rpc";
 import * as agentTabs from "./agenttabs";
 import * as tools from "./tools";
-import { SCHEME_MARKER } from "./page/markers";
+import { EMULATION_MARKER } from "./page/markers";
 import { onUserScriptConnect, onUserScriptMessage, type UserScript, userScripts } from "./userscripts";
 
 declare const ATELIER_NATIVE_HOST: string;
@@ -308,7 +308,7 @@ async function applyBundle(bundle: Bundle) {
 
 /** Starts the page runtime's emulation in a page whose marker asks for it. */
 const emulationStub = `(() => {
-  try { if (!sessionStorage.getItem(${JSON.stringify(SCHEME_MARKER)})) return; } catch { return; }
+  try { if (!sessionStorage.getItem(${JSON.stringify(EMULATION_MARKER)})) return; } catch { return; }
   ${ATELIER_PAGE}
   __atelierPage.emulation.start();
 })();`;
@@ -375,13 +375,13 @@ function listenToShims() {
 
 /** Requests from page scripts (page/emulation.ts): the text of a cross-origin
  * stylesheet, which the page can't read but the extension can fetch; and
- * which colour scheme the tab should emulate, if any, so a page holding a
+ * which media features the tab should emulate, if any, so a page holding a
  * stale marker (a duplicated agent tab, say) can drop it. */
 function onUserScriptRequest(msg: unknown, sender: browser.runtime.MessageSender): Promise<unknown> | undefined {
   const m = msg as { type?: string; href?: string };
-  if (m?.type === "scheme") {
+  if (m?.type === "emulation") {
     const tabId = sender.tab?.id;
-    return agentTabs.ready.then(() => (tabId === undefined ? null : (agentTabs.get(tabId)?.scheme ?? null)));
+    return agentTabs.ready.then(() => (tabId === undefined ? null : agentTabs.features(tabId)));
   }
   if (m?.type !== "fetch-css" || !m.href || !/^https?:/.test(m.href)) return undefined;
   return fetch(m.href, { credentials: "omit" })

@@ -4,6 +4,7 @@
 // be plain JSON.
 
 import * as core from "./core";
+import { syncNow } from "./emulation";
 
 /** Adds CSS for one capture (after atelier's own styles, so it wins ties),
  * or removes it (null). For showing variants without editing files. */
@@ -14,6 +15,12 @@ export function extraCss(css: string | null) {
   el.setAttribute("data-atelier-extra", "");
   el.textContent = css;
   document.documentElement.append(el);
+}
+
+/** Brings what emulation keeps up to date (where fixed elements sit, for
+ * the scroll position) up to date now: before a screenshot. */
+export function syncEmulation() {
+  syncNow();
 }
 
 /** Finishes CSS animations and transitions (shadow trees' included). */

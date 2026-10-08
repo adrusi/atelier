@@ -321,6 +321,24 @@ try {
     await tool("eval", { tab, expression: "document.getElementById('tall').remove(); 0" });
   });
 
+  await check("viewport lays a tab out at a phone's width, and screenshots show that viewport", async () => {
+    const { tab: r } = await tool("tab_open", { url: fixture.replace("/tokens/", "/responsive/") });
+    const color = async () => (await tool("computed_style", { tab: r, selector: "#mq-min", properties: ["color"] })).color;
+    assert.equal(await color(), "rgb(0, 128, 0)", "wide: min-width 600px applies");
+    const set = await tool("viewport", { tab: r, width: 390 });
+    assert.deepEqual(set.viewport, { width: 390, height: 842 });
+    assert.equal(await color(), "rgb(0, 0, 0)", "narrow: it doesn't");
+    const shot = (await rpc("tools/call", { name: "screenshot", arguments: { tab: r } })).result;
+    const image = shot.content.find((c: any) => c.type === "image");
+    const png = Buffer.from(image.data, "base64");
+    assert.equal(png.readUInt32BE(16), 390, "the screenshot is the emulated viewport's width");
+    const text = shot.content.filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
+    assert.match(text, /as if its viewport were 390×842/, text);
+    await tool("viewport", { tab: r, width: null });
+    assert.equal(await color(), "rgb(0, 128, 0)", "back to the real viewport");
+    await tool("tab_close", { tab: r });
+  });
+
   await check("color_scheme says what it can't emulate, and only when the page has it", async () => {
     const { tab: gaps } = await tool("tab_open", { url: fixture.replace("/tokens/", "/scheme-frames/") });
     const r = await tool("color_scheme", { tab: gaps, scheme: "dark" });

@@ -1,7 +1,8 @@
 // End-to-end test for emulation fidelity (ARCHITECTURE.md, "Dev tooling that
 // keeps it honest"): the fidelity harness (dev/fidelity.ts) compares each
 // fixture under a real colour-scheme preference and under atelier's
-// emulation, in both directions, and they must match. Two controls keep the
+// emulation, in both directions, and at real viewport sizes and atelier's
+// emulation of them, and they must match. Two controls keep the
 // harness honest: without emulation it must see differences, and the known
 // gaps (frames, SVG images with their own scheme rules) must still show, so
 // fixing one is noticed and this test updated.
@@ -64,6 +65,32 @@ await withInstance("light", async (name, fixture) => {
     assert.ok(!isClean(r), summarize(r));
     assert.ok(r.styles.some((s) => s.property === "color" && s.elements > 10), summarize(r));
     assert.ok(r.pixels.ratio > 0.5, summarize(r));
+  });
+
+  await check("viewport emulation matches a real viewport, at phone, tablet and wide sizes", async () => {
+    const sizes = [{ width: 390, height: 844 }, { width: 768, height: 1024 }, { width: 1600, height: 900 }];
+    for (const size of sizes) {
+      for (const f of ["/responsive/", "/responsive-gaps/", "/responsive-gaps/long.html"]) {
+        const r = await compare(name, fixture(f), { feature: "viewport", ...size });
+        assert.ok(isClean(r), summarize(r));
+      }
+    }
+    for (const f of ["/cards/", "/tokens/", "/scheme-hard/"]) {
+      const r = await compare(name, fixture(f), { feature: "viewport", width: 390, height: 844 });
+      assert.ok(isClean(r), summarize(r));
+    }
+  });
+
+  await check("position: fixed elements stay in the emulated viewport when the page scrolls", async () => {
+    const r = await compare(name, fixture("/responsive-gaps/long.html"), { feature: "viewport", width: 390, height: 844 }, { scrollY: 500 });
+    assert.ok(isClean(r), summarize(r));
+    assert.ok(r.equivalent.some((q) => q.property === "translate"), summarize(r));
+  });
+
+  await check("without viewport emulation, the harness sees the difference (a control)", async () => {
+    const r = await compare(name, fixture("/responsive/"), { feature: "viewport", width: 390, height: 844 }, { emulate: false });
+    assert.ok(r.styles.some((s) => s.property === "width" && s.elements > 10), summarize(r));
+    assert.ok(r.geometry.resized > 10, summarize(r));
   });
 
   await check("the known gaps still show: frames, and SVG images with their own scheme rules", async () => {

@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <!-- Where in-page viewport emulation may fall short of the real thing,
+       for the fidelity harness: things sized by the window itself rather
+       than by media queries or viewport units. -->
+  <title>responsive-gaps fixture</title>
+  <style>
+    html, body { height: 100%; margin: 0; font: 16px sans-serif; }
+    body { display: flex; flex-direction: column; }
+    main { flex: 1; background: rgb(235, 240, 250); padding: 12px; }
+    #fixed { position: fixed; left: 0; right: 0; bottom: 0; background: rgb(40, 40, 40); color: white; padding: 8px; }
+    #fixed-corner { position: fixed; top: 8px; right: 8px; background: rgb(200, 60, 60); color: white; padding: 4px 8px; }
+  </style>
+</head>
+<body>
+  <main>A full-height layout (html, body: height 100%)</main>
+  <div id="fixed-corner">fixed, top right</div>
+  <div id="fixed">A fixed bar along the bottom</div>
+</body>
+</html>
