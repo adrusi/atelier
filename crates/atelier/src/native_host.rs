@@ -15,6 +15,7 @@ use atelier_proto::method;
 use serde_json::{Value, json};
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Write};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::net::UnixStream;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -57,6 +58,11 @@ fn relay(init: Value, mut stdin: impl Read) -> ExitCode {
         Ok(d) => d,
         Err(e) => return fail(e.to_string()),
     };
+    // A daemon left running from another build (atelier was updated while
+    // it served the browser) is replaced by this one's.
+    if let Err(e) = replace_other_build(&dir) {
+        eprintln!("atelier native-host: couldn't replace the running daemon: {e}");
+    }
     let stream = match connect_or_spawn(&dir) {
         Ok(s) => s,
         Err(e) => return fail(format!("can't reach the daemon for {}: {e}", dir.display())),
@@ -101,6 +107,77 @@ fn relay(init: Value, mut stdin: impl Read) -> ExitCode {
                 eprintln!("atelier native-host: from extension: {e}");
                 return ExitCode::FAILURE;
             }
+        }
+    }
+}
+
+/// If a daemon from another build of atelier serves `dir`, stops it, so
+/// `connect_or_spawn` starts this build's. Only the native host does this:
+/// its binary is the installed one (the one Firefox's manifest names), so a
+/// CLI or agent session from some other build never displaces it.
+fn replace_other_build(dir: &Path) -> io::Result<()> {
+    let socket = paths::socket_path(dir);
+    let Ok(mut s) = UnixStream::connect(&socket) else {
+        return Ok(()); // nothing running
+    };
+    s.set_read_timeout(Some(Duration::from_secs(5)))?;
+    let hello = json!({ "jsonrpc": "2.0", "id": 1, "method": method::INITIALIZE,
+        "params": { "protocolVersion": atelier_proto::PROTOCOL_VERSION, "role": "nativeHost" } });
+    wire::write_frame(&mut s, &hello)?;
+    let reply = wire::read_frame(&mut s)?.unwrap_or(Value::Null);
+    let build = reply
+        .pointer("/result/build")
+        .and_then(Value::as_str)
+        .unwrap_or("");
+    if build == paths::build_id() {
+        return Ok(());
+    }
+    eprintln!(
+        "atelier native-host: the daemon for {} is another build ({}), replacing it with this one ({})",
+        dir.display(),
+        if build.is_empty() { "older" } else { build },
+        paths::build_id()
+    );
+    if reply.get("result").is_some() && !build.is_empty() {
+        // A daemon that knows how to stop when asked.
+        let _ = wire::write_frame(
+            &mut s,
+            &json!({ "jsonrpc": "2.0", "id": 2, "method": method::DAEMON_EXIT, "params": {} }),
+        );
+    } else {
+        // An older one: find its process by its command line, and stop it.
+        stop_daemon_process(dir);
+    }
+    drop(s);
+    // Wait until it has let go of the socket.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while UnixStream::connect(&socket).is_ok() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    Ok(())
+}
+
+/// Stops `atelier daemon --dir <dir>` processes (Linux: by /proc), for
+/// daemons from before `daemon/exit`.
+fn stop_daemon_process(dir: &Path) {
+    let Ok(entries) = std::fs::read_dir("/proc") else {
+        return;
+    };
+    for e in entries.flatten() {
+        let Some(pid) = e.file_name().to_str().and_then(|p| p.parse::<i32>().ok()) else {
+            continue;
+        };
+        let Ok(cmdline) = std::fs::read(e.path().join("cmdline")) else {
+            continue;
+        };
+        let args: Vec<&[u8]> = cmdline.split(|b| *b == 0).collect();
+        let is_daemon = args.iter().any(|a| *a == b"daemon")
+            && args
+                .windows(2)
+                .any(|w| w[0] == b"--dir" && Path::new(std::ffi::OsStr::from_bytes(w[1])) == dir)
+            && args.first().is_some_and(|a| a.ends_with(b"atelier"));
+        if is_daemon {
+            let _ = Command::new("kill").arg(pid.to_string()).status();
         }
     }
 }

@@ -11,12 +11,17 @@ use std::collections::BTreeMap;
 use ts_rs::TS;
 
 /// Bumped on any incompatible change. Peers refuse to talk across versions.
-pub const PROTOCOL_VERSION: u32 = 1;
+/// Bumped when a client could need something an older daemon doesn't have.
+/// 2: tasks, calls, themes, sessions; `build` and `pid` in initialize; `daemon/exit`.
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// Method names.
 pub mod method {
     /// Request, first message on any connection: [`InitializeParams`] → [`InitializeResult`].
     pub const INITIALIZE: &str = "initialize";
+    /// Request: `{}` → `{}`, then the daemon exits. The native host sends it
+    /// to a daemon from another build of atelier, before starting its own.
+    pub const DAEMON_EXIT: &str = "daemon/exit";
     /// Request: [`SourceParams`] (optional) → [`BlobRef`] for that source's
     /// current [`Bundle`] (as JSON). Asking for a task's source starts the
     /// daemon watching its tree.
@@ -97,6 +102,12 @@ pub struct InitializeResult {
     pub daemon_version: String,
     /// The canonical owned directory the daemon serves.
     pub atelier_dir: String,
+    /// Which build of atelier the daemon is (a hash of its executable), so
+    /// the native host can tell a daemon left running from before an update.
+    #[serde(default)]
+    pub build: String,
+    #[serde(default)]
+    pub pid: u32,
 }
 
 /// A content-addressed blob, fetched in chunks with `blob/get`.

@@ -79,6 +79,36 @@ fn whoami() -> String {
     std::env::var("USER").unwrap_or_else(|_| "user".into())
 }
 
+/// This build of atelier, so two builds with the same version number still
+/// tell themselves apart: a hash of its executable's resolved path, size and
+/// modification time (a Nix store path changes with every build; a dev build
+/// changes its mtime), cheap to compute even for large debug builds.
+pub fn build_id() -> &'static str {
+    static ID: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    ID.get_or_init(|| {
+        use sha2::{Digest, Sha256};
+        let Ok(exe) = std::env::current_exe().and_then(|p| p.canonicalize()) else {
+            return "unknown".into();
+        };
+        let meta = std::fs::metadata(&exe).ok();
+        let mtime = meta
+            .as_ref()
+            .and_then(|m| m.modified().ok())
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map_or(0, |d| d.as_nanos());
+        let key = format!(
+            "{}\n{}\n{mtime}",
+            exe.display(),
+            meta.map_or(0, |m| m.len())
+        );
+        Sha256::digest(key.as_bytes())
+            .iter()
+            .take(6)
+            .map(|b| format!("{b:02x}"))
+            .collect()
+    })
+}
+
 pub fn socket_path(dir: &Path) -> PathBuf {
     runtime_dir().join(format!("{}.sock", dir_id(dir)))
 }

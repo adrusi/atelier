@@ -114,7 +114,7 @@ fn initialize(s: &mut UnixStream, dir: &Path) -> Value {
         s,
         0,
         "initialize",
-        json!({ "protocolVersion": 1, "role": "cli", "atelierDir": dir }),
+        json!({ "protocolVersion": atelier_proto::PROTOCOL_VERSION, "role": "cli", "atelierDir": dir }),
     )
 }
 
@@ -149,7 +149,15 @@ fn serves_bundle_and_pushes_changes() {
     let mut s = env.connect();
 
     let init = initialize(&mut s, &env.dir);
-    assert_eq!(init["result"]["protocolVersion"], json!(1));
+    assert_eq!(
+        init["result"]["protocolVersion"],
+        json!(atelier_proto::PROTOCOL_VERSION)
+    );
+    assert_eq!(
+        init["result"]["build"].as_str().map(str::len),
+        Some(12),
+        "a build id"
+    );
 
     let blob = call(&mut s, 1, "bundle/get", Value::Null)["result"].clone();
     let bundle = fetch_bundle(&mut s, &blob);
@@ -294,7 +302,7 @@ fn rejects_bad_initialization() {
         &mut s,
         1,
         "initialize",
-        json!({ "protocolVersion": 1, "role": "cli", "atelierDir": "/" }),
+        json!({ "protocolVersion": atelier_proto::PROTOCOL_VERSION, "role": "cli", "atelierDir": "/" }),
     );
     assert!(r["error"]["message"].as_str().unwrap().contains("serves"));
 
@@ -549,7 +557,7 @@ fn requests_start_a_session_unless_one_is_at_work() {
         &mut agent,
         0,
         "initialize",
-        json!({ "protocolVersion": 1, "role": "mcp" }),
+        json!({ "protocolVersion": atelier_proto::PROTOCOL_VERSION, "role": "mcp" }),
     );
     let forced = call(&mut s, 3, "session/start", json!({ "force": true }))["result"].clone();
     assert_eq!(forced["started"], json!(true), "{forced}");
@@ -705,4 +713,75 @@ fn an_interrupted_undo_is_finished_on_restart() {
     assert_eq!(journal[1]["undoneBy"], json!(2));
     daemon.kill().unwrap();
     daemon.wait().unwrap();
+}
+
+/// Sends one native-messaging message (length-prefixed JSON) and reads one.
+fn native_exchange(child: &mut Child, msg: &Value) -> Value {
+    let stdin = child.stdin.as_mut().unwrap();
+    let body = serde_json::to_vec(msg).unwrap();
+    stdin.write_all(&(body.len() as u32).to_ne_bytes()).unwrap();
+    stdin.write_all(&body).unwrap();
+    stdin.flush().unwrap();
+    let stdout = child.stdout.as_mut().unwrap();
+    let mut len = [0u8; 4];
+    stdout.read_exact(&mut len).unwrap();
+    let mut buf = vec![0u8; u32::from_ne_bytes(len) as usize];
+    stdout.read_exact(&mut buf).unwrap();
+    serde_json::from_slice(&buf).unwrap()
+}
+
+#[test]
+fn the_native_host_replaces_a_daemon_from_another_build() {
+    let env = Env::new();
+    // Another build: the same binary at another path has another build id.
+    let other = env.root.join("other-atelier");
+    std::fs::copy(env!("CARGO_BIN_EXE_atelier"), &other).unwrap();
+    let mut stale = Command::new(&other);
+    for (var, sub) in [
+        ("XDG_RUNTIME_DIR", "run"),
+        ("XDG_STATE_HOME", "state"),
+        ("XDG_CONFIG_HOME", "config"),
+        ("XDG_DATA_HOME", "data"),
+    ] {
+        stale.env(var, env.root.join(sub));
+    }
+    let mut stale = stale
+        .args(["daemon", "--dir"])
+        .arg(&env.dir)
+        .spawn()
+        .unwrap();
+    let mut s = env.connect();
+    let before = initialize(&mut s, &env.dir)["result"].clone();
+    assert_eq!(before["pid"], json!(stale.id()));
+    drop(s);
+
+    let mut host = env
+        .command()
+        .arg("native-host")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    let reply = native_exchange(
+        &mut host,
+        &json!({ "jsonrpc": "2.0", "id": 1, "method": "initialize",
+            "params": { "protocolVersion": atelier_proto::PROTOCOL_VERSION, "role": "extension", "atelierDir": env.dir } }),
+    );
+    let after = &reply["result"];
+    assert_ne!(after["build"], before["build"], "{reply}");
+    assert_ne!(after["pid"], before["pid"]);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while stale.try_wait().unwrap().is_none() && Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(
+        stale.try_wait().unwrap().is_some(),
+        "the other build's daemon exited"
+    );
+
+    host.kill().unwrap();
+    host.wait().unwrap();
+    // The new daemon runs on its own (its own process group); stop it.
+    let pid = after["pid"].as_u64().unwrap();
+    let _ = Command::new("kill").arg(pid.to_string()).status();
 }

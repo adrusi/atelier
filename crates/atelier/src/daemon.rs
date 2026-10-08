@@ -744,6 +744,8 @@ fn initialize(state: &State, msg: &Value) -> Result<(Role, Value), Value> {
         protocol_version: PROTOCOL_VERSION,
         daemon_version: env!("CARGO_PKG_VERSION").to_string(),
         atelier_dir: state.dir.display().to_string(),
+        build: paths::build_id().to_string(),
+        pid: std::process::id(),
     };
     Ok((params.role, wire::response(id, json!(result))))
 }
@@ -763,6 +765,20 @@ fn handle_request(state: &Arc<State>, msg: Value, out: mpsc::Sender<Value>, role
                     Err((code, message)) => wire::error_response(id, code, message),
                 };
             let _ = out.send(reply).await;
+        });
+        return;
+    }
+    if msg.get("method").and_then(Value::as_str) == Some(method::DAEMON_EXIT) {
+        // Another build of atelier is taking over (an update): stop serving.
+        eprintln!("atelier daemon: asked to exit, for another build of atelier");
+        if let Some(id) = msg.get("id").cloned() {
+            let _ = out.try_send(wire::response(id, json!({})));
+        }
+        let socket = paths::socket_path(&state.dir);
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            let _ = std::fs::remove_file(&socket);
+            std::process::exit(0);
         });
         return;
     }

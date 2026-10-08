@@ -4,4 +4,9 @@ export type InitializeResult = { protocolVersion: number, daemonVersion: string,
 /**
  * The canonical owned directory the daemon serves.
  */
-atelierDir: string, };
+atelierDir: string, 
+/**
+ * Which build of atelier the daemon is (a hash of its executable), so
+ * the native host can tell a daemon left running from before an update.
+ */
+build: string, pid: number, };

@@ -31,7 +31,7 @@ declare const ATELIER_PAGE: string;
 declare const ATELIER_PAGE_MAIN: string;
 
 /** Must match atelier_proto::PROTOCOL_VERSION. */
-const PROTOCOL_VERSION = 1;
+const PROTOCOL_VERSION = 2;
 /** Bytes per blob/get request; the daemon caps chunks at this anyway. */
 const CHUNK = 512 * 1024;
 
@@ -120,6 +120,12 @@ async function connect() {
     }
   } catch (e) {
     state.error = e instanceof Error ? e.message : String(e);
+    // An atelier program older than this extension (an update that reached
+    // one but not the other) says so in its own terms; say it in the user's.
+    const older = /protocol version \d+ isn't supported; this daemon speaks (\d+)/.exec(state.error);
+    if (older && Number(older[1]) < PROTOCOL_VERSION) {
+      state.error = `The atelier program on this computer is older than the extension (protocol ${older[1]}; the extension needs ${PROTOCOL_VERSION}). Update atelier (with home-manager, \`home-manager switch\` after updating the flake input), then restart Firefox.`;
+    }
     console.warn("atelier:", state.error);
     if (rpc === r) {
       rpc = null;
