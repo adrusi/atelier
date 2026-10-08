@@ -221,10 +221,14 @@ export class Shim {
   private keepLast() {
     const root = document.documentElement;
     const els = this.order.map((id) => this.elements.get(id)).filter((e): e is HTMLStyleElement => Boolean(e));
-    // CSS added for one screenshot (screenshot's extraCss) goes after ours, so it wins.
-    const extra = [...root.querySelectorAll(":scope > style[data-atelier-extra]")];
+    // CSS added by the tools goes after ours, as it stands in for something
+    // that would come after: a variant for one screenshot (extraCss), and
+    // force_state's clones of rules, ours included, which at equal
+    // specificity have to beat our other rules as the real state would.
+    const after = (e: Element) => e.hasAttribute("data-atelier-extra") || e.hasAttribute("data-atelier-force");
+    const extra = [...root.children].filter(after);
     let node = root.lastElementChild;
-    while (node && node.hasAttribute("data-atelier-extra")) node = node.previousElementSibling;
+    while (node && after(node)) node = node.previousElementSibling;
     for (let i = els.length - 1; i >= 0; i--) {
       if (node !== els[i]) {
         for (const el of els) root.append(el);

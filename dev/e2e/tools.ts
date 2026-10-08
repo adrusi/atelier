@@ -271,6 +271,7 @@ try {
   :is(h1::before, h2) { color: red; }
   main { & > p { margin: 0; } }
   html, body, main > p:first-child, a:link { margin: 0; }
+  input[type="submit"]:nope, a[title="a;b{c"] { color: red; }
 }
 `);
     const r = await tool("styles_status", { tab });
@@ -280,6 +281,7 @@ try {
       [
         { style, selector: "main:unknown-pseudo", effect: "dropped" },
         { style, selector: ":is(h1::before, h2)", effect: "ignored" },
+        { style, selector: 'input[type="submit"]:nope', effect: "dropped" },
       ],
       JSON.stringify(r.tab),
     );
@@ -294,6 +296,32 @@ try {
     const plain = await tool("tab_open", { url: fixture });
     assert.equal(plain.warning, undefined);
     await tool("tab_close", { tab: plain.tab });
+  });
+
+  await check("type_text chooses a <select> option by its text, as a user would", async () => {
+    await tool("eval", { tab, expression: "const s = document.createElement('select'); s.id = 'pick'; s.innerHTML = '<option value=\"auto\">Automatic</option><option value=\"dark\">Dark</option>'; s.addEventListener('change', () => (s.dataset.changed = s.value)); document.body.append(s); 0" });
+    const r = await tool("type_text", { tab, selector: "#pick", text: "dark" });
+    assert.deepEqual(r, { value: "dark", chosen: "Dark" });
+    assert.deepEqual(await tool("eval", { tab, expression: "document.getElementById('pick').dataset.changed" }), { result: "dark" }, "the page heard the change");
+    await assert.rejects(tool("type_text", { tab, selector: "#pick", text: "Sepia" }), /no option "Sepia"; its options: Automatic \(auto\), Dark \(dark\)/);
+    await tool("eval", { tab, expression: "document.getElementById('pick').remove(); 0" });
+  });
+
+  await check("a forced state beats our own rules as the real state would, at equal specificity", async () => {
+    const file = path.join(owned, "services/fixtures/e2e/forced.user.css");
+    // Equal specificity: hovering, the later rule (green) wins.
+    fs.writeFileSync(file, `@-moz-document url-prefix("http://127.0.0.1:") {
+  #forced.a.b { color: rgb(200, 0, 0); }
+  #forced.a:hover { color: rgb(0, 150, 0); }
+}
+`);
+    await tool("eval", { tab, expression: "const p = document.createElement('p'); p.id = 'forced'; p.className = 'a b'; p.textContent = 'forced'; document.body.append(p); 0" });
+    await tool("styles_status", { tab });
+    await tool("force_state", { tab, selector: "#forced", states: ["hover"] });
+    assert.equal((await tool("computed_style", { tab, selector: "#forced", properties: ["color"] })).color, "rgb(0, 150, 0)");
+    await tool("force_state", { tab, selector: "#forced", states: [] });
+    await tool("eval", { tab, expression: "document.getElementById('forced').remove(); 0" });
+    fs.rmSync(file);
   });
 
   await check("screenshot's extraCss shows a variant just for the capture", async () => {
@@ -360,6 +388,7 @@ try {
     const set = await tool("viewport", { tab: r, width: 390 });
     assert.deepEqual(set.viewport, { width: 390, height: 842 });
     assert.equal(await color(), "rgb(0, 0, 0)", "narrow: it doesn't");
+    assert.deepEqual(await tool("eval", { tab: r, expression: "[innerWidth, document.documentElement.clientWidth]" }), { result: [390, 390] }, "eval sees the emulated size");
     const shot = (await rpc("tools/call", { name: "screenshot", arguments: { tab: r } })).result;
     const image = shot.content.find((c: any) => c.type === "image");
     const png = Buffer.from(image.data, "base64");

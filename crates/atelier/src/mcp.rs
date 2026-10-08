@@ -261,7 +261,8 @@ const TOOLS: &[Tool] = &[
         method: "page/type",
         description: "Fill in a text field as typing would: focus it, set its value, and fire input and change events, \
             so the page reacts (search suggestions, live filters). With submit, also press Enter and submit its form. \
-            The events aren't trusted, so a rare page that checks for real keystrokes won't respond.",
+            On a <select>, choose the option with that text or value (a site's own theme menu, say). The events \
+            aren't trusted, so a rare page that checks for real keystrokes won't respond.",
         schema: || {
             json!({ "type": "object", "properties": {
                 "tab": tab_prop(),

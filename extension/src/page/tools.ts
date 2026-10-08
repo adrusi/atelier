@@ -475,6 +475,18 @@ export function fill(selector: string, text: string, submit: boolean) {
   const editable = (e: Element) => e instanceof HTMLInputElement || e instanceof HTMLTextAreaElement;
   let target = core.find(selector);
   if (!target) return null;
+  if (target instanceof HTMLSelectElement) {
+    // A <select>: choose the option whose value or text this is, as a user would.
+    const want = text.trim().toLowerCase();
+    const options = [...target.options];
+    const option = options.find((o) => o.value === text) ?? options.find((o) => o.text.trim().toLowerCase() === want);
+    if (!option) return { error: `\`${selector}\` is a <select> with no option "${text}"; its options: ${options.map((o) => `${o.text.trim()} (${o.value})`).join(", ")}` };
+    target.focus();
+    target.value = option.value;
+    target.dispatchEvent(new Event("input", { bubbles: true }));
+    target.dispatchEvent(new Event("change", { bubbles: true }));
+    return { value: target.value, chosen: option.text.trim() };
+  }
   let host: string | undefined;
   if (!editable(target)) {
     const inner = core.scopes(target).filter((s): s is ShadowRoot => s instanceof ShadowRoot).map((s) => s.querySelector("input:not([type=hidden]), textarea")).find(Boolean) ?? null;
@@ -625,12 +637,20 @@ export function atelierStyleCheck(): { present: string[]; dropped: Unusable[] } 
     present.add(id);
     // Rule preludes in the source: text before each {, outside comments and
     // strings, skipping at-rules and keyframe selectors.
-    const text = (el.textContent ?? "").replace(/\/\*[\s\S]*?\*\//g, "").replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""');
+    const text = (el.textContent ?? "").replace(/\/\*[\s\S]*?\*\//g, "");
     const blocks: string[] = [];
     let start = 0;
+    let quote = "";
     for (let i = 0; i < text.length; i++) {
       const c = text[i];
-      if (c === "{") {
+      // Braces and semicolons inside strings ([title="a;b"], content: "{") don't count.
+      if (quote) {
+        if (c === "\\") i++;
+        else if (c === quote) quote = "";
+        continue;
+      }
+      if (c === '"' || c === "'") quote = c;
+      else if (c === "{") {
         const prelude = text.slice(start, i).trim();
         const inKeyframes = blocks.some((b) => /^@(-\w+-)?keyframes/.test(b));
         blocks.push(prelude);

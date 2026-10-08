@@ -102,6 +102,19 @@ export function start() {
     style.setAttribute("data-atelier-emulation", "");
     style.textContent = `html { width: ${size.width}px !important; height: ${size.height}px !important; transform: scale(1); }`;
     root.append(style);
+    // The userScripts world (where eval runs) has its own view of window:
+    // the emulated size there too, as main.ts does for the page's world.
+    const getter = (target: object, name: string, value: number) => {
+      try {
+        Object.defineProperty(target, name, { get: () => value, configurable: true });
+      } catch {
+        // Not redefinable here.
+      }
+    };
+    for (const name of ["innerWidth", "outerWidth"]) getter(window, name, size.width);
+    for (const name of ["innerHeight", "outerHeight"]) getter(window, name, size.height);
+    getter(root, "clientWidth", size.width);
+    getter(root, "clientHeight", size.height);
   }
   // The marker is the page's; the background has the truth. A tab that
   // shouldn't be emulating this (a copy of an agent tab) drops it and reloads.
