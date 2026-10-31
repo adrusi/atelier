@@ -8,9 +8,14 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-/// Only the dev build exists so far; it must match extension/build.ts.
-const HOST_NAME: &str = "atelier_dev";
-const EXTENSION_ID: &str = "atelier-dev@atelier.invalid";
+/// The native host names and the extension each is for, one per flavor of
+/// the extension; they must match extension/build.ts. Both are registered,
+/// pointing at the same binary, so the signed extension and a dev build
+/// loaded alongside it both reach it.
+const HOSTS: &[(&str, &str)] = &[
+    ("atelier", "atelier@adrusi.com"),
+    ("atelier_dev", "atelier-dev@atelier.invalid"),
+];
 
 /// Firefox-family browsers and where they look for per-user host manifests.
 const BROWSERS: &[(&str, &str)] = &[
@@ -41,12 +46,14 @@ fn setup(dir: Option<&str>) -> io::Result<()> {
         if i > 0 && !home.join(dot_dir).is_dir() {
             continue;
         }
-        let manifest = home
-            .join(dot_dir)
-            .join("native-messaging-hosts")
-            .join(format!("{HOST_NAME}.json"));
-        write_manifest(&manifest, &exe)?;
-        wrote.push(format!("{browser}: {}", manifest.display()));
+        for (name, extension) in HOSTS {
+            let manifest = home
+                .join(dot_dir)
+                .join("native-messaging-hosts")
+                .join(format!("{name}.json"));
+            write_manifest(&manifest, name, extension, &exe)?;
+            wrote.push(format!("{browser}: {}", manifest.display()));
+        }
     }
     println!("registered the native host ({}) for:", exe.display());
     for w in &wrote {
@@ -69,10 +76,10 @@ fn setup(dir: Option<&str>) -> io::Result<()> {
     }
 
     println!(
-        "\nNext: load the extension. Until atelier has signed builds, use about:debugging →\n\
-         This Firefox → Load Temporary Add-on, and pick extension/dist/manifest.json\n\
-         (temporary add-ons are removed when Firefox restarts). Then allow user scripts\n\
-         when atelier asks."
+        "\nNext: install the extension. The signed one is release/atelier.xpi in atelier's\n\
+         repo: open it in Firefox (File → Open File), or let the home-manager module install\n\
+         it. A dev build loads through about:debugging → This Firefox → Load Temporary\n\
+         Add-on (extension/dist/manifest.json). Then allow user scripts when atelier asks."
     );
     if !exe.starts_with("/nix/store") && exe.components().any(|c| c.as_os_str() == "target") {
         println!(
@@ -84,13 +91,13 @@ fn setup(dir: Option<&str>) -> io::Result<()> {
     Ok(())
 }
 
-fn write_manifest(path: &Path, exe: &Path) -> io::Result<()> {
+fn write_manifest(path: &Path, name: &str, extension: &str, exe: &Path) -> io::Result<()> {
     let manifest = json!({
-        "name": HOST_NAME,
+        "name": name,
         "description": "atelier native host",
         "path": exe,
         "type": "stdio",
-        "allowed_extensions": [EXTENSION_ID],
+        "allowed_extensions": [extension],
     });
     fs::create_dir_all(path.parent().expect("manifest has a parent"))?;
     fs::write(path, serde_json::to_string_pretty(&manifest)? + "\n")

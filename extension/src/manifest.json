@@ -4,7 +4,11 @@
   "version": "0.0.0",
   "description": "Agent-authored userstyles.",
   "browser_specific_settings": {
-    "gecko": { "id": "__GECKO_ID__", "strict_min_version": "140.0" }
+    "gecko": {
+      "id": "__GECKO_ID__",
+      "strict_min_version": "142.0",
+      "data_collection_permissions": { "required": ["none"] }
+    }
   },
   "background": { "scripts": ["background.js"], "type": "module" },
   "action": { "default_popup": "popup.html", "default_title": "atelier" },

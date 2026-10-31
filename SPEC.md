@@ -591,7 +591,7 @@ atelier daemon | native-host | mcp  internal entry points
 
 - **First-class: a Nix flake with a home-manager module.** It installs the extension through policies, the binary, the native-messaging manifests, the managed-storage default for `ATELIER_DIR`, and optionally the MCP registration and kit. It calls the same code paths as `atelier setup`.
 - **Manual install:**
-  1. Install the signed, self-distributed `.xpi` (signed through AMO as unlisted, with an `update_url`).
+  1. Install the signed, self-distributed `.xpi` (signed through AMO as unlisted, with an `update_url`). *Done in part:* `npm run sign` (extension/sign.ts) builds the release flavor (ID `atelier@adrusi.com`, native host `atelier`; dev builds keep `atelier-dev@atelier.invalid` and `atelier_dev`), versions it by date and time, signs it through AMO's API with `web-ext sign --channel unlisted`, and saves `release/atelier.xpi`, which the home-manager module installs through Firefox's policies (`ExtensionSettings`). `atelier setup` and the module register both flavors' native hosts, so a dev build runs beside the signed one. No `update_url` yet: updates come with the flake.
   2. Install a static musl binary from GitHub releases, or use `cargo install`.
   3. Run `atelier setup`. It writes native-messaging manifests for every Firefox-family browser it finds (Firefox, LibreWolf, Waterfox; paths in a table so more are easy to add), prints or runs the MCP registration for harnesses it recognises, and installs the kit.
 - Flatpak and Snap Firefox are unsupported in v1 (§1).

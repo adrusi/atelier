@@ -12,6 +12,7 @@
       # store paths, because the jail can't see ~/.nix-profile.
       devEnvTools = pkgs: with pkgs; [
         nodejs_24
+        web-ext
         bubblewrap
         sway
         firefox
@@ -57,19 +58,22 @@
         default = atelier;
       });
 
-      # Registers the native host with Firefox and (optionally) sets the owned
-      # directory, declaratively. The extension itself is still loaded through
-      # about:debugging until there are signed builds.
+      # Registers the native hosts with Firefox, optionally sets the owned
+      # directory, and (with programs.firefox) installs the signed extension,
+      # release/atelier.xpi, through Firefox's policies.
       homeManagerModules.default = { config, lib, pkgs, ... }:
         let
           cfg = config.programs.atelier;
-          manifest = builtins.toJSON {
-            name = "atelier_dev";
+          # One host per flavor of the extension (extension/build.ts), both
+          # the same binary: the signed extension, and a dev build beside it.
+          manifest = name: extension: builtins.toJSON {
+            inherit name;
             description = "atelier native host";
             path = lib.getExe cfg.package;
             type = "stdio";
-            allowed_extensions = [ "atelier-dev@atelier.invalid" ];
+            allowed_extensions = [ extension ];
           };
+          xpi = ./release/atelier.xpi;
         in
         {
           options.programs.atelier = {
@@ -78,6 +82,16 @@
               type = lib.types.package;
               default = self.packages.${pkgs.stdenv.hostPlatform.system}.atelier;
               description = "The atelier package.";
+            };
+            installExtension = lib.mkOption {
+              type = lib.types.bool;
+              default = config.programs.firefox.enable && builtins.pathExists xpi;
+              defaultText = lib.literalExpression "config.programs.firefox.enable";
+              description = ''
+                Install the signed extension (release/atelier.xpi) in Firefox
+                through its policies, and keep it updated with this flake.
+                Needs Firefox managed by home-manager (programs.firefox).
+              '';
             };
             atelierDir = lib.mkOption {
               type = lib.types.nullOr lib.types.str;
@@ -88,7 +102,14 @@
           };
           config = lib.mkIf cfg.enable {
             home.packages = [ cfg.package ];
-            home.file.".mozilla/native-messaging-hosts/atelier_dev.json".text = manifest;
+            home.file.".mozilla/native-messaging-hosts/atelier.json".text = manifest "atelier" "atelier@adrusi.com";
+            home.file.".mozilla/native-messaging-hosts/atelier_dev.json".text = manifest "atelier_dev" "atelier-dev@atelier.invalid";
+            programs.firefox.policies.ExtensionSettings = lib.mkIf cfg.installExtension {
+              "atelier@adrusi.com" = {
+                installation_mode = "normal_installed";
+                install_url = "file://${xpi}";
+              };
+            };
             xdg.configFile."atelier/config.toml" = lib.mkIf (cfg.atelierDir != null) {
               text = ''atelier_dir = "${cfg.atelierDir}"'' + "\n";
             };

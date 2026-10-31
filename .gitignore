@@ -1,5 +1,7 @@
 /target/
 /extension/node_modules/
 /extension/dist/
+/extension/dist-release/
+/extension/signed/
 /spikes/*/last-run.json
 /spikes/r5/vendor/

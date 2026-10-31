@@ -7,10 +7,10 @@ Early days. The design is in [SPEC.md](SPEC.md), and how to work on it is in
 
 ## Trying it in your own Firefox
 
-Phase 1 works: style files in an owned directory are applied to pages, before
-first paint, and update live when you edit them. There are no signed builds
-yet, so the extension loads as a temporary add-on, which Firefox removes when
-it restarts.
+Style files in an owned directory are applied to pages, before first paint,
+and update live when you edit them; agents can write and revise them for you.
+The extension is signed (unlisted on AMO) as `release/atelier.xpi`, so
+release Firefox keeps it installed.
 
 1. **Build** the binary and the extension:
    ```sh
@@ -22,15 +22,19 @@ it restarts.
    ```sh
    atelier setup --dir examples/owned     # `nix run .#atelier -- setup …`, or target/debug/atelier
    ```
-   This writes `~/.mozilla/native-messaging-hosts/atelier_dev.json` (and the
-   same for LibreWolf or Waterfox if present) and
+   This writes native-host manifests to `~/.mozilla/native-messaging-hosts/`
+   (`atelier.json` for the signed extension, `atelier_dev.json` for a dev
+   build; the same for LibreWolf or Waterfox if present) and
    `~/.config/atelier/config.toml`. With home-manager, import
    `homeManagerModules.default` from this flake instead and set
    `programs.atelier = { enable = true; atelierDir = "…"; };`.
-3. **Load the extension:** go to `about:debugging` → This Firefox → Load
-   Temporary Add-on, and pick `manifest.json` in the built extension
-   (`result-1/` from `nix build`, or `extension/dist/`). It asks to be allowed
-   to run user scripts; it needs that to style pages before they first appear.
+3. **Install the extension:** open `release/atelier.xpi` in Firefox (File →
+   Open File). With home-manager managing Firefox (`programs.firefox`), the
+   module installs it through Firefox's policies instead, and keeps it updated
+   with the flake. It asks to be allowed to run user scripts; it needs that to
+   style pages before they first appear. (A dev build loads through
+   `about:debugging` → This Firefox → Load Temporary Add-on, picking
+   `extension/dist/manifest.json`; Firefox removes it when it restarts.)
 4. **Look around.** The toolbar button shows what applies to the current page,
    and `atelier status`, `atelier lint` and `atelier match URL` help from the
    terminal. Edit a style under the owned directory and open pages update as

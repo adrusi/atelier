@@ -180,3 +180,23 @@ Public smoke tests use sites that don't need logging in (Wikipedia, MDN, Hacker 
 
 - Temporarily installed MV3 extensions get their content-script host permissions without a prompt: the smoke extension's `<all_urls>` CSS applies immediately. Don't assume the same for a signed install.
 - Agent harnesses may themselves run tools inside a bubblewrap sandbox (Claude Code does on Linux). Nested bwrap usually works when unprivileged user namespaces are enabled. If it doesn't, run `atelier-dev` outside the harness's sandbox.
+
+### Signing a release
+
+The extension comes in two flavors (`extension/build.ts`): **dev**, the
+default (ID `atelier-dev@atelier.invalid`, native host `atelier_dev`, built
+into `extension/dist/`), and **release** (ID `atelier@adrusi.com`, native
+host `atelier`, into `extension/dist-release/`). To sign a release through
+AMO, with API credentials from addons.mozilla.org (Developer Hub → Tools →
+Manage API Keys), from a `nix develop` shell:
+
+```sh
+cd extension
+WEB_EXT_API_KEY=<JWT issuer> WEB_EXT_API_SECRET=<JWT secret> npm run sign
+```
+
+It versions the build by date and time (AMO needs a new version each time),
+signs it as unlisted (not listed publicly), and saves
+`release/atelier.xpi` and `release/VERSION`; commit both, since the
+home-manager module installs from the flake. `web-ext lint --source-dir
+extension/dist-release --self-hosted` runs AMO's validator locally first.
