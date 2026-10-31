@@ -14,7 +14,7 @@ release Firefox keeps it installed.
 
 1. **Build** the binary and the extension:
    ```sh
-   nix build .#atelier .#extension
+   nix build .#atelier .#extension-dev     # the binary, and an unpacked dev build of the extension
    ```
    Or in a dev shell: `cargo build` and `(cd extension && npm install && npm run build)`.
 2. **Register the native host**, and choose the owned directory. The examples

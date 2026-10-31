@@ -39,8 +39,50 @@
           meta.mainProgram = "atelier";
         };
 
+        # The signed extension (release/atelier.xpi, from `npm run sign`), laid
+        # out for home-manager's programs.firefox.profiles.<name>.extensions.packages.
+        extension = pkgs.stdenvNoCC.mkDerivation {
+          pname = "atelier-firefox-addon";
+          version = pkgs.lib.removeSuffix "\n" (builtins.readFile ./release/VERSION);
+          src = ./release/atelier.xpi;
+          dontUnpack = true;
+          installPhase = ''
+            dir=$out/share/mozilla/extensions/{ec8030f7-c20a-464f-9b0e-13a3a9e97384}
+            mkdir -p $dir
+            cp $src $dir/atelier@adrusi.com.xpi
+          '';
+          passthru.addonId = "atelier@adrusi.com";
+          meta = {
+            description = "atelier: agent-authored userstyles";
+            # extension/src/manifest.json: permissions, host permissions, and
+            # the optional user-scripts permission it asks for on first run.
+            mozPermissions = [
+              "nativeMessaging" "storage" "webNavigation" "alarms" "sessions" "cookies"
+              "contextualIdentities" "userScripts" "<all_urls>"
+            ];
+          };
+        };
+
+        # The native-messaging host manifests for both flavors of the extension
+        # (extension/build.ts), for programs.firefox.nativeMessagingHosts.
+        native-host = pkgs.runCommand "atelier-native-host" { } ''
+          mkdir -p $out/lib/mozilla/native-messaging-hosts
+          for host in "atelier atelier@adrusi.com" "atelier_dev atelier-dev@atelier.invalid"; do
+            set -- $host
+            cat > $out/lib/mozilla/native-messaging-hosts/$1.json <<EOF
+          {
+            "name": "$1",
+            "description": "atelier native host",
+            "path": "${pkgs.lib.getExe atelier}",
+            "type": "stdio",
+            "allowed_extensions": ["$2"]
+          }
+          EOF
+          done
+        '';
+
         # The unpacked dev build of the extension (dist/), for about:debugging.
-        extension = pkgs.buildNpmPackage {
+        extension-dev = pkgs.buildNpmPackage {
           pname = "atelier-extension";
           version = "0.0.0";
           src = ./extension;
