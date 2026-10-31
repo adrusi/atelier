@@ -102,7 +102,13 @@ function batchCard(b: Batch, task: Task | undefined, open: boolean) {
   const card = h(
     "section",
     { class: `batch ${b.wait}` },
-    h("header", {}, h("span", { class: "site", textContent: site }), task ? h("span", { class: "what", textContent: task.brief.description }) : null),
+    h(
+      "header",
+      {},
+      h("span", { class: "site", textContent: site }),
+      // The request, unless it only names the site again ("Style example.com").
+      task && task.brief.description !== `Style ${site}` ? h("span", { class: "what", textContent: task.brief.description }) : null,
+    ),
     open ? h("p", { class: "wait", textContent: WAIT_LABEL[b.wait] }) : null,
     b.summary ? h("p", { class: "summary", textContent: b.summary }) : null,
   );

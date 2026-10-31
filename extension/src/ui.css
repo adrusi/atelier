@@ -56,3 +56,13 @@ pre.diff .skip { display: block; opacity: 0.5; }
 .proposal textarea { margin-top: 0.4rem; }
 .proposal footer button + button { margin-left: 0; }
 label button.show { font-size: 0.85rem; }
+
+/* The popup's next step for a queued request */
+section.next { margin: 0.6rem 0 0; padding: 0.5rem 0.65rem; border-radius: 6px; background: color-mix(in srgb, CanvasText 6%, Canvas); }
+section.next p { margin: 0; }
+section.next p.how { margin-top: 0.35rem; font-size: 0.85rem; opacity: 0.85; }
+section.next .row button { margin-top: 0.5rem; }
+details.problems summary { opacity: 0.85; }
+details.problems ul { margin-top: 0.3rem; font-size: 0.85rem; }
+code { font: 0.9em ui-monospace, monospace; }
+.lede { margin-top: -0.5rem; opacity: 0.8; }

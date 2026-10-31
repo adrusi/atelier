@@ -860,6 +860,35 @@ fn dispatch(state: &State, msg: Value, role: Role) -> Option<Value> {
         Some(method::STATUS) => source_param(params)
             .and_then(|source| status(state, source.as_deref()))
             .map(|s| json!(s)),
+        Some(method::SESSION_STATUS) => {
+            let working = state
+                .tasks
+                .lock()
+                .unwrap()
+                .list(Some(atelier_proto::TaskState::Claimed), now_ms())
+                .is_ok_and(|t| !t.is_empty());
+            let launcher = state.launcher.lock().unwrap();
+            let (start, command, problem) = match session::config() {
+                Ok(c) => (
+                    match c.start {
+                        session::Start::Pull => "pull",
+                        session::Start::Spawn => "spawn",
+                        session::Start::Headless => "headless",
+                    },
+                    c.command.is_some(),
+                    None,
+                ),
+                Err(e) => ("pull", false, Some(e)),
+            };
+            Ok(json!(atelier_proto::SessionStatus {
+                start: start.into(),
+                command,
+                working,
+                waiting: launcher.waiting(),
+                starting: launcher.starting(),
+                problem,
+            }))
+        }
         Some(method::SESSION_START) => {
             let in_progress = state
                 .tasks

@@ -12,6 +12,17 @@
     <p>atelier only runs its own code, which inserts the styles from your atelier directory into the pages they're written for.</p>
     <button id="grant" autofocus>Allow user scripts</button>
     <p id="result" role="status"></p>
+    <section id="next" hidden>
+      <div id="connected" hidden>
+        <h2>Ready</h2>
+        <p>atelier is serving your styles from <code id="dir"></code> (theme: <span id="theme"></span>).</p>
+        <p>To style a site, open it, click atelier's toolbar button, and choose <strong>Style this site</strong>. An agent session does the work: start one in your agent harness (in Claude Code, atelier's <code>/mcp__atelier__work</code> prompt), or have atelier start one for you with <code>[session]</code> in its <code>config.toml</code>.</p>
+      </div>
+      <div id="missing" hidden>
+        <h2>One more step: the atelier program</h2>
+        <p>The extension can't reach atelier's program on this computer (<span id="error"></span>). It does the work outside the browser: install it, then run <code>atelier setup</code> so Firefox can find it (with the home-manager module, that's done for you), and restart Firefox.</p>
+      </div>
+    </section>
   </main>
   <script src="onboarding.js" type="module"></script>
 </body>

@@ -25,6 +25,14 @@
 
   <h2 id="tasks-heading" hidden>Requests for this site</h2>
   <ul id="tasks" class="tasks"></ul>
+  <section id="next" class="next" hidden>
+    <p id="next-text"></p>
+    <p id="next-how" class="how" hidden>In your agent harness, in your atelier directory, run atelier's work prompt (in Claude Code: <code>/mcp__atelier__work</code>). To have atelier start one for you, set <code>[session]</code> in atelier's <code>config.toml</code>.</p>
+    <div class="row">
+      <button id="start" type="button" hidden>Start an agent</button>
+      <span id="started" role="status"></span>
+    </div>
+  </section>
 
   <section id="landing" hidden>
     <h2>Last change here</h2>
@@ -35,8 +43,10 @@
     </div>
   </section>
 
-  <h2 id="problems-heading" hidden>Problems</h2>
-  <ul id="problems"></ul>
+  <details id="problems-box" class="problems" hidden>
+    <summary id="problems-summary"></summary>
+    <ul id="problems"></ul>
+  </details>
 
   <details id="details">
     <summary>atelier</summary>

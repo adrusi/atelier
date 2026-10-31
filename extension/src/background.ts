@@ -16,6 +16,7 @@ import type { Proposal } from "./proto/Proposal";
 import type { BundleChanged } from "./proto/BundleChanged";
 import type { InitializeResult } from "./proto/InitializeResult";
 import type { JournalEntry } from "./proto/JournalEntry";
+import type { SessionStatus } from "./proto/SessionStatus";
 import type { Task } from "./proto/Task";
 import { cssFor } from "./matching";
 import { Rpc } from "./rpc";
@@ -460,6 +461,7 @@ browser.runtime.onMessage.addListener((msg: unknown) => {
   if (m?.type === "site" && m.tabId !== undefined) return siteInfo(m.tabId);
   if (m?.type === "request" && m.tabId !== undefined) return request(m.tabId, m.text ?? "", Boolean(m.screenshot));
   if (m?.type === "undo" && m.seq !== undefined) return daemon().call<JournalEntry>("journal/undo", { seq: m.seq });
+  if (m?.type === "start-session") return daemon().call("session/start", {});
   const i = msg as { type?: string; batch?: string; name?: string; answers?: unknown[]; task?: string; url?: string; stage?: string };
   if (i?.type === "inbox") return inbox();
   if (i?.type === "attachment" && i.batch && i.name) return attachment(i.batch, i.name);
@@ -636,6 +638,8 @@ export type SiteInfo = {
   landing: JournalEntry | null;
   /** Tasks whose landing has since been undone. */
   undone: string[];
+  /** Agent sessions: what will happen to a queued request. */
+  session: SessionStatus | null;
 };
 
 async function siteInfo(tabId: number): Promise<SiteInfo> {
@@ -643,7 +647,11 @@ async function siteInfo(tabId: number): Promise<SiteInfo> {
   const host = hostOf(tab.url);
   const service = tab.url ? serviceAt(tab.url) : null;
   const r = daemon();
-  const [tasks, journal] = await Promise.all([r.call<Task[]>("task/list", {}), r.call<JournalEntry[]>("journal/list", {})]);
+  const [tasks, journal, session] = await Promise.all([
+    r.call<Task[]>("task/list", {}),
+    r.call<JournalEntry[]>("journal/list", {}),
+    r.call<SessionStatus>("session/status", {}).catch(() => null),
+  ]);
   const here = tasks
     .filter((t) => (service !== null && t.service === service) || (host !== "" && hostOf(t.brief.origin) === host))
     .reverse()
@@ -653,7 +661,7 @@ async function siteInfo(tabId: number): Promise<SiteInfo> {
       ? null
       : (journal.find((e) => e.undoOf === null && e.undoneBy === null && e.files.some((f) => f.path.startsWith(`services/${service}/`))) ?? null);
   const undone = journal.filter((e) => e.task !== null && e.undoOf === null && e.undoneBy !== null).map((e) => e.task!);
-  return { host, service, tasks: here, landing, undone };
+  return { host, service, tasks: here, landing, undone, session };
 }
 
 /** Queues a request for the page in a tab: a revise if a style applies

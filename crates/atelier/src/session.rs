@@ -197,16 +197,24 @@ impl Launcher {
         }
     }
 
+    /// A session asked for work recently.
+    pub fn waiting(&self) -> bool {
+        self.polled.is_some_and(|t| t.elapsed() < WAITING_FOR)
+    }
+
+    /// A session was launched recently and hasn't claimed anything yet.
+    pub fn starting(&self) -> bool {
+        self.launched
+            .is_some_and(|t| t.elapsed().unwrap_or_default() < STARTING_FOR)
+    }
+
     /// Why a new session shouldn't be started now, if there's a reason.
     pub fn busy(&self, tasks_in_progress: bool) -> Option<&'static str> {
         if tasks_in_progress {
             Some("a session is working on a task, and will see the queue when it's done")
-        } else if self.polled.is_some_and(|t| t.elapsed() < WAITING_FOR) {
+        } else if self.waiting() {
             Some("a session is waiting for work")
-        } else if self
-            .launched
-            .is_some_and(|t| t.elapsed().unwrap_or_default() < STARTING_FOR)
-        {
+        } else if self.starting() {
             Some("a session was started recently and hasn't claimed anything yet")
         } else {
             None

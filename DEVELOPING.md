@@ -142,6 +142,17 @@ For `--viewport`, the truth is a tab given that size with BiDi's
 `setViewport`, and the emulated tab keeps a different real size; `--scroll`
 compares the pages scrolled down that far.
 
+
+### The UI tour
+
+`node dev/tour.ts [--out DIR]` brings up dev instances and puts atelier's UI
+into each state a person meets (first run before and after the permission,
+an unstyled site, a request with no agent running, a styled site with a
+change to undo, the inbox empty and with an agent's calls, a THEME.md
+proposal and a design note, a request in progress), capturing each through
+the compositor, browser chrome included. Screenshots and an `index.txt`
+saying what each shows go to `$XDG_RUNTIME_DIR/atelier-dev/tour-shots/`. Run
+it after changing the UI, and look.
 ### Fixture sites
 
 `dev/fixtures/` holds small deterministic sites, each exercising one thing. Each instance runs `dev/fixtures/server.ts` inside the jail on its own port (`$ATELIER_DEV_FIXTURES`), serving each fixture directory at `/<name>/`. A fixture can have a `_fixture.json` that adds response headers (e.g. a CSP) or makes unknown paths serve `index.html` (for single-page apps), and HTML can use `{{ALT_ORIGIN}}` to reference the same server under a different origin; see the comment at the top of `server.ts`.

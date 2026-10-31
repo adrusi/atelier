@@ -785,3 +785,46 @@ fn the_native_host_replaces_a_daemon_from_another_build() {
     let pid = after["pid"].as_u64().unwrap();
     let _ = Command::new("kill").arg(pid.to_string()).status();
 }
+
+#[test]
+fn session_status_says_how_sessions_start_and_whether_one_is_starting() {
+    let env = Env::new();
+    let mut daemon = env.daemon();
+    let mut s = env.connect();
+    initialize(&mut s, &env.dir);
+    let status = call(&mut s, 1, "session/status", json!({}))["result"].clone();
+    assert_eq!(
+        status,
+        json!({ "start": "pull", "command": false, "working": false, "waiting": false, "starting": false })
+    );
+    daemon.kill().unwrap();
+    daemon.wait().unwrap();
+
+    // Configured to start sessions: a request starts one, and it's starting.
+    write(
+        &env.root.join("config/atelier"),
+        "config.toml",
+        "[session]\nstart = \"headless\"\ncommand = 'true'\n",
+    );
+    for e in std::fs::read_dir(env.root.join("run/atelier"))
+        .unwrap()
+        .flatten()
+    {
+        let _ = std::fs::remove_file(e.path());
+    }
+    let mut daemon = env.daemon();
+    let mut s = env.connect();
+    initialize(&mut s, &env.dir);
+    call(
+        &mut s,
+        2,
+        "task/create",
+        json!({ "kind": "create", "brief": { "description": "Style it" } }),
+    );
+    let status = call(&mut s, 3, "session/status", json!({}))["result"].clone();
+    assert_eq!(status["start"], json!("headless"));
+    assert_eq!(status["command"], json!(true));
+    assert_eq!(status["starting"], json!(true), "{status}");
+    daemon.kill().unwrap();
+    daemon.wait().unwrap();
+}

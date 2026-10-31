@@ -19,6 +19,9 @@ const tabPromise = forcedTab
   ? browser.tabs.get(Number(forcedTab))
   : browser.tabs.query({ active: true, currentWindow: true }).then(([t]) => t);
 
+/** Whether this page can take a request (a web page, with the daemon there). */
+let askable = false;
+
 async function render() {
   const tab = await tabPromise;
   const state = (await browser.runtime.sendMessage({ type: "state", tabId: tab?.id })) as State & { unmet: Unmet[] };
@@ -47,16 +50,24 @@ async function render() {
   el("unmet-heading").hidden = state.unmet.length === 0;
   el("unmet").replaceChildren(...state.unmet.map((u) => item(u.description, u.style)));
 
-  const problems = state.bundle?.diagnostics ?? [];
-  el("problems-heading").hidden = problems.length === 0;
+  // Problems loading styles: one line, details on demand; this site's first.
+  const services = new Set(applying.map((s) => s.service).filter(Boolean));
+  const mine = (path: string | null) => [...services].some((s) => path?.startsWith(`services/${s}/`));
+  const problems = [...(state.bundle?.diagnostics ?? [])].sort((a, b) => Number(mine(b.path)) - Number(mine(a.path)));
+  const here = problems.filter((d) => mine(d.path)).length;
+  const errors = problems.filter((d) => d.severity === "error").length;
+  el("problems-box").hidden = problems.length === 0;
+  el("problems-summary").textContent =
+    `${problems.length} ${errors ? "problem" : "warning"}${problems.length === 1 ? "" : "s"} loading your styles` + (here ? ` (${here} for this site)` : "");
   el("problems").replaceChildren(
     ...problems.map((d) => item(`${d.severity}: ${d.path ? `${d.path}${d.line ? `:${d.line}` : ""}: ` : ""}${d.message}`)),
   );
 
   // Requests only make sense for web pages, with the daemon there to take them.
   const web = Boolean(tab?.url && /^https?:/.test(tab.url));
-  el("ask").hidden = !web || state.connection !== "connected";
-  if (!el("ask").hidden) {
+  askable = web && state.connection === "connected";
+  el("ask").hidden = !askable;
+  if (askable) {
     const styled = applying.some((s) => s.service);
     el("ask-heading").textContent = styled ? "Something's off?" : "Style this site";
     el<HTMLTextAreaElement>("request").placeholder = styled
@@ -74,14 +85,22 @@ async function renderInbox(state: State) {
   if (state.connection === "connected") {
     const inbox = (await browser.runtime.sendMessage({ type: "inbox" }).catch(() => null)) as {
       batches: { wait: string; state: string }[];
-      proposals: { state: string }[];
+      proposals: { state: string; path: string; reviewed?: boolean }[];
     } | null;
+    // Waiting on the user: questions, THEME.md proposals; to look over: calls
+    // made for the record, and design notes added without waiting.
     const waiting =
-      (inbox?.batches.filter((b) => b.state === "open" && b.wait !== "record").length ?? 0) + (inbox?.proposals.filter((p) => p.state === "open").length ?? 0);
-    const record = inbox?.batches.filter((b) => b.state === "open" && b.wait === "record").length ?? 0;
-    el("inbox").hidden = waiting + record === 0;
-    el("inbox").textContent =
-      waiting > 0 ? `${waiting} thing${waiting === 1 ? "" : "s"} from agents, waiting for you` : `${record} set${record === 1 ? "" : "s"} of calls to look over`;
+      (inbox?.batches.filter((b) => b.state === "open" && b.wait !== "record").length ?? 0) +
+      (inbox?.proposals.filter((p) => p.state === "open").length ?? 0);
+    const look =
+      (inbox?.batches.filter((b) => b.state === "open" && b.wait === "record").length ?? 0) +
+      (inbox?.proposals.filter((p) => p.path.endsWith("/notes.md") && p.state === "accepted" && !p.reviewed).length ?? 0);
+    el("inbox").hidden = waiting + look === 0;
+    const parts = [
+      waiting ? `${waiting} waiting for you` : "",
+      look ? `${look} to look over` : "",
+    ].filter(Boolean);
+    el("inbox").textContent = `Inbox: ${parts.join(", ")}`;
   }
 
 }
@@ -90,7 +109,7 @@ function describe(t: Task, undone: boolean): string {
   if (t.state === "landed" && undone) return "done, then undone";
   switch (t.state) {
     case "queued":
-      return t.tree ? "waiting to be picked up again" : "waiting for a session";
+      return t.tree ? "queued, to be picked up again" : "queued";
     case "claimed":
       return "being worked on";
     case "waiting":
@@ -111,6 +130,11 @@ async function renderSite(tabId: number) {
   } catch {
     return; // the daemon went away; the status section says so
   }
+  // A request to style this site that's still to be done: don't offer another.
+  const pending = (t: Task) => t.state === "queued" || t.state === "claimed" || t.state === "waiting";
+  const styling = site.tasks.find((t) => t.kind === "create" && pending(t));
+  el("ask").hidden = !askable || styling !== undefined;
+  renderNext(site);
   el("tasks-heading").hidden = site.tasks.length === 0;
   el("tasks").replaceChildren(
     ...site.tasks.map((t) => {
@@ -132,6 +156,45 @@ async function renderSite(tabId: number) {
     el("undo").dataset.seq = String(site.landing.seq);
   }
 }
+
+/** What happens next to a queued request: an agent is on it, is starting,
+ * or none is running, with how to start one. */
+function renderNext(site: SiteInfo) {
+  const queued = site.tasks.some((t) => t.state === "queued");
+  const s = site.session;
+  el("next").hidden = !queued || s === null;
+  if (!queued || s === null) return;
+  let text: string;
+  let how = false;
+  const here = site.tasks.some((t) => t.state === "claimed");
+  if (here) text = "An agent is working on this site now, and will pick up the rest after.";
+  else if (s.working) text = "An agent is working on another request, and will pick this up after.";
+  else if (s.waiting) text = "An agent is waiting for work, and will pick this up shortly.";
+  else if (s.starting) text = "An agent is starting, and will pick this up.";
+  else {
+    text = s.start === "pull" ? "No agent is running, so nothing happens until you start one." : "No agent is running, and atelier couldn't start one.";
+    how = !s.command;
+  }
+  if (s.problem) text += ` (atelier's [session] settings have a problem: ${s.problem})`;
+  el("next-text").textContent = text;
+  el("next-how").hidden = !how;
+  el("start").hidden = !(s.command && !s.working && !s.waiting && !s.starting);
+}
+
+el("start").addEventListener("click", async () => {
+  const tab = await tabPromise;
+  const start = el<HTMLButtonElement>("start");
+  start.disabled = true;
+  try {
+    const r = (await browser.runtime.sendMessage({ type: "start-session" })) as { started: boolean; reason?: string };
+    el("started").textContent = r.started ? "Starting…" : `Not started: ${r.reason ?? "unknown reason"}`;
+    await renderSite(tab!.id!);
+  } catch (err) {
+    el("started").textContent = err instanceof Error ? err.message : String(err);
+  } finally {
+    start.disabled = false;
+  }
+});
 
 el("grant").addEventListener("click", async () => {
   await browser.permissions.request(USER_SCRIPTS_PERMISSION);
@@ -185,5 +248,5 @@ void render();
 // Requests change state while the popup is open (a session picks one up).
 setInterval(async () => {
   const tab = await tabPromise;
-  if (tab?.id !== undefined && !el("ask").hidden) await renderSite(tab.id);
+  if (tab?.id !== undefined && askable) await renderSite(tab.id);
 }, 2000);

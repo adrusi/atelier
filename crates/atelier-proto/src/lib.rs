@@ -41,6 +41,31 @@ pub mod method {
     /// "reason"?: … }`. Runs the configured session command (SPEC §9.1),
     /// unless a session is already working or starting (or `force`).
     pub const SESSION_START: &str = "session/start";
+    /// Request: `{}` → [`SessionStatus`]: whether an agent session is at
+    /// work, waiting for work or starting, and how sessions start, so the UI
+    /// can say what happens to a request.
+    pub const SESSION_STATUS: &str = "session/status";
+}
+
+/// What the daemon knows of agent sessions (SPEC §9.1).
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SessionStatus {
+    /// How sessions start: "pull" (by hand), "spawn" or "headless".
+    pub start: String,
+    /// Whether a command to start one is configured.
+    pub command: bool,
+    /// A session holds a task.
+    pub working: bool,
+    /// A session asked for work in the last few seconds.
+    pub waiting: bool,
+    /// A session was started recently and hasn't claimed anything yet.
+    pub starting: bool,
+    /// A problem with the [session] configuration, if any.
+    #[ts(optional, as = "Option<String>")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub problem: Option<String>,
 }
 
 /// atelier-specific JSON-RPC error codes.
