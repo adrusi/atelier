@@ -471,6 +471,50 @@ const handlers: Record<string, Handler> = {
     return { result: (await run(tab.id!, `{\n${param<string>(params, "expression", "string")}\n}`)) ?? null };
   },
 
+  async "page/interact"(params) {
+    const tab = await agentTab(params);
+    const selector = param<string>(params, "selector", "string");
+    const before = tab.url;
+    // A click that follows a link unloads the page mid-call, and the call then
+    // never finishes: whichever comes first.
+    let stop = () => {};
+    const navigated = new Promise<object>((resolve) => {
+      const listener = (id: number, info: browser.tabs._OnUpdatedChangeInfo) => {
+        if (id === tab.id && (info.status === "loading" || (info.url && info.url !== before))) resolve({});
+      };
+      browser.tabs.onUpdated.addListener(listener);
+      stop = () => browser.tabs.onUpdated.removeListener(listener);
+    });
+    let r: unknown;
+    try {
+      r = await Promise.race([
+        call(
+          tab.id!,
+          "interact",
+          selector,
+          param<string>(params, "action", "string", "click"),
+          param<string | null>(params, "key", "string", null),
+          Math.min(Math.max(param<number>(params, "waitMs", "number", 1500), 0), 10_000),
+        ),
+        navigated,
+      ]);
+    } catch (e) {
+      const now = await browser.tabs.get(tab.id!);
+      if (now.url === before && now.status !== "loading") throw e;
+      r = {};
+    } finally {
+      stop();
+    }
+    if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\`, in the page or its open shadow roots`);
+    if ((r as { error?: string }).error) throw new RpcError(PAGE_ERROR, (r as { error: string }).error);
+    const now = await browser.tabs.get(tab.id!);
+    if (now.url !== before || now.status === "loading") {
+      await settled(tab.id!);
+      return { ...(r as object), navigated: (await browser.tabs.get(tab.id!)).url, note: "The page navigated away (a link, or a form). tab_navigate goes back to where you were." };
+    }
+    return r;
+  },
+
   async "page/type"(params) {
     const tab = await agentTab(params);
     const selector = param<string>(params, "selector", "string");

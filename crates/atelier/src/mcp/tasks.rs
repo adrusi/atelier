@@ -1262,7 +1262,8 @@ fn pages_section(tree: &str, service: Option<&str>) -> String {
     } else {
         out.push_str(
             "service.toml lists these as the site's representative pages. Check your styles on each, in the \
-             states given; where you can't (a logged-in page in a logged-out browser, say), say so in your \
+             states given (open them with interact: the states are the part most easily skipped, and where \
+             styles most often look unfinished); where you can't (a logged-in page in a logged-out browser, say), say so in your \
              summary rather than leaving it to be assumed. Add pages you find that the list is missing.\n\n",
         );
         for (url, what, states) in pages {
@@ -1301,6 +1302,15 @@ background, shape_scan finds what's still drawn as a box, force_state shows hove
 styles_status reports problems loading your files (a style with errors keeps its last good version \
 applied, so a mistake can look as if nothing happened), and, with a tab, selectors Firefox silently drops \
 or ignores.\n\
+- Look at what only shows on interaction: menus and dropdowns, dialogs, popovers, hover cards, \
+tooltips, autocomplete lists. It's where styles most often look unfinished, for reasons that are easy to \
+miss: sites build these from their own overlay surfaces and tokens rather than the page's, render them in \
+a portal at the end of <body> (outside the containers your rules are scoped to), and often don't create \
+them until they're opened, so neither a screenshot of the page as it loads nor a query shows them. The \
+user meets them all the time. So on each page, open what it offers (interact: click, hover, focus; it \
+says what appeared) and look, in each colour scheme you style; add the states worth checking to the \
+page's `states` in service.toml for the next agent; and say in your summary which you checked and which \
+you couldn't open.\n\
 - Work in the task's tree, not the owned directory: only landings are recorded, undoable, and passed to \
 the user's hooks.\n\
 - When a limit of atelier or the browser stops you (a part of the page your styles can't reach, a tool \

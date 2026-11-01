@@ -389,6 +389,7 @@ The kit ships with atelier and is installed by `atelier setup` (§14):
   - Use scripts only for what CSS can't do.
   - Start by inventorying the site's custom properties, and which selectors and media queries define them. On Wikipedia, one block of token overrides restyled the whole skin (examples/DOGFOODING.md).
   - Always set default link and text colours: sites leave some links to the browser default, which is unreadable on a dark theme.
+  - Look at what only shows on interaction (menus, dropdowns, dialogs, popovers, hover cards), opening it with `interact`: sites build these from their own overlay surfaces and tokens, render them in portals outside the containers a style covers, and often don't create them until opened, so screenshots of the page as loaded never show them. The datasheet theme's GitHub styles were solid on everything visible at load and messy in every dropdown; the agent had never opened one (owner, 2026-11).
 - **Tone:** briefs and instructions are written in a collegial register, for a colleague being briefed, not as imperative commands. The kit tells agents explicitly that they may ask, push back, suggest and decline.
 
 ### 9.3 Supervisor and contractors

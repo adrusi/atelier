@@ -211,6 +211,31 @@ try {
     assert.equal(outside.result.isError, true);
   });
 
+  await check("interact opens what only appears on interaction, and says what came up", async () => {
+    const menus = (await tool("tab_open", { url: `http://127.0.0.1:${state.fixturesPort}/menus/` })).tab;
+    // A menu that opens on pointerdown, rendered at the end of <body>.
+    const opened = await tool("interact", { tab: menus, selector: "#open-menu" });
+    assert.equal(opened.expanded, true, JSON.stringify(opened));
+    assert.equal(opened.appeared.length, 1, JSON.stringify(opened));
+    assert.equal(opened.appeared[0].role, "menu");
+    assert.equal(opened.appeared[0].text, "Rename Delete");
+    // Escape closes it.
+    const closed = await tool("interact", { tab: menus, selector: "#open-menu", action: "press", key: "Escape" });
+    assert.equal(closed.expanded, false);
+    assert.equal((await tool("query", { tab: menus, selector: "[role=menu]" })).count, 0);
+    // A hover card shown a moment after mouseenter.
+    const hovered = await tool("interact", { tab: menus, selector: "#user", action: "hover" });
+    assert.match(JSON.stringify(hovered.appeared), /card/);
+    // A popover, which changes no attribute.
+    const popped = await tool("interact", { tab: menus, selector: "#open-pop" });
+    assert.match(JSON.stringify(popped.appeared), /pop/);
+    // A link: the page goes elsewhere, and says so.
+    const away = await tool("interact", { tab: menus, selector: "#away" });
+    assert.match(away.navigated, /\?away/);
+    await assert.rejects(tool("interact", { tab: menus, selector: "#nothing" }), /no element matches/);
+    await tool("tab_close", { tab: menus });
+  });
+
   await check("force_state shows hover and focus-visible styles, and clears them", async () => {
     await tool("force_state", { tab, selector: "a.button", states: ["hover", "focus-visible"] });
     const forced = await tool("computed_style", { tab, selector: "a.button", properties: ["color", "outline-color"] });

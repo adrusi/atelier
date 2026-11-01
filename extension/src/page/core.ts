@@ -178,6 +178,51 @@ function observeAll() {
   }
 }
 
+/** The focused element, inside open shadow roots too; null for none (the body). */
+export function activeElement(): Element | null {
+  let a: Element | null = document.activeElement;
+  while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement;
+  return a === document.body ? null : a;
+}
+
+/** Records what changes in the page (in every scope) until `stop()`: the
+ * elements added, and those whose attributes that show or hide things
+ * changed. For seeing what an interaction brought up. */
+export function recordChanges(): { quietFor: () => number; stop: () => Element[] } {
+  const seen = new Set<Element>();
+  let last = performance.now();
+  const note = (records: MutationRecord[]) => {
+    if (records.length) last = performance.now();
+    for (const r of records) {
+      if (r.type === "childList") {
+        for (const n of r.addedNodes) if (n instanceof Element) seen.add(n);
+      } else if (r.target instanceof Element) seen.add(r.target);
+    }
+  };
+  const observers = scopes().map((scope) => {
+    const o = new MutationObserver(note);
+    o.observe(scope instanceof Document ? scope.documentElement : scope, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["hidden", "open", "aria-hidden", "aria-expanded", "class", "style", "data-state"],
+    });
+    return o;
+  });
+  return {
+    quietFor: () => performance.now() - last,
+    stop: () => {
+      for (const o of observers) {
+        note(o.takeRecords());
+        o.disconnect();
+      }
+      // Popovers shown with showPopover() change no attribute.
+      for (const el of queryAll(":popover-open")) seen.add(el);
+      return [...seen];
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Sheets
 

@@ -778,3 +778,110 @@ export function atelierClashes(limit: number) {
   const all = [...clashes.values()].sort((a, b) => b.elements - a.elements);
   return { total: all.length, clashes: all.slice(0, limit) };
 }
+
+/** Acts on an element the way a person's input would (the same events, in
+ * the same order, though untrusted), waits for the page to settle, and says
+ * what came up: elements added or shown since, top-most first (a menu, a
+ * dialog, a popover portalled to the end of <body>). */
+export async function interact(selector: string, action: string, key: string | null, waitMs: number) {
+  const el = core.query(selector, false)[0];
+  if (!el) return null;
+  el.scrollIntoView({ block: "center", inline: "center" });
+  const r = el.getBoundingClientRect();
+  const [x, y] = [r.left + r.width / 2, r.top + r.height / 2];
+  const init = (type: string) => ({
+    bubbles: !type.endsWith("enter"),
+    cancelable: true,
+    composed: true,
+    clientX: x,
+    clientY: y,
+    button: 0,
+    buttons: type.endsWith("down") ? 1 : 0,
+    detail: type === "click" ? 1 : 0,
+    pointerId: 1,
+    pointerType: "mouse",
+    isPrimary: true,
+  });
+  const pointer = (t: string) => el.dispatchEvent(new PointerEvent(t, init(t)));
+  const mouse = (t: string) => el.dispatchEvent(new MouseEvent(t, init(t)));
+  const focusedBefore = core.activeElement();
+  const recorder = core.recordChanges();
+  const hover = () => {
+    pointer("pointerover");
+    pointer("pointerenter");
+    mouse("mouseover");
+    mouse("mouseenter");
+    pointer("pointermove");
+    mouse("mousemove");
+  };
+  switch (action) {
+    case "hover":
+      hover();
+      break;
+    case "click":
+      hover();
+      pointer("pointerdown");
+      mouse("mousedown");
+      (el as HTMLElement).focus?.({ focusVisible: false } as FocusOptions);
+      pointer("pointerup");
+      mouse("mouseup");
+      mouse("click");
+      break;
+    case "focus":
+      (el as HTMLElement).focus?.({ focusVisible: true } as FocusOptions);
+      break;
+    case "press": {
+      if (!key) return { error: "`press` needs `key`, e.g. Enter, Escape, ArrowDown or a letter" };
+      (el as HTMLElement).focus?.();
+      const k = { key, code: key.length === 1 ? `Key${key.toUpperCase()}` : key, bubbles: true, cancelable: true, composed: true };
+      el.dispatchEvent(new KeyboardEvent("keydown", k));
+      el.dispatchEvent(new KeyboardEvent("keyup", k));
+      break;
+    }
+    default:
+      return { error: `\`action\` must be click, hover, focus or press (got \`${action}\`)` };
+  }
+  // Until the page has been quiet for a moment, or waitMs. A background tab's
+  // timers run about once a second (the page's, and this wait's), so a menu
+  // opened after a short delay needs a little over that to show.
+  const start = performance.now();
+  const least = Math.min(waitMs, document.visibilityState === "hidden" ? 1100 : 200);
+  while (performance.now() - start < waitMs && (performance.now() - start < least || recorder.quietFor() < 300)) {
+    await new Promise((res) => setTimeout(res, 100));
+  }
+  const visible = (e: Element) => {
+    if (e === el || e.contains(el) || !e.getClientRects().length) return false;
+    const rect = e.getBoundingClientRect();
+    if (rect.width < 2 || rect.height < 2) return false;
+    const cs = getComputedStyle(e);
+    return cs.visibility === "visible" && cs.display !== "none" && Number(cs.opacity) > 0 && e.getAttribute("aria-hidden") !== "true";
+  };
+  const shown = recorder.stop().filter((e) => e.isConnected && !["STYLE", "SCRIPT", "LINK", "META"].includes(e.tagName) && visible(e));
+  // Top-most only: a menu, not each of its items.
+  const set = new Set(shown);
+  const top = shown.filter((e) => {
+    for (let p = core.up(e); p; p = core.up(p)) if (set.has(p)) return false;
+    return true;
+  });
+  const focusedAfter = core.activeElement();
+  return {
+    action,
+    target: core.describe(el),
+    ...(el.hasAttribute("aria-expanded") ? { expanded: el.getAttribute("aria-expanded") === "true" } : {}),
+    ...(focusedAfter && focusedAfter !== focusedBefore ? { focused: core.describe(focusedAfter) } : {}),
+    appeared: top.slice(0, 8).map((e) => {
+      const b = e.getBoundingClientRect();
+      const role = e.getAttribute("role") ?? (e.tagName === "DIALOG" ? "dialog" : null);
+      const label = e.getAttribute("aria-label");
+      const text = ((e as HTMLElement).innerText ?? e.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+      return {
+        element: core.describe(e),
+        ...(role ? { role } : {}),
+        ...(label ? { label } : {}),
+        ...(text ? { text } : {}),
+        rect: { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) },
+      };
+    }),
+    ...(top.length > 8 ? { more: top.length - 8 } : {}),
+  };
+}
