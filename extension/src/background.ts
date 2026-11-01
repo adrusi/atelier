@@ -477,11 +477,14 @@ browser.runtime.onMessage.addListener((msg: unknown) => {
   if (m?.type === "site" && m.tabId !== undefined) return siteInfo(m.tabId);
   if (m?.type === "request" && m.tabId !== undefined) return request(m.tabId, m.text ?? "", Boolean(m.screenshot));
   if (m?.type === "undo" && m.seq !== undefined) return daemon().call<JournalEntry>("journal/undo", { seq: m.seq });
-  if (m?.type === "start-session") return daemon().call("session/start", {});
+  if (m?.type === "start-session") return daemon().call("session/start", { force: Boolean((msg as { force?: boolean }).force) });
   const i = msg as { type?: string; batch?: string; name?: string; answers?: unknown[]; task?: string; url?: string; stage?: string };
   if (i?.type === "inbox") return inbox();
   if (i?.type === "attachment" && i.batch && i.name) return attachment(i.batch, i.name);
   if (i?.type === "answer" && i.batch) return daemon().call<Batch>("call/answer", { batch: i.batch, answers: i.answers ?? [] });
+  // All of a task's batches at once, so what the user changed goes to one revise.
+  const many = msg as { type?: string; batches?: { batch: string; answers: unknown[] }[] };
+  if (many?.type === "answer-all" && many.batches?.length) return daemon().call<Batch[]>("call/answer", { batches: many.batches });
   if (i?.type === "preview" && i.task && i.url) return preview(i.task, i.url);
   const v = msg as { type?: string; key?: string; task?: string | null; url?: string; file?: string; name?: string; css?: string };
   if (v?.type === "variant" && v.key && v.url && v.file && v.name && v.css !== undefined)

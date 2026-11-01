@@ -4,8 +4,10 @@
 //! and the attachments copied in when it was posted. Its id is
 //! `<task>-q<n>`. A `review` or `block` batch parks the task (`Waiting`)
 //! until it's answered; then the task goes back to the queue with its tree,
-//! and whoever claims it sees the answers. Answering a `record` batch for a
-//! task that has landed queues a `revise` for each call the user changed.
+//! and whoever claims it sees the answers. Answering `record` batches for a
+//! task that has landed queues one `revise` carrying the calls the user
+//! changed (or adds them to a `revise` for the service that nobody has
+//! started yet).
 
 use super::{Result, Store, err, write_atomic};
 use atelier_proto::{
@@ -258,141 +260,230 @@ impl Store {
     }
 
     /// Answers a batch. Returns it, the task if this sent it back to the
-    /// queue, and any `revise` tasks queued for record calls the user
-    /// changed after the work landed.
+    /// queue, and the `revise` task (new, or one already queued that the
+    /// changes joined) for record calls the user changed after the work
+    /// landed.
+    #[cfg(test)]
     pub fn answer(
         &self,
         p: CallAnswerParams,
         theme: Option<String>,
         now: u64,
     ) -> Result<(Batch, Option<Task>, Vec<Task>)> {
-        let mut batch = self.batch(&p.batch)?;
-        if batch.state != BatchState::Open {
-            return Err(format!("batch {} has already been answered", batch.id));
-        }
-        if p.answers.len() > batch.calls.len() {
-            return Err(format!(
-                "batch {} has {} calls, but {} answers were given",
-                batch.id,
-                batch.calls.len(),
-                p.answers.len()
-            ));
-        }
-        for (i, call) in batch.calls.iter_mut().enumerate() {
-            let input = p.answers.get(i).cloned().unwrap_or_default();
-            let note = input.note.filter(|n| !n.trim().is_empty());
-            let choice = input.choice.filter(|c| !c.trim().is_empty());
-            let kept = note.is_none()
-                && choice
-                    .as_ref()
-                    .is_none_or(|c| Some(c) == call.choice.as_ref());
-            call.answer = Some(Answer {
-                choice: choice.or_else(|| call.choice.clone()),
-                note,
-                kept,
-                applied: false,
-                time: now,
-            });
-        }
-        batch.state = BatchState::Answered;
-        batch.answered = Some(now);
+        let (mut batches, requeued, revisions) = self.answer_all(vec![p], theme, now)?;
+        Ok((batches.remove(0), requeued.into_iter().next(), revisions))
+    }
 
-        let mut task = self.get(&batch.task)?;
-        // A variant answered with another option is written in now: into the
-        // tree while the work is unlanded, into the owned directory (through
-        // the journal) once it has landed.
-        for call in batch.calls.iter_mut() {
-            let (Some(v), Some(a)) = (&call.variant, call.answer.as_mut()) else {
-                continue;
-            };
-            let Some(chosen) = a.choice.clone().filter(|c| Some(c) != call.choice.as_ref()) else {
-                continue;
-            };
-            let Some(css) = v.css.get(&chosen) else {
-                continue;
-            };
-            if task.state == TaskState::Landed {
-                let current = fs::read_to_string(self.dir.join(&v.file)).unwrap_or_default();
-                if let Some(text) = replace_block(&current, &v.name, css) {
-                    let summary =
-                        format!("{}: {chosen} for {} (the user's choice)", v.file, v.name);
-                    self.land_text(
-                        &v.file,
-                        &text,
-                        &summary,
-                        Some(task.id.clone()),
-                        Vec::new(),
-                        now,
-                    )?;
-                    a.applied = true;
-                }
-            } else if task.tree.is_some() {
-                let path = self.task_dir(&task.id).join("tree").join(&v.file);
-                let current = fs::read_to_string(&path).unwrap_or_default();
-                if let Some(text) = replace_block(&current, &v.name, css) {
-                    write_atomic(&path, text.as_bytes()).map_err(err)?;
-                    a.applied = true;
-                }
+    /// Answers several batches at once, as the inbox does for all of a
+    /// task's: what the user changed then goes to one `revise` per task,
+    /// not one per call, so the agent that takes it sees the changes
+    /// together. Returns the batches, the tasks this sent back to the queue,
+    /// and the `revise` tasks queued or joined.
+    pub fn answer_all(
+        &self,
+        ps: Vec<CallAnswerParams>,
+        theme: Option<String>,
+        now: u64,
+    ) -> Result<(Vec<Batch>, Vec<Task>, Vec<Task>)> {
+        if ps.is_empty() {
+            return Err("no batches to answer".into());
+        }
+        // Everything is checked before anything is written.
+        let mut batches = Vec::new();
+        for p in &ps {
+            let batch = self.batch(&p.batch)?;
+            if batch.state != BatchState::Open {
+                return Err(format!("batch {} has already been answered", batch.id));
             }
+            if batches.iter().any(|(b, _): &(Batch, _)| b.id == batch.id) {
+                return Err(format!("batch {} is answered twice", batch.id));
+            }
+            if p.answers.len() > batch.calls.len() {
+                return Err(format!(
+                    "batch {} has {} calls, but {} answers were given",
+                    batch.id,
+                    batch.calls.len(),
+                    p.answers.len()
+                ));
+            }
+            batches.push((batch, &p.answers));
         }
-        self.save_batch(&batch)?;
-        let mut requeued = None;
-        if task.state == TaskState::Waiting
-            && self
-                .batches(true, Some(&task.id))?
-                .iter()
-                .all(|b| b.wait == Wait::Record)
-        {
-            task.state = TaskState::Queued;
-            task.updated = now;
-            self.save(&task)?;
-            requeued = Some(task.clone());
-        }
-        let mut revisions = Vec::new();
-        if task.state == TaskState::Landed {
-            for call in batch.calls.iter().filter(|c| c.wait == Some(Wait::Record)) {
-                let Some(a) = call
-                    .answer
-                    .as_ref()
-                    .filter(|a| !a.kept && !(a.applied && a.note.is_none()))
+
+        let mut out = Vec::new();
+        // Changed record calls of landed tasks, by task, in order.
+        let mut changed: Vec<(Task, Vec<Revisit>)> = Vec::new();
+        for (mut batch, answers) in batches {
+            for (i, call) in batch.calls.iter_mut().enumerate() {
+                let input = answers.get(i).cloned().unwrap_or_default();
+                let note = input.note.filter(|n| !n.trim().is_empty());
+                let choice = input.choice.filter(|c| !c.trim().is_empty());
+                let kept = note.is_none()
+                    && choice
+                        .as_ref()
+                        .is_none_or(|c| Some(c) == call.choice.as_ref());
+                call.answer = Some(Answer {
+                    choice: choice.or_else(|| call.choice.clone()),
+                    note,
+                    kept,
+                    applied: false,
+                    time: now,
+                });
+            }
+            batch.state = BatchState::Answered;
+            batch.answered = Some(now);
+
+            let task = self.get(&batch.task)?;
+            // A variant answered with another option is written in now: into the
+            // tree while the work is unlanded, into the owned directory (through
+            // the journal) once it has landed.
+            for call in batch.calls.iter_mut() {
+                let (Some(v), Some(a)) = (&call.variant, call.answer.as_mut()) else {
+                    continue;
+                };
+                let Some(chosen) = a.choice.clone().filter(|c| Some(c) != call.choice.as_ref())
                 else {
                     continue;
                 };
-                let mut said = Vec::new();
-                if a.choice != call.choice
-                    && let Some(c) = &a.choice
-                {
-                    said.push(format!("they chose: {c}"));
+                let Some(css) = v.css.get(&chosen) else {
+                    continue;
+                };
+                if task.state == TaskState::Landed {
+                    let current = fs::read_to_string(self.dir.join(&v.file)).unwrap_or_default();
+                    if let Some(text) = replace_block(&current, &v.name, css) {
+                        let summary =
+                            format!("{}: {chosen} for {} (the user's choice)", v.file, v.name);
+                        self.land_text(
+                            &v.file,
+                            &text,
+                            &summary,
+                            Some(task.id.clone()),
+                            Vec::new(),
+                            now,
+                        )?;
+                        a.applied = true;
+                    }
+                } else if task.tree.is_some() {
+                    let path = self.task_dir(&task.id).join("tree").join(&v.file);
+                    let current = fs::read_to_string(&path).unwrap_or_default();
+                    if let Some(text) = replace_block(&current, &v.name, css) {
+                        write_atomic(&path, text.as_bytes()).map_err(err)?;
+                        a.applied = true;
+                    }
                 }
-                if let Some(n) = &a.note {
-                    said.push(format!("they said: {n}"));
+            }
+            self.save_batch(&batch)?;
+            if task.state == TaskState::Landed {
+                let items: Vec<Revisit> = batch
+                    .calls
+                    .iter()
+                    .filter(|c| c.wait == Some(Wait::Record))
+                    .filter_map(revisit)
+                    .collect();
+                if !items.is_empty() {
+                    match changed.iter_mut().find(|(t, _)| t.id == task.id) {
+                        Some((_, all)) => all.extend(items),
+                        None => changed.push((task, items)),
+                    }
                 }
-                let made = call.choice.as_deref().unwrap_or("(no choice recorded)");
-                revisions.push(self.create(
-                    TaskCreateParams {
-                        kind: TaskKind::Revise,
-                        service: task.service.clone(),
-                        brief: TaskBrief {
-                            description: format!(
-                                "Revisit a call from an earlier task ({}): {}",
-                                task.id, call.question
-                            ),
-                            origin: task.brief.origin.clone(),
-                            note: Some(format!(
-                                "The agent went with: {made}. Looking at it afterwards, {}.",
-                                said.join("; ")
-                            )),
-                            container: task.brief.container.clone(),
-                            attachments: Vec::new(),
-                        },
-                        uploads: Vec::new(),
-                    },
-                    theme.clone(),
-                    now,
-                )?);
+            }
+            out.push(batch);
+        }
+
+        let mut requeued = Vec::new();
+        for b in &out {
+            if requeued.iter().any(|t: &Task| t.id == b.task) {
+                continue;
+            }
+            let mut task = self.get(&b.task)?;
+            if task.state == TaskState::Waiting
+                && self
+                    .batches(true, Some(&task.id))?
+                    .iter()
+                    .all(|b| b.wait == Wait::Record)
+            {
+                task.state = TaskState::Queued;
+                task.updated = now;
+                self.save(&task)?;
+                requeued.push(task);
             }
         }
-        Ok((batch, requeued, revisions))
+        let mut revisions = Vec::new();
+        for (task, items) in changed {
+            revisions.push(self.revise_from(&task, &items, theme.clone(), now)?);
+        }
+        Ok((out, requeued, revisions))
+    }
+
+    /// Queues a `revise` carrying the calls the user changed on a landed
+    /// task. If a `revise` for the same service is already queued and
+    /// nobody has started it, the changes join it instead: one task per
+    /// service at a time, so two agents don't work on the same files in
+    /// separate trees (SPEC §8.3).
+    fn revise_from(
+        &self,
+        task: &Task,
+        items: &[Revisit],
+        theme: Option<String>,
+        now: u64,
+    ) -> Result<Task> {
+        let list = items
+            .iter()
+            .enumerate()
+            .map(|(i, r)| format!("{}. {}", i + 1, r.text))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let note = format!(
+            "Looking over the calls made in an earlier task ({}), the user changed {}:\n{list}",
+            task.id,
+            if items.len() == 1 { "one" } else { "these" },
+        );
+        let pending = self
+            .list(Some(TaskState::Queued), now)?
+            .into_iter()
+            .find(|t| {
+                t.kind == TaskKind::Revise
+                    && t.tree.is_none()
+                    && t.service.is_some()
+                    && t.service == task.service
+            });
+        if let Some(mut pending) = pending {
+            pending.brief.note = Some(match pending.brief.note.take() {
+                Some(n) => format!("{n}\n\n{note}"),
+                None => note,
+            });
+            let service = task.service.as_deref().unwrap_or_default();
+            pending.brief.description = format!("Revisit calls from earlier work on {service}");
+            pending.updated = now;
+            self.save(&pending)?;
+            return Ok(pending);
+        }
+        let description = match items {
+            [one] => format!(
+                "Revisit a call from an earlier task ({}): {}",
+                task.id, one.question
+            ),
+            _ => format!(
+                "Revisit {} calls from an earlier task ({})",
+                items.len(),
+                task.id
+            ),
+        };
+        self.create(
+            TaskCreateParams {
+                kind: TaskKind::Revise,
+                service: task.service.clone(),
+                brief: TaskBrief {
+                    description,
+                    origin: task.brief.origin.clone(),
+                    note: Some(note),
+                    container: task.brief.container.clone(),
+                    attachments: Vec::new(),
+                },
+                uploads: Vec::new(),
+            },
+            theme,
+            now,
+        )
     }
 
     /// How often the user kept agents' calls, for tasks on this theme. A
@@ -447,6 +538,49 @@ impl Store {
             data: base64::engine::general_purpose::STANDARD.encode(&buf),
         })
     }
+}
+
+/// A record call the user changed after the work landed, for a `revise`.
+struct Revisit {
+    question: String,
+    /// The call, what the agent did, and what the user wants instead.
+    text: String,
+}
+
+/// What a `revise` needs to know about an answered record call, if the
+/// user changed it and an agent has something to do: a different option
+/// for a variant is already written in, unless the user also said
+/// something.
+fn revisit(call: &atelier_proto::Call) -> Option<Revisit> {
+    let a = call
+        .answer
+        .as_ref()
+        .filter(|a| !a.kept && !(a.applied && a.note.is_none()))?;
+    let mut said = Vec::new();
+    if a.choice != call.choice
+        && let Some(c) = &a.choice
+    {
+        said.push(format!(
+            "they chose: {c}{}",
+            if a.applied {
+                " (already written in)"
+            } else {
+                ""
+            }
+        ));
+    }
+    if let Some(n) = &a.note {
+        said.push(format!("they said: {n}"));
+    }
+    let made = call.choice.as_deref().unwrap_or("(no choice recorded)");
+    Some(Revisit {
+        question: call.question.clone(),
+        text: format!(
+            "{}\n   The agent went with: {made}. Looking at it afterwards, {}.",
+            call.question,
+            said.join("; ")
+        ),
+    })
 }
 
 fn markers(name: &str) -> (String, String) {
@@ -772,6 +906,92 @@ mod tests {
                 .unwrap()
                 .contains("they chose: mauve")
         );
+    }
+
+    #[test]
+    fn a_tasks_changed_calls_go_to_one_revise_which_later_changes_join() {
+        let e = env();
+        create(&e, Some("site"));
+        let t = e.store.claim(None, "s1", 1000).unwrap().unwrap();
+        let post = |q: &str, at| {
+            e.store
+                .post(
+                    CallPostParams {
+                        task: t.id.clone(),
+                        session: "s1".into(),
+                        wait: Wait::Record,
+                        summary: None,
+                        calls: vec![call(q, Some("teal"))],
+                        hold_ms: None,
+                    },
+                    at,
+                )
+                .unwrap()
+                .1
+        };
+        let (a, b) = (post("Header accent", 1500), post("Link accent", 1600));
+        put(
+            &tree(&t),
+            "services/site/t/a.user.css",
+            "@-moz-document domain(\"a.example\") { p { color: teal; } }\n",
+        );
+        super::super::tests::submit(&e, &t.id);
+        let change = |batch: &Batch, to: &str| CallAnswerParams {
+            batch: batch.id.clone(),
+            answers: vec![AnswerInput {
+                choice: Some(to.into()),
+                note: None,
+            }],
+        };
+        let (_, _, revisions) = e
+            .store
+            .answer_all(vec![change(&a, "mauve"), change(&b, "peach")], None, 3000)
+            .unwrap();
+        assert_eq!(
+            revisions.len(),
+            1,
+            "one revise for the task, not one per call"
+        );
+        let note = revisions[0].brief.note.clone().unwrap();
+        assert!(
+            note.contains("they chose: mauve") && note.contains("they chose: peach"),
+            "{note}"
+        );
+
+        // Another landed task on the same service: its changes join the
+        // queued revise, since nobody has started it.
+        let t2 = create(&e, Some("site"));
+        let t2 = e.store.claim(Some(&t2.id), "s1", 3500).unwrap().unwrap();
+        let c = e
+            .store
+            .post(
+                CallPostParams {
+                    task: t2.id.clone(),
+                    session: "s1".into(),
+                    wait: Wait::Record,
+                    summary: None,
+                    calls: vec![call("Footer rule", Some("1px"))],
+                    hold_ms: None,
+                },
+                3600,
+            )
+            .unwrap()
+            .1;
+        put(
+            &tree(&t2),
+            "services/site/t/a.user.css",
+            "@-moz-document domain(\"a.example\") { p { color: navy; } }\n",
+        );
+        super::super::tests::submit(&e, &t2.id);
+        let (_, _, joined) = e.store.answer(change(&c, "2px"), None, 4000).unwrap();
+        assert_eq!(joined[0].id, revisions[0].id);
+        let note = joined[0].brief.note.clone().unwrap();
+        assert!(
+            note.contains("mauve") && note.contains("they chose: 2px"),
+            "{note}"
+        );
+        let queued = e.store.list(Some(TaskState::Queued), 4000).unwrap();
+        assert_eq!(queued.len(), 1, "{queued:?}");
     }
 
     #[test]

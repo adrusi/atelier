@@ -125,12 +125,8 @@ function batchCard(b: Batch, task: Task | undefined, open: boolean) {
     const status = h("span", { class: "sent", role: "status" } as Partial<HTMLSpanElement>);
     const send = h("button", { type: "button", textContent: b.wait === "record" ? "Done" : "Send answers" });
     send.addEventListener("click", async () => {
-      const answers = b.calls.map((c, i) => {
-        const picked = card.querySelector<HTMLInputElement>(`input[name="${b.id}-${i}"]:checked`)?.value;
-        const note = card.querySelector<HTMLTextAreaElement>(`textarea[name="${b.id}-${i}-note"]`)?.value.trim();
-        return { choice: picked && picked !== c.choice ? picked : null, note: note || null };
-      });
-      const unanswered = b.calls.findIndex((c, i) => (c.wait ?? b.wait) !== "record" && !c.choice && !answers[i].choice && !answers[i].note);
+      const answers = answersIn(card, b);
+      const unanswered = unansweredIn(b, answers);
       if (unanswered >= 0) {
         status.textContent = `Question ${unanswered + 1} needs an answer.`;
         return;
@@ -150,6 +146,70 @@ function batchCard(b: Batch, task: Task | undefined, open: boolean) {
   }
   return card;
 }
+
+const rank = { block: 0, review: 1, record: 2 } as const;
+
+/** All of a task's open batches as one card, answered together: what the
+ * user changes then reaches one agent, with the rest of it as context,
+ * rather than a session per batch. */
+function taskCard(batches: Batch[], task: Task | undefined) {
+  if (batches.length === 1) return batchCard(batches[0], task, true);
+  batches.sort((a, b) => rank[a.wait] - rank[b.wait] || Number(a.created) - Number(b.created));
+  const first = batches[0];
+  const site = hostOf(first.origin) || first.service || "";
+  const card = h(
+    "section",
+    { class: `batch ${first.wait}` },
+    h("header", {}, h("span", { class: "site", textContent: site }), task && task.brief.description !== `Style ${site}` ? h("span", { class: "what", textContent: task.brief.description }) : null),
+  );
+  if (task?.tree && first.origin && (task.state === "waiting" || task.state === "claimed" || task.state === "queued")) {
+    const look = h("button", { type: "button", class: "link", textContent: "Look at the work in progress" });
+    look.addEventListener("click", () => void browser.runtime.sendMessage({ type: "preview", task: task.id, url: first.origin }));
+    card.append(look);
+  }
+  for (const b of batches) {
+    const list = h("ol", { class: "calls" });
+    b.calls.forEach((c, i) => list.append(callCard(b, c, i, true)));
+    card.append(h("p", { class: "wait", textContent: WAIT_LABEL[b.wait] }), ...(b.summary ? [h("p", { class: "summary", textContent: b.summary })] : []), list);
+  }
+  const status = h("span", { class: "sent", role: "status" } as Partial<HTMLSpanElement>);
+  const record = batches.every((b) => b.wait === "record");
+  const send = h("button", { type: "button", textContent: record ? "Done" : "Send answers" });
+  send.addEventListener("click", async () => {
+    const all = batches.map((b) => ({ batch: b.id, answers: answersIn(card, b) }));
+    for (const [k, b] of batches.entries()) {
+      const unanswered = unansweredIn(b, all[k].answers);
+      if (unanswered >= 0) {
+        status.textContent = `"${b.calls[unanswered].question}" needs an answer.`;
+        return;
+      }
+    }
+    send.disabled = true;
+    try {
+      await browser.runtime.sendMessage({ type: "answer-all", batches: all });
+      status.textContent = record ? "Done. Anything you changed is queued as one new request." : "Sent. The task goes back to the queue with your answers.";
+      setTimeout(() => void render(true), 1500);
+    } catch (e) {
+      status.textContent = e instanceof Error ? e.message : String(e);
+      send.disabled = false;
+    }
+  });
+  card.append(h("footer", {}, send, status));
+  return card;
+}
+
+/** The answers given in a card for one batch's calls. */
+function answersIn(card: HTMLElement, b: Batch) {
+  return b.calls.map((c, i) => {
+    const picked = card.querySelector<HTMLInputElement>(`input[name="${b.id}-${i}"]:checked`)?.value;
+    const note = card.querySelector<HTMLTextAreaElement>(`textarea[name="${b.id}-${i}-note"]`)?.value.trim();
+    return { choice: picked && picked !== c.choice ? picked : null, note: note || null };
+  });
+}
+
+/** The first call that needs an answer and has none, or -1. */
+const unansweredIn = (b: Batch, answers: { choice: string | null; note: string | null }[]) =>
+  b.calls.findIndex((c, i) => (c.wait ?? b.wait) !== "record" && !c.choice && !answers[i].choice && !answers[i].note);
 
 /** A line diff (longest common subsequence): small files, so simple is fine. */
 function diffLines(a: string[], b: string[]): { op: " " | "-" | "+"; line: string }[] {
@@ -315,11 +375,13 @@ async function render(force = false) {
   tasks.clear();
   for (const [id, t] of Object.entries(inbox.tasks)) tasks.set(id, t);
   const open = inbox.batches.filter((b) => b.state === "open");
-  // Blocking first, then review, then calls for the record.
-  const rank = { block: 0, review: 1, record: 2 } as const;
-  open.sort((a, b) => rank[a.wait] - rank[b.wait]);
+  // A card per task; blocking first, then review, then calls for the record.
+  const byTask = new Map<string, Batch[]>();
+  for (const b of open) byTask.set(b.task, [...(byTask.get(b.task) ?? []), b]);
+  const strongest = (bs: Batch[]) => Math.min(...bs.map((b) => rank[b.wait]));
+  const groups = [...byTask.values()].sort((a, b) => strongest(a) - strongest(b));
   const openProposals = inbox.proposals.filter((p) => p.state === "open" || unreviewedNote(p));
-  el("open").replaceChildren(...openProposals.map(proposalCard), ...open.map((b) => batchCard(b, inbox.tasks[b.task], true)));
+  el("open").replaceChildren(...openProposals.map(proposalCard), ...groups.map((bs) => taskCard(bs, inbox.tasks[bs[0].task])));
   el("empty").hidden = open.length + openProposals.length > 0;
   const answered = inbox.batches.filter((b) => b.state === "answered");
   const decided = inbox.proposals.filter((p) => p.state !== "open" && !unreviewedNote(p));

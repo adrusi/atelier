@@ -161,6 +161,9 @@ async function renderSite(tabId: number) {
   }
 }
 
+/** Whether "Start an agent" starts one although a launch is still counted as starting. */
+let startAnother = false;
+
 /** What happens next to a queued request: an agent is on it, is starting,
  * or none is running, with how to start one. */
 function renderNext(site: SiteInfo) {
@@ -174,7 +177,9 @@ function renderNext(site: SiteInfo) {
   if (here) text = "An agent is working on this site now, and will pick up the rest after.";
   else if (s.working) text = "An agent is working on another request, and will pick this up after.";
   else if (s.waiting) text = "An agent is waiting for work, and will pick this up shortly.";
-  else if (s.starting) text = "An agent is starting, and will pick this up.";
+  // A launch can fail without atelier knowing (the window opened, the harness
+  // didn't get going), so starting another stays possible.
+  else if (s.starting) text = "An agent was started and should pick this up soon. If none appeared, start one.";
   else {
     text = s.start === "pull" ? "No agent is running, so nothing happens until you start one." : "No agent is running, and atelier couldn't start one.";
     how = !s.command;
@@ -182,7 +187,8 @@ function renderNext(site: SiteInfo) {
   if (s.problem) text += ` (atelier's [session] settings have a problem: ${s.problem})`;
   el("next-text").textContent = text;
   el("next-how").hidden = !how;
-  el("start").hidden = !(s.command && !s.working && !s.waiting && !s.starting);
+  el("start").hidden = !(s.command && !s.working && !s.waiting);
+  startAnother = s.starting;
 }
 
 el("start").addEventListener("click", async () => {
@@ -190,7 +196,7 @@ el("start").addEventListener("click", async () => {
   const start = el<HTMLButtonElement>("start");
   start.disabled = true;
   try {
-    const r = (await browser.runtime.sendMessage({ type: "start-session" })) as { started: boolean; reason?: string };
+    const r = (await browser.runtime.sendMessage({ type: "start-session", force: startAnother })) as { started: boolean; reason?: string };
     el("started").textContent = r.started ? "Starting…" : `Not started: ${r.reason ?? "unknown reason"}`;
     await renderSite(tab!.id!);
   } catch (err) {

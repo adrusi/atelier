@@ -1292,29 +1292,36 @@ fn call_call(
             Ok(json!(store.batches(open, task).map_err(failed)?))
         }
         cm::ANSWER => {
-            let p: CallAnswerParams = serde_json::from_value(params).map_err(bad)?;
+            // One batch, or several answered together ({batches: [...]}),
+            // as the inbox does for all of a task's.
+            let many = params.get("batches").is_some();
+            let ps: Vec<CallAnswerParams> = if many {
+                serde_json::from_value(params["batches"].clone()).map_err(bad)?
+            } else {
+                vec![serde_json::from_value(params).map_err(bad)?]
+            };
             let theme = state.inner.lock().unwrap().default.bundle.theme.clone();
-            let (batch, requeued, revisions) = store.answer(p, theme, now).map_err(failed)?;
-            changed(&batch);
+            let (batches, requeued, revisions) =
+                store.answer_all(ps, theme, now).map_err(failed)?;
+            for b in &batches {
+                changed(b);
+            }
             for t in requeued.iter().chain(&revisions) {
                 announce(t);
             }
             // Answers are the user asking for work to go on.
-            if role != Role::Mcp && (requeued.is_some() || !revisions.is_empty()) {
+            if role != Role::Mcp && (!requeued.is_empty() || !revisions.is_empty()) {
                 let in_progress = store
                     .list(Some(atelier_proto::TaskState::Claimed), now)
                     .is_ok_and(|t| !t.is_empty());
                 start_session(
                     state,
-                    requeued
-                        .as_ref()
-                        .or(revisions.first())
-                        .map(|t| t.id.as_str()),
+                    requeued.first().or(revisions.first()).map(|t| t.id.as_str()),
                     in_progress,
                     false,
                 );
             }
-            Ok(json!(batch))
+            Ok(if many { json!(batches) } else { json!(batches[0]) })
         }
         cm::ATTACHMENT => {
             let s = |k: &str| {
