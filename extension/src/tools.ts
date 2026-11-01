@@ -623,6 +623,7 @@ const handlers: Record<string, Handler> = {
     if (tab) {
       const applying = (bundle?.styles ?? []).filter((s) => tab.url && cssFor(s, tab.url) !== null).map((s) => s.id);
       const inPage = (await call(tab.id!, "atelierStyleCheck").catch(() => null)) as { present: string[]; dropped: { style: string; selector: string; effect: string }[] } | null;
+      const clashes = (await call(tab.id!, "atelierClashes", 20).catch(() => null)) as { total: number; clashes: unknown[] } | null;
       const missing = inPage ? applying.filter((id) => !inPage.present.includes(id)) : [];
       out.tab = {
         ...describeTab(tab, ctx),
@@ -636,6 +637,12 @@ const handlers: Record<string, Handler> = {
           ? {
               droppedSelectors: inPage.dropped,
               droppedNote: "Firefox can't use these selectors, and says nothing. \"dropped\": it can't parse the selector, so the whole rule is thrown away. \"ignored\": inside :is() or :where(), which forgive what they can't parse, so the rule stays but those arguments match nothing; usually a pseudo-element (::before) or a leading > inside :is(). Write those outside the :is(), e.g. :is(.a, .b)::before.",
+            }
+          : {}),
+        ...(clashes?.total
+          ? {
+              overriddenByOurs: clashes.clashes,
+              overriddenNote: `${clashes.total} place(s) on this page where a rule in one of atelier's style files sets a property and a rule in another overrides it with a different value (by !important, specificity, then order; @layer isn't considered). Often that's a specificity clash nobody meant; if it's meant, ignore it. matched_rules on the example element shows the whole cascade.`,
             }
           : {}),
       };

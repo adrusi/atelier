@@ -271,6 +271,22 @@ try {
     ]);
   });
 
+  await check("styles_status flags a rule in one of our files overridden by a rule in another", async () => {
+    const a = path.join(owned, "services/fixtures/e2e/clash-a.user.css");
+    const b = path.join(owned, "services/fixtures/e2e/clash-b.user.css");
+    fs.writeFileSync(a, `@-moz-document url-prefix("http://127.0.0.1:") { .note { font-style: italic; } }\n`);
+    fs.writeFileSync(b, `@-moz-document url-prefix("http://127.0.0.1:") { main .note { font-style: normal; } .note { color: inherit; } }\n`);
+    const r = await tool("styles_status", { tab });
+    assert.equal(r.tab.overriddenByOurs?.length, 1, JSON.stringify(r.tab));
+    const [c] = r.tab.overriddenByOurs;
+    assert.equal(c.property, "font-style");
+    assert.deepEqual(c.overridden, { file: "services/fixtures/e2e/clash-a.user.css", selector: ".note", value: "italic" });
+    assert.deepEqual(c.by, { file: "services/fixtures/e2e/clash-b.user.css", selector: "main .note", value: "normal" });
+    fs.rmSync(a);
+    fs.rmSync(b);
+    await tool("styles_status", {});
+  });
+
   await check("styles_status names selectors Firefox drops or ignores, and styles missing from the page", async () => {
     const file = path.join(owned, "services/fixtures/e2e/selectors.user.css");
     fs.writeFileSync(file, `@-moz-document url-prefix("http://127.0.0.1:") {

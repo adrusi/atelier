@@ -341,7 +341,7 @@ const TOOLS: &[Tool] = &[
             is what the user's tabs have. With `tab`, also which styles apply to that tab's page, whether the page \
             has atelier's style shim, any prerequisite (site setting) the page shows isn't met, styles that should \
             apply but aren't in the page (notInPage), and selectors in your styles that Firefox silently drops or \
-            ignores (droppedSelectors: a pseudo-element inside :is(), say). Check after editing: a style with \
+            ignores (droppedSelectors: a pseudo-element inside :is(), say), and properties one of your style files sets that another of them overrides (overriddenByOurs). Check after editing: a style with \
             errors keeps its last good version applied, so a mistake can look as if nothing happened.",
         schema: || json!({ "type": "object", "properties": { "tab": tab_prop(), "task": { "type": "string", "description": "A task whose tree to report on, without a tab." } } }),
     },

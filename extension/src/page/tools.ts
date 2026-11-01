@@ -702,3 +702,79 @@ export function botCheck(): string | null {
   if (core.find("#challenge-form, #cf-challenge-running, .cf-browser-verification, #anubis_challenge, [data-ddg-challenge]")) return title || "a challenge page";
   return null;
 }
+
+/** Properties that two of atelier's style files set differently on the same
+ * element, with the rule that wins and the one it overrides: a specificity
+ * clash between our own files, which nothing else flags (matched_rules
+ * explains one once it's suspected). Within one file, an override is
+ * usually meant, so only clashes between files count. The cascade is
+ * judged by !important, specificity and order; @layer isn't considered. */
+export function atelierClashes(limit: number) {
+  type Decl = { value: string; important: boolean };
+  type Ours = { file: string; selector: string; parts: string[]; order: number; scope: core.Scope; props: Map<string, Decl> };
+  const ours: Ours[] = [];
+  for (const scope of core.scopes()) {
+    for (const { rule: r, selector, active, sheet, order } of core.rules(core.sheets(scope))) {
+      if (sheet.owner !== "atelier" || !active) continue;
+      const props = new Map<string, Decl>();
+      for (let i = 0; i < r.style.length; i++) {
+        const name = r.style[i];
+        props.set(name, { value: r.style.getPropertyValue(name).trim(), important: r.style.getPropertyPriority(name) === "important" });
+      }
+      if (props.size) ours.push({ file: sheet.label.replace(/^.*atelier: /, ""), selector, parts: core.splitTop(selector), order, scope, props });
+    }
+  }
+  type Hit = { r: Ours; spec: number[] };
+  const byElement = new Map<Element, Hit[]>();
+  for (const r of ours) {
+    let els: Element[];
+    try {
+      els = core.queryAll(r.selector, r.scope).filter((el) => el.getRootNode() === r.scope);
+    } catch {
+      continue; // pseudo-elements and the like
+    }
+    for (const el of els.slice(0, 2000)) {
+      const matching = r.parts.filter((p) => {
+        try {
+          return el.matches(p);
+        } catch {
+          return false;
+        }
+      });
+      const hits = byElement.get(el) ?? [];
+      hits.push({ r, spec: maxSpecificity(matching.map(specificity)) });
+      byElement.set(el, hits);
+    }
+  }
+  const beats = (a: Hit, b: Hit, p: string) => {
+    const [ia, ib] = [a.r.props.get(p)!.important, b.r.props.get(p)!.important];
+    if (ia !== ib) return ia;
+    for (let i = 0; i < 3; i++) if (a.spec[i] !== b.spec[i]) return a.spec[i] > b.spec[i];
+    return a.r.order > b.r.order;
+  };
+  type Clash = { property: string; overridden: { file: string; selector: string; value: string }; by: { file: string; selector: string; value: string }; elements: number; example: string };
+  const clashes = new Map<string, Clash>();
+  for (const [el, hits] of byElement) {
+    if (new Set(hits.map((h) => h.r.file)).size < 2) continue;
+    for (const p of new Set(hits.flatMap((h) => [...h.r.props.keys()]))) {
+      const setting = hits.filter((h) => h.r.props.has(p));
+      if (new Set(setting.map((h) => h.r.file)).size < 2) continue;
+      const win = setting.reduce((a, b) => (beats(b, a, p) ? b : a));
+      for (const h of setting) {
+        if (h.r.file === win.r.file || h.r.props.get(p)!.value === win.r.props.get(p)!.value) continue;
+        const key = [p, h.r.file, h.r.selector, win.r.file, win.r.selector].join("\n");
+        const c = clashes.get(key) ?? {
+          property: p,
+          overridden: { file: h.r.file, selector: h.r.selector, value: h.r.props.get(p)!.value },
+          by: { file: win.r.file, selector: win.r.selector, value: win.r.props.get(p)!.value },
+          elements: 0,
+          example: core.describe(el),
+        };
+        c.elements++;
+        clashes.set(key, c);
+      }
+    }
+  }
+  const all = [...clashes.values()].sort((a, b) => b.elements - a.elements);
+  return { total: all.length, clashes: all.slice(0, limit) };
+}
