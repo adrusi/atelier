@@ -31,6 +31,8 @@ export type ToolContext = {
   settle: (source?: string) => Promise<void>;
   /** The owned directory, as the daemon reports it. */
   atelierDir: () => string | undefined;
+  /** Swaps a variant's block in the styles a tab gets (null: back to the styles as they are). */
+  override: (tabId: number, o: { file: string; name: string; css: string } | null) => void;
 };
 
 const INVALID_PARAMS = -32602;
@@ -384,6 +386,18 @@ const handlers: Record<string, Handler> = {
 
   async "page/screenshot"(params, ctx) {
     const tab = await agentTab(params);
+    // A variant's option swapped in for this screenshot only, as the inbox shows it
+    // (atelier mcp resolves the option's CSS from the tree).
+    const variant = (params?.variant ?? null) as { file: string; name: string; css: string } | null;
+    if (variant) {
+      ctx.override(tab.id!, variant);
+      try {
+        await new Promise((r) => setTimeout(r, 300));
+        return await handlers["page/screenshot"]({ ...params, variant: null }, ctx);
+      } finally {
+        ctx.override(tab.id!, null);
+      }
+    }
     // Saves just made should show: wait until their styles have reached the page.
     await ctx.settle(ctx.sourceOf(tab.id!) ?? undefined);
     await new Promise((r) => setTimeout(r, 150));

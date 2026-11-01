@@ -1315,8 +1315,8 @@ Better, when the choice matters: mark the part in the style file with the commen
 `/* atelier:variant NAME */` and `/* atelier:end NAME */` around your choice, put each option's CSS (yours \
 too) in variants/NAME/<option>.css beside the style file (just the rules that go between the markers, \
 with no @-moz-document around them; if the markers sit inside nested rules, the option files are \
-nested the same way, so `&`-relative rules work), and give the call `variant: NAME`. The user can \
-then flip between the options live in their own tab, and picking another one writes it into the style \
+nested the same way, so `&`-relative rules work), and give the call `variant: NAME`. screenshot's `variant` and `option` then show any option exactly as \
+the user will see it, for its screenshots. The user can then flip between the options live in their own tab, and picking another one writes it into the style \
 for you, even after the work has landed.\n";
 
 #[cfg(test)]

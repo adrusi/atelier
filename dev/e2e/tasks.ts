@@ -144,6 +144,25 @@ try {
     assert.ok(!fs.existsSync(path.join(owned, PREVIEW)));
   });
 
+  await check("a screenshot can show a variant's option, just for that capture", async () => {
+    const file = path.join(tree, STYLE);
+    const saved = fs.readFileSync(file, "utf8");
+    // The option makes the page tall, which the screenshot's note gives away.
+    fs.writeFileSync(file, saved.replace("html { --e2e: teal; }", "html { --e2e: teal; }\n  /* atelier:variant height */\n  /* atelier:end height */"));
+    fs.mkdirSync(path.join(tree, "services/fixtures/e2e/variants/height"), { recursive: true });
+    fs.writeFileSync(path.join(tree, "services/fixtures/e2e/variants/height/tall.css"), "body { min-height: 3000px; }\n");
+    await new Promise((r) => setTimeout(r, 800));
+    const plain = await tool("screenshot", { tab, fullPage: true, maxHeight: 1000 });
+    assert.doesNotMatch(plain, /px tall/);
+    const tall = await tool("screenshot", { tab, fullPage: true, maxHeight: 1000, variant: "height", option: "tall" });
+    assert.match(tall, /The page is \d{4}px tall/);
+    const after = await tool("screenshot", { tab, fullPage: true, maxHeight: 1000 });
+    assert.doesNotMatch(after, /px tall/, "the tab's styles are back as they were");
+    await assert.rejects(tool("screenshot", { tab, variant: "height", option: "short" }), /variants\/height\/short\.css/);
+    fs.writeFileSync(file, saved);
+    fs.rmSync(path.join(tree, "services/fixtures/e2e/variants"), { recursive: true });
+  });
+
   await check("task_info lists what's changed so far", async () => {
     const info = await tool("task_info");
     assert.match(info, new RegExp(`- ${STYLE} \\(modified\\)`));

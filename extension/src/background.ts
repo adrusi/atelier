@@ -93,6 +93,11 @@ async function connect() {
       hasShim: (tabId) => [...shimPorts].some((p) => p.sender?.tab?.id === tabId && (p.sender?.frameId ?? 0) === 0),
       unmet: (tabId) => unmetByTab.get(tabId) ?? [],
       atelierDir: () => state.atelierDir,
+      override: (tabId, o) => {
+        if (o) overrides.set(tabId, o);
+        else overrides.delete(tabId);
+        for (const port of shimPorts) if (port.sender?.tab?.id === tabId) sendStyles(port);
+      },
       settle: async (source) => {
         const have = () => (source === undefined ? state.bundleHash : sources.get(source)?.hash);
         const deadline = Date.now() + 3000;

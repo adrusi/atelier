@@ -157,6 +157,8 @@ const TOOLS: &[Tool] = &[
                 "scale": { "type": "number", "description": "Pixels per CSS pixel. Default 1; use 2–4 to inspect small elements." },
                 "returnImage": { "type": "boolean", "description": "With saveAs or attach: also return the image. Default false." },
                 "extraCss": { "type": "string", "description": "CSS added just for this capture, then removed: for showing a variant (\"this or that?\") without editing files. It comes after the page's CSS and your styles, so it wins ties with both; a more specific rule still beats it." },
+                "variant": { "type": "string", "description": "A variant (marked in a style file, with its options in variants/NAME/): show `option` in place of what's between its markers, just for this capture, exactly as the user will see it in the inbox." },
+                "option": { "type": "string", "description": "With variant: the option's name (its file in variants/NAME/, without .css)." },
                 "attach": { "type": "boolean", "description": "Save the image for task_ask (outside the tree, so it won't land); the result gives its path. JPEG." },
                 "saveAs": { "type": "string", "description": "Also save the image at this path, relative to the task's tree (or the owned directory), e.g. services/example/roarke/previews/home.jpg. A .jpg name saves JPEG (smaller; preferred for previews)." }
             }, "required": ["tab"] })
@@ -531,6 +533,30 @@ impl Server {
             }
         }
         let tab = args.get("tab").and_then(Value::as_i64);
+        // A variant option for one screenshot: its CSS from the tree the tab shows.
+        if tool.name == "screenshot"
+            && let Some(name) = args
+                .get("variant")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        {
+            let Some(option) = args
+                .get("option")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+            else {
+                return tool_error("`variant` needs `option`: which of its options to show");
+            };
+            let root = self
+                .task_for_tab(tab)
+                .and_then(|t| self.tree_of(&t))
+                .unwrap_or_else(|| self.dir.clone());
+            match variant_option(&root, &name, &option) {
+                Ok(v) => args["variant"] = v,
+                Err(e) => return tool_error(e),
+            }
+            args.as_object_mut().map(|a| a.remove("option"));
+        }
         // attach: true saves next to the task's tree, for task_ask, where it won't land
         // (as well as at saveAs, if that's given too).
         let mut attach: Option<PathBuf> = None;
@@ -707,6 +733,48 @@ impl Server {
             Err(e) => Err(format!("couldn't reach atelier's daemon: {e}")),
         }
     }
+}
+
+/// A variant's option, for screenshot: the style file under `root` with
+/// the variant's markers, and the option's CSS from `variants/NAME/` beside
+/// it, as the extension swaps it in.
+fn variant_option(root: &std::path::Path, name: &str, option: &str) -> Result<Value, String> {
+    fn styles(dir: &std::path::Path, out: &mut Vec<PathBuf>) {
+        for e in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            let p = e.path();
+            if p.is_dir() && !e.file_name().to_string_lossy().starts_with('.') {
+                styles(&p, out);
+            } else if p.to_string_lossy().ends_with(".user.css") {
+                out.push(p);
+            }
+        }
+    }
+    let mut files = Vec::new();
+    styles(&root.join("services"), &mut files);
+    let marker = format!("/* atelier:variant {name} */");
+    let file = files
+        .into_iter()
+        .find(|f| std::fs::read_to_string(f).is_ok_and(|t| t.contains(&marker)))
+        .ok_or_else(|| {
+            format!(
+                "no style file in {} has the marker `{marker}`",
+                root.display()
+            )
+        })?;
+    let path = file
+        .parent()
+        .expect("in a directory")
+        .join("variants")
+        .join(name)
+        .join(format!("{option}.css"));
+    let css = std::fs::read_to_string(&path)
+        .map_err(|e| format!("variant {name}'s option {option}: {} ({e})", path.display()))?;
+    let rel = file
+        .strip_prefix(root)
+        .expect("under root")
+        .to_string_lossy()
+        .replace('\\', "/");
+    Ok(json!({ "file": rel, "name": name, "css": css }))
 }
 
 fn tool_result(tool: &str, mut result: Value) -> Value {
