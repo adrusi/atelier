@@ -21,6 +21,8 @@ export type AgentTab = {
   scheme?: "light" | "dark";
   /** The viewport size emulated in the tab (tab/viewport). */
   viewport?: { width: number; height: number };
+  /** The agent session (`atelier mcp`) that opened it: its tabs close when it ends. */
+  agent?: string;
 };
 
 /** The media features a tab emulates (page/media.ts), or null. */
@@ -88,6 +90,44 @@ browser.tabs.onRemoved.addListener((id) => {
   void forget(id).then(() => containers.sweep());
 });
 
+// The window each agent session's tabs go in, when they get one of their own
+// (`[session] windows`). Kept in session storage like the tab records.
+const windows = new Map<string, number>();
+const windowsReady: Promise<void> = browser.storage.session.get("agentWindows").then((v) => {
+  for (const [agent, id] of (v.agentWindows as [string, number][] | undefined) ?? []) windows.set(agent, id);
+});
+const saveWindows = () => browser.storage.session.set({ agentWindows: [...windows] });
+
+/** The window of an agent session's tabs, if it's still open. */
+export async function windowOf(agent: string): Promise<number | undefined> {
+  await windowsReady;
+  const id = windows.get(agent);
+  if (id === undefined) return undefined;
+  if (await browser.windows.get(id).then(() => true, () => false)) return id;
+  windows.delete(agent);
+  await saveWindows();
+  return undefined;
+}
+
+export async function setWindow(agent: string, id: number) {
+  await windowsReady;
+  windows.set(agent, id);
+  await saveWindows();
+}
+
+/** Closes the tabs an agent session opened (and so its window, if it had
+ * one), when the session has ended. Returns how many. */
+export async function end(agent: string): Promise<number> {
+  await ready;
+  await windowsReady;
+  const mine = [...records].filter(([, r]) => r.agent === agent).map(([id]) => id);
+  if (mine.length) await browser.tabs.remove(mine).catch(() => {});
+  for (const id of mine) records.delete(id);
+  await save();
+  if (windows.delete(agent)) await saveWindows();
+  return mine.length;
+}
+
 /** Makes the browser's tabs and containers agree with the records: closes
  * agent tabs restored from an earlier session, lets go of copies, forgets
  * tabs that are gone, and removes throwaway containers nothing needs. */
@@ -101,6 +141,15 @@ export async function reconcile() {
     if (!live.has(id)) changed = records.delete(id) || changed;
   }
   if (changed) await save();
+  // Windows that are gone, or have no agent tabs left (the user may have
+  // moved them), are no longer the agent's.
+  await windowsReady;
+  const used = new Set(tabs.filter((t) => t.id !== undefined && records.has(t.id)).map((t) => t.windowId));
+  let windowsChanged = false;
+  for (const [agent, id] of windows) {
+    if (!used.has(id)) windowsChanged = windows.delete(agent) || windowsChanged;
+  }
+  if (windowsChanged) await saveWindows();
   const leftovers: number[] = [];
   for (const tab of tabs) {
     if (tab.id === undefined || records.has(tab.id)) continue;

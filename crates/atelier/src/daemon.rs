@@ -644,6 +644,9 @@ async fn handle(stream: UnixStream, state: Arc<State>) {
     let mut pending: HashMap<String, oneshot::Sender<RpcResult>> = HashMap::new();
     let mut next_request = 0u64;
 
+    // The agent sessions that opened tabs through this connection (an `atelier
+    // mcp` keeps one connection for its life), so their tabs close with it.
+    let mut agents: std::collections::BTreeSet<String> = Default::default();
     let mut notifications = state.notify.subscribe();
     loop {
         let frame = tokio::select! {
@@ -656,6 +659,11 @@ async fn handle(stream: UnixStream, state: Arc<State>) {
                             let _ = reply.send(rpc_result(&frame));
                         }
                     } else {
+                        if role == Role::Mcp
+                            && let Some(agent) = opened_for(&frame)
+                        {
+                            agents.insert(agent);
+                        }
                         handle_request(&state, frame, out.clone(), role);
                     }
                     continue;
@@ -682,6 +690,15 @@ async fn handle(stream: UnixStream, state: Arc<State>) {
 
     if let Some(link) = link {
         state.browsers.lock().unwrap().retain(|(id, _)| *id != link);
+    }
+    for agent in agents {
+        let state = state.clone();
+        tokio::spawn(async move {
+            let call = json!({ "method": "agent/end", "params": { "agent": &agent } });
+            if let Err((_, e)) = browser_call(&state, call).await {
+                eprintln!("atelier daemon: closing {agent}'s tabs: {e}");
+            }
+        });
     }
     for (_, reply) in pending {
         let _ = reply.send(Err((
@@ -787,10 +804,42 @@ fn handle_request(state: &Arc<State>, msg: Value, out: mpsc::Sender<Value>, role
     }
 }
 
-/// Forwards a call to the most recently connected extension.
+/// The agent session a browser call opens a tab for, if it does.
+fn opened_for(frame: &Value) -> Option<String> {
+    (frame.get("method")?.as_str()? == method::BROWSER_CALL).then_some(())?;
+    let call = frame.get("params")?;
+    (call.get("method")?.as_str()? == "tab/open").then_some(())?;
+    Some(call.get("params")?.get("agent")?.as_str()?.to_string())
+}
+
+/// Forwards a call to the most recently connected extension. A tab opened
+/// for an agent session goes in a window of the session's own when
+/// `[session] windows` says so, and a new one runs the `on_agent_window`
+/// hook.
 async fn browser_call(state: &State, params: Value) -> RpcResult {
-    let p: BrowserCallParams =
+    let mut p: BrowserCallParams =
         serde_json::from_value(params).map_err(|e| (wire::code::INVALID_PARAMS, e.to_string()))?;
+    let opens = p.method == "tab/open" && p.params.get("agent").is_some();
+    if opens && session::config().is_ok_and(|c| c.windows) {
+        p.params["window"] = json!(true);
+    }
+    let agent = |k: &str| {
+        p.params
+            .get(k)
+            .map(|v| v.to_string().trim_matches('"').to_string())
+    };
+    let (agent, pid) = (agent("agent"), agent("agentPid"));
+    let result = relay(state, p).await;
+    if opens
+        && let Ok(r) = &result
+        && let Some(w) = r.get("window").filter(|w| w["created"] == json!(true))
+    {
+        agent_window_hook(state, &w["id"].to_string(), agent, pid);
+    }
+    result
+}
+
+async fn relay(state: &State, p: BrowserCallParams) -> RpcResult {
     let link = state
         .browsers
         .lock()
@@ -1316,12 +1365,19 @@ fn call_call(
                     .is_ok_and(|t| !t.is_empty());
                 start_session(
                     state,
-                    requeued.first().or(revisions.first()).map(|t| t.id.as_str()),
+                    requeued
+                        .first()
+                        .or(revisions.first())
+                        .map(|t| t.id.as_str()),
                     in_progress,
                     false,
                 );
             }
-            Ok(if many { json!(batches) } else { json!(batches[0]) })
+            Ok(if many {
+                json!(batches)
+            } else {
+                json!(batches[0])
+            })
         }
         cm::ATTACHMENT => {
             let s = |k: &str| {
@@ -1508,5 +1564,42 @@ fn recover(state: &State) {
             &entry.summary,
             &entry.files,
         );
+    }
+}
+
+/// Runs `[hooks] on_agent_window` for a window atelier opened for an agent
+/// session's tabs, so the user's desktop can put it somewhere out of the way
+/// (a workspace of its own). It gets the Firefox window id, which an
+/// extension like firefox-sway-favicon puts in the window's title.
+fn agent_window_hook(state: &State, window: &str, agent: Option<String>, pid: Option<String>) {
+    let command = std::fs::read_to_string(paths::config_path())
+        .ok()
+        .and_then(|t| t.parse::<toml::Table>().ok())
+        .and_then(|t| {
+            t.get("hooks")?
+                .get("on_agent_window")?
+                .as_str()
+                .map(str::to_string)
+        });
+    let Some(command) = command else { return };
+    let child = std::process::Command::new("sh")
+        .arg("-c")
+        .arg(&command)
+        .current_dir(&state.dir)
+        .env("ATELIER_DIR", &state.dir)
+        .env("ATELIER_FIREFOX_WINDOW_ID", window)
+        .env("ATELIER_AGENT", agent.unwrap_or_default())
+        .env("ATELIER_AGENT_PID", pid.unwrap_or_default())
+        .stdin(std::process::Stdio::null())
+        .spawn();
+    match child {
+        Ok(mut child) => {
+            std::thread::spawn(move || match child.wait() {
+                Ok(s) if s.success() => {}
+                Ok(s) => eprintln!("atelier daemon: on_agent_window hook failed ({s})"),
+                Err(e) => eprintln!("atelier daemon: on_agent_window hook: {e}"),
+            });
+        }
+        Err(e) => eprintln!("atelier daemon: on_agent_window hook: {e}"),
     }
 }

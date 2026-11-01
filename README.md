@@ -115,6 +115,30 @@ starts when a request arrives and no session is working or waiting. Try your
 command with `atelier session start`. Whether a headless command is allowed
 under your harness's plan is yours to check.
 
+Agent tabs open as background tabs in your current window. To keep them out
+of the way instead, give each session a Firefox window of its own, and have
+your desktop move it somewhere (a workspace of its own, say):
+
+```toml
+[session]
+windows = true    # each session's tabs in a window of its own, closed when it ends
+
+[hooks]
+on_agent_window = 'my-move-script'   # gets ATELIER_FIREFOX_WINDOW_ID, ATELIER_AGENT, ATELIER_AGENT_PID
+```
+
+The hook gets Firefox's id for the window, not the window manager's. An
+extension that puts the id in window titles (firefox-sway-favicon sets
+`[fx:ID] `) lets a script find it, e.g. `swaymsg '[title="^\[fx:ID\] "] move
+container to workspace atelier'`. When a session ends (its `atelier mcp`
+exits), the tabs it opened close, in either mode.
+
+With Nix, the home-manager module's `atelier-agent` also ends a Claude Code
+session once its work is done: when it holds no task, the queue is empty and
+you haven't typed anything to it (`atelier agent-hook`, run from Claude Code's
+Stop and UserPromptSubmit hooks; `programs.atelier.agent.closeWhenDone`). It
+starts Claude Code in `auto` permission mode (`agent.permissionMode`).
+
 
 ## Watching agents work
 

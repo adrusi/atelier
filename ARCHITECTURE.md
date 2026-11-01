@@ -127,6 +127,7 @@ simply finishes it, and runs the hooks it missed.
 | Spawned sessions | daemon | a record of the launch | startup: a launch counts until it times out |
 | Registered user scripts | background | the bundle | every bundle load (already a diff) |
 | Agent tabs, their bindings and emulation | background (`agenttabs.ts`) | records in `storage.session`, and a tab value (`sessions.setTabValue`, restored with the tab) carrying the browser session's epoch | startup, a few seconds after tabs appear, and every 5 minutes: tabs with an earlier epoch are closed; copies (current epoch, not ours) lose the value and are the user's |
+| Agent windows (`[session] windows`) | background (`agenttabs.ts`) | agent session → window in `storage.session`; each agent tab's record names its session | when the session's `atelier mcp` connection closes, the daemon sends `agent/end` and its tabs close (the window with them); reconcile drops windows that are gone or hold no agent tabs |
 | Throwaway containers | background (`containers.ts`) | the session's list in `storage.session`, and the tabs that use them | with agent tabs, and when a tab closes: unlisted containers are removed with their tabs, listed ones once no tab uses them |
 | Page-side markers (sessionStorage) | page runtime | the background's tab state | the source marker on each shim connection (the background sends the tab's binding); the scheme marker on each load (the page asks); stale ones are dropped |
 

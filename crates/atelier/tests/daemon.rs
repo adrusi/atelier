@@ -828,3 +828,94 @@ fn session_status_says_how_sessions_start_and_whether_one_is_starting() {
     daemon.kill().unwrap();
     daemon.wait().unwrap();
 }
+
+/// Runs `atelier agent-hook` under a stand-in harness (a shell whose pid is
+/// ATELIER_AGENT_PID), and returns what the hook printed and whether the
+/// harness was ended within a few seconds.
+fn agent_hook(env: &Env, which: &str, event: Value) -> (String, bool) {
+    let mut c = Command::new("sh");
+    c.arg("-c")
+        .arg(r#"printf '%s' "$1" | ATELIER_AGENT_PID=$$ "$0" --dir "$2" agent-hook "$3"; sleep 6"#)
+        .arg(env!("CARGO_BIN_EXE_atelier"))
+        .arg(event.to_string())
+        .arg(&env.dir)
+        .arg(which)
+        .stdout(std::process::Stdio::piped());
+    for (var, sub) in [
+        ("XDG_RUNTIME_DIR", "run"),
+        ("XDG_STATE_HOME", "state"),
+        ("XDG_CONFIG_HOME", "config"),
+        ("XDG_DATA_HOME", "data"),
+    ] {
+        c.env(var, env.root.join(sub));
+    }
+    let mut harness = c.spawn().unwrap();
+    let deadline = Instant::now() + Duration::from_secs(4);
+    let ended = loop {
+        if let Some(status) = harness.try_wait().unwrap() {
+            break !status.success();
+        }
+        if Instant::now() > deadline {
+            harness.kill().unwrap();
+            harness.wait().unwrap();
+            break false;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    let mut out = String::new();
+    harness
+        .stdout
+        .take()
+        .unwrap()
+        .read_to_string(&mut out)
+        .unwrap();
+    (out, ended)
+}
+
+#[test]
+fn the_stop_hook_ends_a_finished_agent_session_and_keeps_a_busy_one_going() {
+    let env = Env::new();
+    let mut daemon = env.daemon();
+    let mut s = env.connect();
+    initialize(&mut s, &env.dir);
+    let stop = |active: bool| json!({ "session_id": "c1", "stop_hook_active": active });
+
+    // Work waiting in the queue: the agent is asked to carry on, once.
+    call(
+        &mut s,
+        1,
+        "task/create",
+        json!({ "kind": "create", "brief": { "description": "Style it" } }),
+    );
+    let (out, ended) = agent_hook(&env, "stop", stop(false));
+    assert!(out.contains(r#""decision":"block""#), "{out}");
+    assert!(!ended);
+    let (out, ended) = agent_hook(&env, "stop", stop(true));
+    assert!(
+        out.is_empty() && !ended,
+        "asked once already: left open ({out})"
+    );
+
+    // Nothing left for it (the task is someone else's): the session ends.
+    call(&mut s, 2, "task/claim", json!({ "session": "s1" }));
+    let (_, ended) = agent_hook(&env, "stop", stop(false));
+    assert!(ended, "a finished session is ended");
+
+    // Once the user has said something to it, it's theirs.
+    agent_hook(
+        &env,
+        "prompt",
+        json!({ "session_id": "c2", "prompt": "I'd like your help with atelier's queue. …" }),
+    );
+    let (_, ended) = agent_hook(&env, "stop", json!({ "session_id": "c2" }));
+    assert!(ended, "the work prompt isn't the user talking");
+    agent_hook(
+        &env,
+        "prompt",
+        json!({ "session_id": "c3", "prompt": "why that colour?" }),
+    );
+    let (_, ended) = agent_hook(&env, "stop", json!({ "session_id": "c3" }));
+    assert!(!ended, "a session the user talked to stays open");
+    daemon.kill().unwrap();
+    daemon.wait().unwrap();
+}

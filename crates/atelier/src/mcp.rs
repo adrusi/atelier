@@ -350,6 +350,11 @@ pub fn work_prompt(request: Option<&str>) -> String {
     tasks::work_prompt(request.map(str::trim).filter(|r| !r.is_empty()))
 }
 
+/// The harness's process id, from atelier-agent (ATELIER_AGENT_PID).
+pub fn agent_pid() -> Option<u32> {
+    std::env::var("ATELIER_AGENT_PID").ok()?.parse().ok()
+}
+
 pub fn run(dir: Option<&str>) -> ExitCode {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -357,7 +362,12 @@ pub fn run(dir: Option<&str>) -> ExitCode {
     let mut server = Server {
         dir: paths::atelier_dir(dir),
         client: None,
-        session: format!("mcp-{}-{:04x}", std::process::id(), nanos & 0xffff),
+        // Named after the harness when it says which process it is (atelier-agent
+        // exports ATELIER_AGENT_PID), so its hooks can ask what the session holds.
+        session: match agent_pid() {
+            Some(pid) => format!("agent-{pid}"),
+            None => format!("mcp-{}-{:04x}", std::process::id(), nanos & 0xffff),
+        },
         held: BTreeMap::new(),
         last_heartbeat: None,
         notices: Vec::new(),
@@ -493,6 +503,12 @@ impl Server {
         }
         // Tabs open on the task this session is working on, unless told otherwise.
         if tool.name == "tab_open" {
+            // Whose tab it is: they close when this session ends, and may get a
+            // window of their own (`[session] windows`).
+            args["agent"] = json!(self.session);
+            if let Some(pid) = agent_pid() {
+                args["agentPid"] = json!(pid);
+            }
             match args.get("task") {
                 Some(Value::Null) => {
                     args.as_object_mut().map(|a| a.remove("task"));
@@ -561,6 +577,10 @@ impl Server {
                     && let Some(tab) = result["closed"].as_i64()
                 {
                     self.tab_tasks.remove(&tab);
+                }
+                // For the daemon (the on_agent_window hook), not the agent.
+                if tool.name == "tab_open" {
+                    result.as_object_mut().map(|r| r.remove("window"));
                 }
                 // Where this tab's styles come from, so the agent edits the right files.
                 if tool.name == "styles_status"

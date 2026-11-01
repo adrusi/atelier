@@ -53,6 +53,9 @@ pub enum Template {
 pub struct Config {
     pub start: Start,
     pub command: Option<Template>,
+    /// Agent tabs open in a window per session rather than in the user's
+    /// current window (`windows = true`).
+    pub windows: bool,
 }
 
 /// Reads `[session]` from config.toml. A missing file or table means pull.
@@ -70,6 +73,7 @@ pub fn config() -> Result<Config, String> {
         return Ok(Config {
             start: Start::Pull,
             command: None,
+            windows: false,
         });
     };
     let start = match session.get("start").and_then(|v| v.as_str()) {
@@ -115,7 +119,21 @@ pub fn config() -> Result<Config, String> {
             }
         ));
     }
-    Ok(Config { start, command })
+    let windows = match session.get("windows") {
+        None => false,
+        Some(toml::Value::Boolean(b)) => *b,
+        Some(_) => {
+            return Err(format!(
+                "{}: [session] windows must be true or false",
+                path.display()
+            ));
+        }
+    };
+    Ok(Config {
+        start,
+        command,
+        windows,
+    })
 }
 
 /// Quotes a value for `sh`.

@@ -305,8 +305,27 @@ const handlers: Record<string, Handler> = {
       }
     }
     // Bound before anything loads, so the first load already shows the task's tree.
-    const tab = await browser.tabs.create({ url: "about:blank", active: false, ...(container ? { cookieStoreId: container.cookieStoreId } : {}) });
-    await agentTabs.add(tab.id!, container ? { throwaway: container.cookieStoreId } : {});
+    const cookies = container ? { cookieStoreId: container.cookieStoreId } : {};
+    const agent = param<string | null>(params, "agent", "string", null);
+    // In a window of the session's own (`[session] windows`), out of the user's way,
+    // and the active tab there, so it renders as a visible page does.
+    let window: { id: number; created: boolean } | undefined;
+    let tab: browser.tabs.Tab;
+    if (agent !== null && param<boolean>(params, "window", "boolean", false)) {
+      const existing = await agentTabs.windowOf(agent);
+      if (existing !== undefined) {
+        tab = await browser.tabs.create({ url: "about:blank", windowId: existing, active: true, ...cookies });
+        window = { id: existing, created: false };
+      } else {
+        const w = await browser.windows.create({ url: "about:blank", focused: false, ...cookies });
+        tab = w.tabs![0];
+        await agentTabs.setWindow(agent, w.id!);
+        window = { id: w.id!, created: true };
+      }
+    } else {
+      tab = await browser.tabs.create({ url: "about:blank", active: false, ...cookies });
+    }
+    await agentTabs.add(tab.id!, { ...(container ? { throwaway: container.cookieStoreId } : {}), ...(agent !== null ? { agent } : {}) });
     if (task !== null) {
       try {
         await ctx.bind(tab.id!, task);
@@ -316,7 +335,7 @@ const handlers: Record<string, Handler> = {
       }
     }
     await browser.tabs.update(tab.id!, { url });
-    const result = await afterLoad(tab.id!, params, ctx, await settled(tab.id!));
+    const result = { ...(await afterLoad(tab.id!, params, ctx, await settled(tab.id!))), ...(window ? { window } : {}) };
     return container ? { ...result, cookiesCopied: container.copied } : result;
   },
 
@@ -349,6 +368,11 @@ const handlers: Record<string, Handler> = {
     await loaded;
     const tabs = await Promise.all(agentTabs.ids().map((id) => browser.tabs.get(id).catch(() => null)));
     return { tabs: tabs.filter((t): t is browser.tabs.Tab => Boolean(t)).map((t) => describeTab(t, ctx)) };
+  },
+
+  /** An agent session ended (its harness closed): its tabs go with it. */
+  async "agent/end"(params) {
+    return { closed: await agentTabs.end(param<string>(params, "agent", "string")) };
   },
 
   async "tab/close"(params) {

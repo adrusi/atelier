@@ -126,6 +126,17 @@
           mcpConfig = pkgs.writeText "atelier-mcp.json" (builtins.toJSON {
             mcpServers.atelier = { type = "stdio"; command = exe; args = [ "mcp" ]; };
           });
+          # Ends a session once its work is done (atelier agent-hook).
+          agentSettings = pkgs.writeText "atelier-agent-settings.json" (builtins.toJSON {
+            hooks = {
+              Stop = [ { hooks = [ { type = "command"; command = "${exe} agent-hook stop"; } ]; } ];
+              UserPromptSubmit = [ { hooks = [ { type = "command"; command = "${exe} agent-hook prompt"; } ]; } ];
+            };
+          });
+          agentArgs =
+            lib.optionals cfg.agent.closeWhenDone [ "--settings" "${agentSettings}" ]
+            ++ lib.optionals (cfg.agent.permissionMode != null) [ "--permission-mode" cfg.agent.permissionMode ]
+            ++ cfg.agent.extraArgs;
           agent = pkgs.writeShellScriptBin "atelier-agent" ''
             # Claude Code on atelier's queue (SPEC §9.1): in the atelier
             # directory, with only atelier's MCP server and its tools allowed,
@@ -134,20 +145,25 @@
             # servers in the background, so /mcp__atelier__work on its
             # command line would run before the command exists.
             cd "''${ATELIER_DIR:-${dir}}" || exit 1
+            # Claude Code keeps this pid (exec), and its hooks and atelier mcp
+            # see it, so a finished session can be ended.
+            export ATELIER_AGENT_PID=$$
             exec ${lib.escapeShellArg cfg.agent.command} \
               --mcp-config ${mcpConfig} --strict-mcp-config \
               --allowedTools mcp__atelier \
               --add-dir "''${XDG_STATE_HOME:-$HOME/.local/state}/atelier" \
-              ${lib.escapeShellArgs cfg.agent.extraArgs} \
+              ${lib.escapeShellArgs agentArgs} \
               "$@" "$(${exe} work-prompt)"
           '';
           toml = pkgs.formats.toml { };
           settings =
             lib.optionalAttrs (cfg.atelierDir != null) { atelier_dir = cfg.atelierDir; }
-            // lib.optionalAttrs (cfg.session.start != "pull" || cfg.session.command != null) {
+            // lib.optionalAttrs (cfg.session.start != "pull" || cfg.session.command != null || cfg.session.windows) {
               session = { inherit (cfg.session) start; }
-                // lib.optionalAttrs (cfg.session.command != null) { inherit (cfg.session) command; };
-            };
+                // lib.optionalAttrs (cfg.session.command != null) { inherit (cfg.session) command; }
+                // lib.optionalAttrs cfg.session.windows { windows = true; };
+            }
+            // lib.optionalAttrs (cfg.hooks != { }) { inherit (cfg) hooks; };
           xpi = ./release/atelier.xpi;
         in
         {
@@ -186,6 +202,27 @@
                   atelier-agent starts Claude Code on atelier's queue.
                 '';
               };
+              windows = lib.mkOption {
+                type = lib.types.bool;
+                default = false;
+                description = ''
+                  Open each agent session's tabs in a Firefox window of its own,
+                  rather than as background tabs in your current window. The window
+                  closes when the session ends. With hooks.on_agent_window, your
+                  desktop can put it somewhere out of the way.
+                '';
+              };
+            };
+            hooks = lib.mkOption {
+              type = lib.types.attrsOf lib.types.str;
+              default = { };
+              example = { on_agent_window = "move-to-workspace atelier"; };
+              description = ''
+                Commands for [hooks] in config.toml, run with sh -c: on_land and
+                on_undo (SPEC §8.6), and on_agent_window, run when atelier opens a
+                window for an agent session (session.windows), with
+                ATELIER_FIREFOX_WINDOW_ID, ATELIER_AGENT and ATELIER_AGENT_PID.
+              '';
             };
             agent = {
               enable = lib.mkEnableOption ''
@@ -197,10 +234,31 @@
                 default = "claude";
                 description = "The Claude Code executable.";
               };
+              closeWhenDone = lib.mkOption {
+                type = lib.types.bool;
+                default = true;
+                description = ''
+                  End a session (and so its terminal window) once it holds no task,
+                  the queue is empty, and you haven't said anything to it. With
+                  requests still queued, the agent is asked to carry on first.
+                '';
+              };
+              permissionMode = lib.mkOption {
+                type = lib.types.nullOr lib.types.str;
+                default = "auto";
+                description = ''
+                  Claude Code's --permission-mode for atelier sessions, or null
+                  for its default. Agents edit files, open tabs and run checks
+                  all through a session, and answering a prompt for each isn't
+                  practical, so the default is "auto". (Sandboxing that would let
+                  agents run unprompted with less at stake is on the roadmap,
+                  SPEC §15.)
+                '';
+              };
               extraArgs = lib.mkOption {
                 type = lib.types.listOf lib.types.str;
                 default = [ ];
-                example = [ "--permission-mode" "acceptEdits" ];
+                example = [ "--model" "opus" ];
                 description = "More arguments for Claude Code.";
               };
             };

@@ -119,7 +119,8 @@ owned directory, daemon, native host, extension and page shim. Build first
 `node dev/e2e/popup.ts` (requests and undo from the popup, driven by keystrokes),
 `node dev/e2e/calls.ts` (questions from agents, the inbox, answers, theme stage),
 `node dev/e2e/recovery.ts` (agent tabs and containers reconciled after a restart, simulated by reloading the extension),
-`node dev/e2e/permissions.ts` (an install without site access: asking for it, and restarting to use it), and
+`node dev/e2e/permissions.ts` (an install without site access: asking for it, and restarting to use it),
+`node dev/e2e/windows.ts` (an agent session's tabs in a window of its own, the on_agent_window hook, and closing them when the session ends), and
 `node dev/e2e/fidelity.ts` (emulation against the real thing, through the fidelity harness). A failing run keeps the instance and its owned
 directory (`$XDG_RUNTIME_DIR/atelier-dev/<name>{,-owned}`) for inspection.
 
