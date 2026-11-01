@@ -230,12 +230,14 @@ const TOOLS: &[Tool] = &[
             default 4.5; 3 for large text), worst first. Backgrounds are composited from the element upwards; text \
             over background images is counted as unknown rather than checked, and text inside shadow roots isn't \
             reached. Disabled controls are skipped (WCAG exempts them). Problems like dark text left on a dark \
-            background often don't stand out in a screenshot, so run this after changing colours.",
+            background often don't stand out in a screenshot, so run this after changing colours. With more failures \
+            than listed, byColour groups them by colour pair, most common first.",
         schema: || {
             json!({ "type": "object", "properties": {
                 "tab": tab_prop(),
                 "minRatio": { "type": "number" },
-                "limit": { "type": "integer", "description": "Maximum failures to list. Default 40." }
+                "limit": { "type": "integer", "description": "Maximum failures to list. Default 40." },
+                "exclude": { "type": "string", "description": "A selector: text inside elements it matches is skipped (text faint on purpose, like downvoted comments)." }
             }, "required": ["tab"] })
         },
     },

@@ -176,6 +176,13 @@ try {
     assert.deepEqual(r.failures.map((f: any) => f.text).sort(), ["This line is deliberately low contrast.", "Tokens"]);
     assert.ok(r.failures.every((f: any) => f.ratio < 3));
     assert.equal(r.skippedDisabled, 1);
+    // Text faint on purpose can be left out, and a long list is grouped by colour pair.
+    const without = await tool("contrast_scan", { tab, exclude: "header" });
+    assert.deepEqual(without.failures.map((f: any) => f.text), ["This line is deliberately low contrast."]);
+    assert.ok(without.skippedExcluded >= 1);
+    const short = await tool("contrast_scan", { tab, limit: 1 });
+    assert.equal(short.failures.length, 1);
+    assert.equal(short.byColour.length, 2, JSON.stringify(short.byColour));
   });
 
   await check("computed_style and query report what's on the page", async () => {

@@ -298,7 +298,7 @@ export function matchedRules(selector: string, property: string | null, limit: n
  * threshold (3:1 for large text), in the page and its open shadow roots.
  * Backgrounds are composited from the element up; text over background
  * images is counted as unknown, not checked. */
-export function contrast(minRatio: number, limit: number) {
+export function contrast(minRatio: number, limit: number, exclude: string | null = null) {
   type RGBA = { r: number; g: number; b: number; a: number };
   const parse = (c: string): RGBA | null => {
     let m = /rgba?\(([^)]+)\)/.exec(c);
@@ -347,6 +347,7 @@ export function contrast(minRatio: number, limit: number) {
   let checked = 0;
   let unknown = 0;
   let disabled = 0;
+  let excluded = 0;
   for (const node of core.textNodes()) {
     const el = node.parentElement;
     if (!el || seen.has(el) || !node.textContent?.trim()) continue;
@@ -356,6 +357,11 @@ export function contrast(minRatio: number, limit: number) {
     // WCAG exempts disabled controls; sites dim them on purpose.
     if (el.closest(':disabled, [aria-disabled="true"]')) {
       disabled++;
+      continue;
+    }
+    // Text the agent says is meant to be faint (downvoted comments, say).
+    if (exclude && el.closest(exclude)) {
+      excluded++;
       continue;
     }
     checked++;
@@ -385,7 +391,25 @@ export function contrast(minRatio: number, limit: number) {
     }
   }
   failures.sort((a, b) => a.ratio - b.ratio);
-  return { checked, failing: failures.length, failures: failures.slice(0, limit), unknownBackground: unknown, skippedDisabled: disabled };
+  // The colour pairs behind the failures, most common first: thousands of
+  // failures are often one pair, deliberate or not.
+  const pairs = new Map<string, { color: string; background: string; count: number; worst: number; example: string }>();
+  for (const f of failures as unknown as { color: string; background: string; ratio: number; element: string }[]) {
+    const key = `${f.color} ${f.background}`;
+    const p = pairs.get(key) ?? { color: f.color, background: f.background, count: 0, worst: f.ratio, example: f.element };
+    p.count++;
+    pairs.set(key, p);
+  }
+  const byColour = [...pairs.values()].sort((a, b) => b.count - a.count).slice(0, 10);
+  return {
+    checked,
+    failing: failures.length,
+    failures: failures.slice(0, limit),
+    ...(failures.length > limit ? { byColour } : {}),
+    unknownBackground: unknown,
+    skippedDisabled: disabled,
+    ...(exclude ? { skippedExcluded: excluded } : {}),
+  };
 }
 
 /** Forces pseudo-class states on an element, like devtools' "force element

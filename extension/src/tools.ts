@@ -531,7 +531,7 @@ const handlers: Record<string, Handler> = {
     const tab = await agentTab(params);
     // Colours mid-transition (just after a hover, or a colour-scheme switch) aren't the ones to judge.
     await call(tab.id!, "finishAnimations");
-    return call(tab.id!, "contrast", param<number>(params, "minRatio", "number", 4.5), param<number>(params, "limit", "number", 40));
+    return call(tab.id!, "contrast", param<number>(params, "minRatio", "number", 4.5), param<number>(params, "limit", "number", 40), param<string | null>(params, "exclude", "string", null));
   },
 
   async "page/shapes"(params) {
