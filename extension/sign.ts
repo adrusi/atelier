@@ -20,8 +20,13 @@ if (!process.env.WEB_EXT_API_KEY || !process.env.WEB_EXT_API_SECRET) {
 const root = import.meta.dirname;
 const now = new Date();
 const pad = (n: number, w = 2) => String(n).padStart(w, "0");
-// 0.1.YYYYMMDD.HHMM (UTC): increasing, and within Firefox's version format.
-const version = `0.1.${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}.${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}`;
+// 0.1.YYYYMMDD.HHMM (UTC), with HHMM as a plain number (105 at 01:05):
+// Firefox compares each part as a number, so it always increases, and
+// allows no leading zeros.
+const day = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}`;
+const version = `0.1.${day}.${now.getUTCHours() * 100 + now.getUTCMinutes()}`;
+// Firefox's format: 1 to 4 numbers, each up to 9 digits, no leading zeros.
+if (!/^(0|[1-9]\d{0,8})(\.(0|[1-9]\d{0,8})){0,3}$/.test(version)) throw new Error(`${version} isn't a valid Firefox version`);
 console.log(`building the release flavor, version ${version}`);
 execFileSync("node", ["build.ts"], { cwd: root, stdio: "inherit", env: { ...process.env, ATELIER_BUILD: "release", ATELIER_VERSION: version } });
 
