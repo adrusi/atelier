@@ -185,6 +185,9 @@ try {
 
   await check("after landing, the session holds nothing", async () => {
     await assert.rejects(tool("task_info"), /you don't hold a task/);
+    // The landed task can still be read, with its calls (the assumptions went as one) and their answers.
+    const landed = (await tool("task_list")).match(/You landed in this session: (t\S+)\./)![1];
+    assert.match(await tool("task_info", { task: landed }), /doesn't hold it \(it's landed\)[^]*not answered yet\):\n- teal means #008080/);
     const { tabs } = await json("tab_list");
     assert.ok(tabs.every((t: any) => t.task === undefined));
   });

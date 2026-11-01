@@ -2,7 +2,11 @@
 <!-- Things that only appear on interaction, the way sites build them: a
      menu rendered into a portal at the end of <body> when its button is
      clicked (and closed with Escape), a hover card shown on mouseenter,
-     and a popover shown with showPopover(). For the interact tool. -->
+     a popover shown with showPopover(), and one opened by popovertarget whose
+     host element has no size of its own (GitHub's anchored-position): only
+     its panel does. Also a "new posts" pill kept in the page, transparent
+     and moved up out of sight, for screenshot's note on unseen elements.
+     For the interact tool. -->
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -11,6 +15,9 @@
       [role="menu"] { position: absolute; top: 60px; left: 10px; padding: 8px; border: 1px solid; background: white; }
       #card { position: absolute; top: 120px; left: 200px; padding: 8px; border: 1px solid; }
       #pop { padding: 8px; }
+      #anchored { inset: auto; top: 200px; left: 300px; width: 0; height: 0; padding: 0; border: 0; overflow: visible; }
+      #anchored .panel { position: absolute; width: 150px; padding: 8px; border: 1px solid; background: white; }
+      #pill { position: fixed; top: 0; left: 40%; padding: 4px 12px; border-radius: 12px; background: royalblue; color: white; opacity: 0; transform: translateY(-100px); }
     </style>
   </head>
   <body>
@@ -20,6 +27,9 @@
       <div id="card" hidden>A hover card</div>
       <button id="open-pop">Info</button>
       <div id="pop" popover>A popover</div>
+      <button id="open-anchored" popovertarget="anchored">Manage</button>
+      <x-anchored id="anchored" popover="auto"><div class="panel" role="menu">Watching</div></x-anchored>
+      <div id="pill-wrap"><div id="pill">See new posts</div></div>
       <a id="away" href="?away">elsewhere</a>
     </main>
     <script>

@@ -47,14 +47,50 @@ export function pageState(): { visibility: string; width: number; height: number
   };
 }
 
-/** The element's box in document coordinates, or null if nothing matches. */
-export function rectOf(selector: string): { x: number; y: number; width: number; height: number } | null {
+/** Where an element shows, in viewport coordinates: its box, or for a box
+ * with no size whose contents overflow it (a popover's host element, a
+ * wrapper of positioned children), the union of what's in it. */
+function box(el: Element): DOMRect {
+  const r = el.getBoundingClientRect();
+  if (r.width >= 2 && r.height >= 2) return r;
+  let [left, top, right, bottom] = [Infinity, Infinity, -Infinity, -Infinity];
+  for (const d of [...el.querySelectorAll("*")].slice(0, 500)) {
+    const b = d.getBoundingClientRect();
+    if (b.width < 2 || b.height < 2) continue;
+    [left, top, right, bottom] = [Math.min(left, b.left), Math.min(top, b.top), Math.max(right, b.right), Math.max(bottom, b.bottom)];
+  }
+  return left === Infinity ? r : new DOMRect(left, top, right - left, bottom - top);
+}
+
+/** Why an element that's in the layout can't be seen, if it can't: it or an
+ * ancestor is transparent or invisible, or it's outside the page. Pages
+ * keep things like this in the DOM until they're wanted (a "new posts"
+ * pill, a closed drawer), and its rect alone doesn't say so. */
+function unseen(el: Element, b: DOMRect): string | null {
+  for (let e: Element | null = el; e && e !== document.documentElement; e = core.up(e)) {
+    const cs = getComputedStyle(e);
+    const who = e === el ? "it" : `its ancestor ${core.describe(e, 1, 3)}`;
+    if (Number(cs.opacity) === 0) return `${who} has opacity 0`;
+    if (cs.visibility !== "visible") return `${who} has visibility ${cs.visibility}`;
+  }
+  const root = document.documentElement;
+  const [x, y] = [b.left + window.scrollX, b.top + window.scrollY];
+  if (x + b.width <= 0 || y + b.height <= 0 || x >= root.scrollWidth || y >= root.scrollHeight) {
+    return `it's outside the page (at ${Math.round(x)},${Math.round(y)} in the document), moved off by its position or a transform`;
+  }
+  return null;
+}
+
+/** The element's box in document coordinates, and why it can't be seen if
+ * it can't (unseen), or null if nothing matches. */
+export function rectOf(selector: string): { x: number; y: number; width: number; height: number; unseen?: string } | null {
   const all = core.query(selector, true);
   if (!all.length) return null;
   // The first match that's actually showing: pages often keep hidden copies (templates, other breakpoints).
-  const el = all.find((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; }) ?? all[0];
-  const r = el.getBoundingClientRect();
-  return { x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height };
+  const el = all.find((e) => { const b = box(e); return b.width > 0 && b.height > 0; }) ?? all[0];
+  const r = box(el);
+  const why = r.width && r.height ? unseen(el, r) : null;
+  return { x: r.left + window.scrollX, y: r.top + window.scrollY, width: r.width, height: r.height, ...(why ? { unseen: why } : {}) };
 }
 
 export function query(selector: string, limit: number, maxLength: number) {
@@ -212,6 +248,46 @@ function specificity(sel: string): number[] {
 const maxSpecificity = (xs: number[][]) =>
   xs.reduce((m, x) => (x[0] > m[0] || (x[0] === m[0] && (x[1] > m[1] || (x[1] === m[1] && x[2] > m[2]))) ? x : m), [0, 0, 0]);
 
+/** The same side of a box under its other name, for an element in
+ * horizontal text: padding-left is padding-inline-start in left-to-right
+ * text and padding-inline-end in right-to-left; top is inset-block-start. */
+function counterparts(property: string, el: Element): string[] {
+  const rtl = getComputedStyle(el).direction === "rtl";
+  const logicalOf: Record<string, string> = {
+    top: "block-start",
+    bottom: "block-end",
+    left: rtl ? "inline-end" : "inline-start",
+    right: rtl ? "inline-start" : "inline-end",
+  };
+  const physicalOf = Object.fromEntries(Object.entries(logicalOf).map(([k, v]) => [v, k]));
+  let m = /^(top|right|bottom|left)$/.exec(property);
+  if (m) return [`inset-${logicalOf[m[1]]}`];
+  m = /^inset-((?:block|inline)-(?:start|end))$/.exec(property);
+  if (m) return [physicalOf[m[1]]];
+  m = /^(margin|padding|border|scroll-margin|scroll-padding)-(top|right|bottom|left)(-(?:color|style|width))?$/.exec(property);
+  if (m) return [`${m[1]}-${logicalOf[m[2]]}${m[3] ?? ""}`];
+  m = /^(margin|padding|border|scroll-margin|scroll-padding)-((?:block|inline)-(?:start|end))(-(?:color|style|width))?$/.exec(property);
+  if (m) return [`${m[1]}-${physicalOf[m[2]]}${m[3] ?? ""}`];
+  return [];
+}
+
+/** Shorthands that can set a longhand: its hyphenated prefixes
+ * (padding-inline for padding-inline-start, border-top for
+ * border-top-color), and the few that aren't prefixes. */
+function shorthandsOf(property: string): string[] {
+  const parts = property.split("-");
+  const out = parts.slice(1).map((_, i) => parts.slice(0, i + 1).join("-"));
+  const FONT = ["font-style", "font-variant", "font-weight", "font-stretch", "font-width", "font-size", "line-height", "font-family"];
+  if (FONT.includes(property) && !out.includes("font")) out.push("font");
+  if (/^(top|right|bottom|left)$/.test(property)) out.push("inset");
+  if (/^inset-(block|inline)-(start|end)$/.test(property)) out.push(`inset-${parts[1]}`);
+  let m = /^border-(?:top|right|bottom|left|(?:block|inline)-(?:start|end))-(color|style|width)$/.exec(property);
+  if (m) out.push(`border-${m[1]}`);
+  m = /^border-(block|inline)-(?:start|end)-(color|style|width)$/.exec(property);
+  if (m) out.push(`border-${m[1]}-${m[2]}`);
+  return out;
+}
+
 /** Style rules that match an element, with specificity and conditions, most
  * specific first; ties are listed latest first, as later rules win. An
  * element inside a shadow root is styled by that root's sheets. */
@@ -219,13 +295,10 @@ export function matchedRules(selector: string, property: string | null, limit: n
   const el = core.query(selector, false)[0] ?? null;
   if (!el) return null;
 
-  // Shorthands that can set `property`.
-  const FONT = ["font-style", "font-variant", "font-weight", "font-stretch", "font-width", "font-size", "line-height", "font-family"];
-  const setters = property
-    ? core.SHORTHANDS.filter((sh) => property.startsWith(`${sh}-`) || (sh === "font" && FONT.includes(property)) ||
-        (sh === "border" && /^border-(top|right|bottom|left)-(color|style|width)$/.test(property)) ||
-        (sh === "inset" && /^(top|right|bottom|left)$/.test(property)))
-    : [];
+  // The property under its other name (padding-left is padding-inline-start
+  // in left-to-right text), and the shorthands that can set either.
+  const names = property ? [property, ...counterparts(property, el)] : [];
+  const setters = names.flatMap(shorthandsOf);
 
   type Hit = { selector: string; specificity: number[]; declarations: string; context?: string; active: boolean; sheet: string; order: number };
   const hits: Hit[] = [];
@@ -242,12 +315,13 @@ export function matchedRules(selector: string, property: string | null, limit: n
     if (!matching.length) continue;
     let declarations = core.declarations(r.style);
     if (property) {
-      const v = r.style.getPropertyValue(property);
-      if (v) {
-        declarations = `${property}: ${v}${r.style.getPropertyPriority(property) ? " !important" : ""}`;
+      const name = names.find((n) => r.style.getPropertyValue(n));
+      if (name) {
+        declarations = `${name}: ${r.style.getPropertyValue(name)}${r.style.getPropertyPriority(name) ? " !important" : ""}`;
         // Say so when it comes from a shorthand, which is easy to miss (font: … resets font-stretch).
-        const via = setters.find((name) => r.style.getPropertyValue(name));
-        if (via) declarations += ` (via ${via}: ${r.style.getPropertyValue(via)})`;
+        const via = setters.find((n) => r.style.getPropertyValue(n));
+        const notes = [...(via ? [`via ${via}: ${r.style.getPropertyValue(via)}`] : []), ...(name !== property ? [`sets ${property}`] : [])];
+        if (notes.length) declarations += ` (${notes.join("; ")})`;
       } else {
         // A shorthand that sets it (font: … resets font-stretch, border: … sets border-top-color).
         const sh = setters.find((name) => r.style.getPropertyValue(name));
@@ -703,12 +777,15 @@ export function botCheck(): string | null {
   return null;
 }
 
-/** Properties that two of atelier's style files set differently on the same
- * element, with the rule that wins and the one it overrides: a specificity
- * clash between our own files, which nothing else flags (matched_rules
- * explains one once it's suspected). Within one file, an override is
- * usually meant, so only clashes between files count. The cascade is
- * judged by !important, specificity and order; @layer isn't considered. */
+/** Declarations in atelier's style files that never take effect: on every
+ * element their rule matches, another of atelier's rules sets the property
+ * to something else and wins. That's a specificity clash nobody meant (a
+ * new rule losing to an older, broader one), which nothing else flags;
+ * matched_rules explains one once it's suspected. A rule overridden only in
+ * places is usually a refinement (a general rule, refined for a part of the
+ * page), so those are only counted. Elements are counted whether they're
+ * shown or not. The cascade is judged by !important, specificity and
+ * order; @layer isn't considered. */
 export function atelierClashes(limit: number) {
   type Decl = { value: string; important: boolean };
   type Ours = { file: string; selector: string; parts: string[]; order: number; scope: core.Scope; props: Map<string, Decl> };
@@ -752,31 +829,47 @@ export function atelierClashes(limit: number) {
     for (let i = 0; i < 3; i++) if (a.spec[i] !== b.spec[i]) return a.spec[i] > b.spec[i];
     return a.r.order > b.r.order;
   };
-  type Clash = { property: string; overridden: { file: string; selector: string; value: string }; by: { file: string; selector: string; value: string }; elements: number; example: string };
-  const clashes = new Map<string, Clash>();
+  // Per declaration (rule and property): the elements its rule matches, and
+  // on how many of them another of our rules overrides it, and with what.
+  type Tally = { r: Ours; property: string; matched: number; lost: number; by: Map<Ours, number>; example?: Element };
+  const tallies = new Map<string, Tally>();
+  const tally = (r: Ours, p: string) => {
+    const key = `${r.order}\n${r.file}\n${p}`;
+    let t = tallies.get(key);
+    if (!t) tallies.set(key, (t = { r, property: p, matched: 0, lost: 0, by: new Map() }));
+    return t;
+  };
   for (const [el, hits] of byElement) {
-    if (new Set(hits.map((h) => h.r.file)).size < 2) continue;
+    for (const h of hits) for (const p of h.r.props.keys()) tally(h.r, p).matched++;
+    if (hits.length < 2) continue;
     for (const p of new Set(hits.flatMap((h) => [...h.r.props.keys()]))) {
       const setting = hits.filter((h) => h.r.props.has(p));
-      if (new Set(setting.map((h) => h.r.file)).size < 2) continue;
+      if (setting.length < 2) continue;
       const win = setting.reduce((a, b) => (beats(b, a, p) ? b : a));
       for (const h of setting) {
-        if (h.r.file === win.r.file || h.r.props.get(p)!.value === win.r.props.get(p)!.value) continue;
-        const key = [p, h.r.file, h.r.selector, win.r.file, win.r.selector].join("\n");
-        const c = clashes.get(key) ?? {
-          property: p,
-          overridden: { file: h.r.file, selector: h.r.selector, value: h.r.props.get(p)!.value },
-          by: { file: win.r.file, selector: win.r.selector, value: win.r.props.get(p)!.value },
-          elements: 0,
-          example: core.describe(el),
-        };
-        c.elements++;
-        clashes.set(key, c);
+        if (h === win || h.r.props.get(p)!.value === win.r.props.get(p)!.value) continue;
+        const t = tally(h.r, p);
+        t.lost++;
+        t.by.set(win.r, (t.by.get(win.r) ?? 0) + 1);
+        t.example ??= el;
       }
     }
   }
-  const all = [...clashes.values()].sort((a, b) => b.elements - a.elements);
-  return { total: all.length, clashes: all.slice(0, limit) };
+  const lost = [...tallies.values()].filter((t) => t.lost);
+  const dead = lost
+    .filter((t) => t.lost === t.matched)
+    .sort((a, b) => b.matched - a.matched)
+    .map((t) => {
+      const by = [...t.by.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      return {
+        property: t.property,
+        overridden: { file: t.r.file, selector: t.r.selector, value: t.r.props.get(t.property)!.value },
+        by: { file: by.file, selector: by.selector, value: by.props.get(t.property)!.value },
+        elements: t.matched,
+        example: core.describe(t.example!),
+      };
+    });
+  return { total: dead.length, clashes: dead.slice(0, limit), partlyOverridden: lost.length - dead.length };
 }
 
 /** Acts on an element the way a person's input would (the same events, in
@@ -849,10 +942,14 @@ export async function interact(selector: string, action: string, key: string | n
   while (performance.now() - start < waitMs && (performance.now() - start < least || recorder.quietFor() < 300)) {
     await new Promise((res) => setTimeout(res, 100));
   }
+  // Overlays are listed even when they can't be seen yet (still fading in,
+  // placed off-screen): they're what was asked for, and the result says why.
+  const overlay = (e: Element) => e.matches(":popover-open, dialog[open], [role=dialog], [role=menu], [role=listbox], [role=tooltip]");
   const visible = (e: Element) => {
     if (e === el || e.contains(el) || !e.getClientRects().length) return false;
-    const rect = e.getBoundingClientRect();
+    const rect = box(e);
     if (rect.width < 2 || rect.height < 2) return false;
+    if (overlay(e)) return true;
     const cs = getComputedStyle(e);
     return cs.visibility === "visible" && cs.display !== "none" && Number(cs.opacity) > 0 && e.getAttribute("aria-hidden") !== "true";
   };
@@ -870,7 +967,8 @@ export async function interact(selector: string, action: string, key: string | n
     ...(el.hasAttribute("aria-expanded") ? { expanded: el.getAttribute("aria-expanded") === "true" } : {}),
     ...(focusedAfter && focusedAfter !== focusedBefore ? { focused: core.describe(focusedAfter) } : {}),
     appeared: top.slice(0, 8).map((e) => {
-      const b = e.getBoundingClientRect();
+      const b = box(e);
+      const why = unseen(e, b);
       const role = e.getAttribute("role") ?? (e.tagName === "DIALOG" ? "dialog" : null);
       const label = e.getAttribute("aria-label");
       const text = ((e as HTMLElement).innerText ?? e.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
@@ -880,8 +978,150 @@ export async function interact(selector: string, action: string, key: string | n
         ...(label ? { label } : {}),
         ...(text ? { text } : {}),
         rect: { x: Math.round(b.x), y: Math.round(b.y), width: Math.round(b.width), height: Math.round(b.height) },
+        ...(why ? { unseen: why } : {}),
       };
     }),
     ...(top.length > 8 ? { more: top.length - 8 } : {}),
+  };
+}
+
+/** A colour as #rrggbb, or #rrggbbaa if it isn't opaque; null for one that
+ * doesn't parse. Through a canvas, which reads every syntax the page can
+ * use (oklch(), color-mix(), names) the way the browser does. */
+const toHex = (() => {
+  let ctx: OffscreenCanvasRenderingContext2D | undefined;
+  const cache = new Map<string, string | null>();
+  return (colour: string): string | null => {
+    let out = cache.get(colour);
+    if (out !== undefined) return out;
+    ctx ??= new OffscreenCanvas(1, 1).getContext("2d", { willReadFrequently: true })!;
+    ctx.clearRect(0, 0, 1, 1);
+    ctx.fillStyle = "#010203";
+    ctx.fillStyle = colour;
+    const parsed = ctx.fillStyle !== "#010203" || /^#010203$/i.test(colour.trim());
+    if (!parsed) out = null;
+    else {
+      ctx.fillRect(0, 0, 1, 1);
+      const [r, g, b, a] = ctx.getImageData(0, 0, 1, 1).data;
+      out = `#${[r, g, b, ...(a < 255 ? [a] : [])].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+    }
+    cache.set(colour, out);
+    return out;
+  };
+})();
+
+/** Where an element's value for a property comes from: its inline style,
+ * the rule that wins for it (with the token it uses, if it uses one), or
+ * for colour, the ancestor it inherits from. */
+function declaredBy(el: Element, property: string): Record<string, string> {
+  const names = [property, ...shorthandsOf(property)];
+  const inline = (el as HTMLElement).style;
+  const own = inline && names.find((n) => inline.getPropertyValue(n));
+  if (own) return { from: "inline style attribute", declaration: `${own}: ${inline.getPropertyValue(own)}` };
+  type Best = { selector: string; sheet: string; declaration: string; value: string; important: boolean; spec: number[]; order: number };
+  let best: Best | null = null;
+  for (const { rule: r, selector, active, sheet, order } of core.rules(core.sheets(el.getRootNode() as core.Scope))) {
+    if (!active) continue;
+    const name = names.find((n) => r.style.getPropertyValue(n));
+    if (!name) continue;
+    const parts = core.splitTop(selector).filter((p) => {
+      try {
+        return el.matches(p);
+      } catch {
+        return false;
+      }
+    });
+    if (!parts.length) continue;
+    const hit = {
+      selector,
+      sheet: sheet.label,
+      declaration: `${name}: ${r.style.getPropertyValue(name)}`,
+      value: r.style.getPropertyValue(name),
+      important: r.style.getPropertyPriority(name) === "important",
+      spec: maxSpecificity(parts.map(specificity)),
+      order,
+    };
+    const wins = (a: Best, b: Best) => {
+      if (a.important !== b.important) return a.important;
+      for (let i = 0; i < 3; i++) if (a.spec[i] !== b.spec[i]) return a.spec[i] > b.spec[i];
+      return a.order > b.order;
+    };
+    if (!best || wins(hit, best)) best = hit;
+  }
+  if (best) {
+    const token = /var\(\s*(--[\w-]+)/.exec(best.value)?.[1];
+    return { from: `${best.selector} (${best.sheet})`, declaration: best.declaration, ...(token ? { token } : {}) };
+  }
+  if (property === "color") {
+    const value = getComputedStyle(el).color;
+    let origin: Element = el;
+    for (let p = core.up(el); p && getComputedStyle(p).color === value; p = core.up(p)) origin = p;
+    if (origin !== el) return { inheritedFrom: core.describe(origin, 1, 3), ...declaredBy(origin, property) };
+  }
+  return { from: "the browser's defaults" };
+}
+
+/** The colours a page draws with (text, backgrounds, borders, SVG fills and
+ * strokes), each with how often, an example, and where it's declared; with
+ * a palette, only those not in it. For sites without design tokens, where
+ * colours are spread over atomic classes and inline styles, and for
+ * finding a site's colours left over after styling. */
+export function colourScan(scope: string | null, palette: string[] | null, tolerance: number, limit: number) {
+  const root = scope ? core.query(scope, false)[0] : document.body;
+  if (!root) return null;
+  const rgb = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+  const swatches = (palette ?? []).map((c) => ({ c, hex: toHex(c) }));
+  const unparsed = swatches.filter((s) => !s.hex).map((s) => s.c);
+  const near = (hex: string) =>
+    swatches.some((s) => s.hex && rgb(s.hex).every((v, i) => Math.abs(v - rgb(hex)[i]) <= tolerance));
+  type Group = { kind: string; colour: string; count: number; examples: Element[]; property: string };
+  const groups = new Map<string, Group>();
+  let checked = 0;
+  const add = (kind: string, property: string, value: string, el: Element) => {
+    const hex = toHex(value);
+    if (!hex || hex.length === 9 && hex.endsWith("00")) return; // unparsed, or transparent
+    const key = `${kind} ${hex}`;
+    let g = groups.get(key);
+    if (!g) groups.set(key, (g = { kind, colour: hex, count: 0, examples: [], property }));
+    g.count++;
+    if (g.examples.length < 2) g.examples.push(el);
+  };
+  for (const [el] of core.elements(root).slice(0, 20000)) {
+    if (el.closest("[data-atelier-extra], style, script, head, noscript, template")) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width < 1 || r.height < 1) continue;
+    const cs = getComputedStyle(el);
+    if (cs.visibility !== "visible" || Number(cs.opacity) === 0) continue;
+    checked++;
+    // Text colour where there's text of the element's own, not on every container that passes it down.
+    if ([...el.childNodes].some((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim())) add("text", "color", cs.color, el);
+    add("background", "background-color", cs.backgroundColor, el);
+    for (const side of ["top", "right", "bottom", "left"]) {
+      if (parseFloat(cs.getPropertyValue(`border-${side}-width`)) > 0 && !/none|hidden/.test(cs.getPropertyValue(`border-${side}-style`))) {
+        add("border", `border-${side}-color`, cs.getPropertyValue(`border-${side}-color`), el);
+      }
+    }
+    if (el instanceof SVGElement && !(el instanceof SVGSVGElement)) {
+      for (const p of ["fill", "stroke"]) {
+        const v = cs.getPropertyValue(p);
+        if (v && v !== "none" && !v.startsWith("url(")) add(p, p, v, el);
+      }
+    }
+  }
+  const all = [...groups.values()].sort((a, b) => b.count - a.count);
+  const listed = palette ? all.filter((g) => !near(g.colour)) : all;
+  return {
+    checked,
+    ...(palette ? { inPalette: all.length - listed.length, offPalette: listed.length } : { colours: all.length }),
+    ...(unparsed.length ? { unparsedPalette: unparsed } : {}),
+    groups: listed.slice(0, limit).map((g) => ({
+      kind: g.kind,
+      colour: g.colour,
+      count: g.count,
+      example: core.describe(g.examples[0]),
+      ...(g.examples[1] ? { alsoOn: core.describe(g.examples[1]) } : {}),
+      declared: declaredBy(g.examples[0], g.property),
+    })),
+    ...(listed.length > limit ? { note: `${listed.length} in all; showing the most used. Narrow with scope, or raise limit.` } : {}),
   };
 }

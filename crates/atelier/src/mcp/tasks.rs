@@ -73,7 +73,8 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
         name: "task_info",
         method: "",
         description: "The brief for a task you hold, where its tree is, and which files in the tree you've \
-            changed so far.",
+            changed so far. For a task you don't hold (one you've landed, say), what it was and its calls \
+            with the user's answers, to read.",
         schema: || json!({ "type": "object", "properties": { "task": task_prop() } }),
     },
     Tool {
@@ -351,6 +352,10 @@ impl Server {
         }
         match self.held.len() {
             1 => Ok(self.held.keys().next().unwrap().clone()),
+            0 if !self.landed.is_empty() => Err(format!(
+                "you don't hold a task in this session; claim one with task_claim. To read one you've landed, with the answers to its calls, say which with `task` ({})",
+                self.landed.join(", ")
+            )),
             0 => Err("you don't hold a task in this session; claim one with task_claim".into()),
             _ => Err(format!(
                 "you hold several tasks ({}); say which with `task`",
@@ -375,6 +380,13 @@ impl Server {
             .filter(|t| t.state == TaskState::Queued)
             .collect();
         let mut out = String::new();
+        if !self.landed.is_empty() {
+            let _ = writeln!(
+                out,
+                "You landed in this session: {}. task_info on one shows the user's answers to its calls.\n",
+                self.landed.join(", ")
+            );
+        }
         if !mine.is_empty() {
             out.push_str("You hold:\n");
             for t in &mine {
@@ -520,10 +532,7 @@ impl Server {
     fn task_info(&mut self, id: &str) -> Result<String, String> {
         let task: Task = parse(self.daemon_call(tm::GET, json!({ "id": id }))?)?;
         if !self.held.contains_key(id) {
-            return Err(format!(
-                "task {id} isn't held by this session ({}); claim it with task_claim",
-                state_name(task.state)
-            ));
+            return self.task_record(&task);
         }
         let changes: Vec<atelier_proto::FileChange> =
             parse(self.daemon_call(tm::CHANGES, json!({ "id": id }))?)?;
@@ -566,6 +575,58 @@ impl Server {
         Ok(brief(&task, &changes, &batches, &stats, &proposals))
     }
 
+    /// A task this session doesn't hold, to read: what it was, where it
+    /// stands, and its calls with the user's answers (which often come
+    /// after the task has landed).
+    fn task_record(&mut self, task: &Task) -> Result<String, String> {
+        let batches: Vec<atelier_proto::Batch> = parse(self.daemon_call(
+            atelier_proto::call_method::LIST,
+            json!({ "open": false, "task": task.id }),
+        )?)?;
+        let mut out = format!(
+            "{}\nThis session doesn't hold it (it's {}), so this is to read, not to work on.",
+            one_line(task),
+            state_name(task.state)
+        );
+        if task.state == TaskState::Queued {
+            out.push_str(" Claim it with task_claim to work on it.");
+        }
+        out.push('\n');
+        if batches.is_empty() {
+            out.push_str("\nIt made no calls.");
+            return Ok(out);
+        }
+        out.push_str("\nIts calls, with the user's answers so far:\n");
+        for b in &batches {
+            out.push_str(&batch_text(b));
+        }
+        // Answers that change a call become a revise task; say which.
+        let tasks: Vec<Task> = parse(self.daemon_call(tm::LIST, json!({}))?)?;
+        let revises: Vec<String> = tasks
+            .iter()
+            .filter(|t| t.kind == TaskKind::Revise && t.id != task.id)
+            .filter(|t| {
+                t.brief
+                    .note
+                    .as_deref()
+                    .is_some_and(|n| n.contains(&task.id))
+            })
+            .map(|t| format!("{} ({})", t.id, state_name(t.state)))
+            .collect();
+        if revises.is_empty() {
+            out.push_str(
+                "\nAn answer that changes a call goes to a revise task, queued for whoever takes it next; none has yet.",
+            );
+        } else {
+            let _ = write!(
+                out,
+                "\nThe answers that change its calls went to: {}.",
+                revises.join(", ")
+            );
+        }
+        Ok(out)
+    }
+
     fn task_submit(&mut self, args: &Value) -> Result<String, String> {
         let id = self.task_arg(args)?;
         let summary = args
@@ -584,6 +645,7 @@ impl Server {
         match result {
             SubmitResult::Landed { journal, changed } => {
                 self.held.remove(&id);
+                self.landed.push(id.clone());
                 let mut out = format!(
                     "Landed as journal entry {journal}. The user's tabs have it now, and so do this task's tabs, \
                      which show the owned directory again. Changed:\n"
@@ -1329,7 +1391,7 @@ a dark theme.\n\
 - Split a service's styles along natural seams (base, editor, settings), so one that breaks can be turned \
 off without losing the rest.\n\
 - Check your work beyond screenshots: contrast_scan finds text that doesn't stand out against its \
-background, shape_scan finds what's still drawn as a box, force_state shows hover and focus styles, and \
+background, shape_scan finds what's still drawn as a box, colour_scan (with the theme's palette) finds the site's own colours still showing, force_state shows hover and focus styles, and \
 styles_status reports problems loading your files (a style with errors keeps its last good version \
 applied, so a mistake can look as if nothing happened), and, with a tab, selectors Firefox silently drops \
 or ignores.\n\

@@ -40,7 +40,7 @@ it.\n\n\
 Tools (your harness may list only some at first): task_list, task_create, task_claim, task_info, task_refresh, feedback, \
 task_ask, task_submit, task_decline, task_release, theme_propose; tab_open, tab_navigate, tab_reload, color_scheme, \
 viewport, tab_list, tab_close; screenshot, interact, query, computed_style, matched_rules, css_tokens, contrast_scan, \
-shape_scan, force_state, type_text, eval; styles_status.";
+shape_scan, colour_scan, force_state, type_text, eval; styles_status.";
 
 struct Tool {
     name: &'static str,
@@ -262,6 +262,27 @@ const TOOLS: &[Tool] = &[
         },
     },
     Tool {
+        name: "colour_scan",
+        method: "page/colours",
+        description: "List the colours a page draws with: text, backgrounds, borders, and SVG fills and strokes, \
+            each as a hex value with how many visible elements use it, an example element, and where the \
+            colour is declared (the winning rule and its stylesheet, the token it goes through if any, an inline \
+            style attribute, or the ancestor text inherits it from). Most used first. On a site without design \
+            tokens, where colours are spread over atomic classes and inline styles, it's the map of what to \
+            override. With `palette` (the theme's colours, in any CSS syntax), it lists only the colours not in \
+            it: what's left of the site's own colours after styling, in one call. Use `scope` for one part of \
+            the page, and run it in each colour scheme you style.",
+        schema: || {
+            json!({ "type": "object", "properties": {
+                "tab": tab_prop(),
+                "scope": { "type": "string", "description": "Only inside the first element matching this selector." },
+                "palette": { "type": "array", "items": { "type": "string" }, "description": "Colours to leave out of the list: the theme's palette." },
+                "tolerance": { "type": "integer", "description": "How far (0-255 per channel of red, green and blue) a colour can be from a palette colour and still count as it. Default 6." },
+                "limit": { "type": "integer", "description": "Colours to list. Default 30." }
+            }, "required": ["tab"] })
+        },
+    },
+    Tool {
         name: "type_text",
         method: "page/type",
         description: "Fill in a text field as typing would: focus it, set its value, and fire input and change events, \
@@ -325,12 +346,15 @@ const TOOLS: &[Tool] = &[
             cover, such as scrolling (window.scrollTo({top: 800, behavior: 'instant'})) or opening a menu by \
             clicking. The tab is the user's real browser, logged in as them, so a click or submit acts as the user: \
             opening a menu is fine, but dismissing a notice, starring, following or posting changes their account \
-            or their view of the site.",
+            or their view of the site. A check you'll run on many pages can live in a file (`file`): it runs \
+            first, then `expression`, so the file can define functions for the expression to call with \
+            arguments.",
         schema: || {
             json!({ "type": "object", "properties": {
                 "tab": tab_prop(),
-                "expression": { "type": "string" }
-            }, "required": ["tab", "expression"] })
+                "expression": { "type": "string" },
+                "file": { "type": "string", "description": "An absolute path to a JavaScript file to run before `expression` (or alone, ending in the expression whose value to return). Keep it outside the task's tree, so it doesn't land." }
+            }, "required": ["tab"] })
         },
     },
     Tool {
@@ -363,7 +387,7 @@ const TOOLS: &[Tool] = &[
             is what the user's tabs have. With `tab`, also which styles apply to that tab's page, whether the page \
             has atelier's style shim, any prerequisite (site setting) the page shows isn't met, styles that should \
             apply but aren't in the page (notInPage), and selectors in your styles that Firefox silently drops or \
-            ignores (droppedSelectors: a pseudo-element inside :is(), say), and properties one of your style files sets that another of them overrides (overriddenByOurs). Check after editing: a style with \
+            ignores (droppedSelectors: a pseudo-element inside :is(), say), and declarations in your style files that never take effect because another of your rules always wins over them (overriddenByOurs). Check after editing: a style with \
             errors keeps its last good version applied, so a mistake can look as if nothing happened.",
         schema: || json!({ "type": "object", "properties": { "tab": tab_prop(), "task": { "type": "string", "description": "A task whose tree to report on, without a tab." } } }),
     },
@@ -396,6 +420,7 @@ pub fn run(dir: Option<&str>) -> ExitCode {
             None => format!("mcp-{}-{:04x}", std::process::id(), nanos & 0xffff),
         },
         held: BTreeMap::new(),
+        landed: Vec::new(),
         last_heartbeat: None,
         notices: Vec::new(),
         tab_tasks: BTreeMap::new(),
@@ -426,6 +451,9 @@ struct Server {
     session: String,
     /// Tasks this session holds, with their trees.
     held: BTreeMap<String, PathBuf>,
+    /// Tasks this session landed, oldest first: the user may answer their
+    /// calls afterwards.
+    landed: Vec<String>,
     last_heartbeat: Option<Instant>,
     /// Things the agent should hear about with their next tool result.
     notices: Vec<String>,
@@ -578,6 +606,23 @@ impl Server {
                 Err(e) => return tool_error(e),
             }
             args.as_object_mut().map(|a| a.remove("option"));
+        }
+        // A file of code to run before the expression: a check kept to run on many pages.
+        if tool.name == "eval"
+            && let Some(file) = args.as_object_mut().and_then(|a| a.remove("file"))
+        {
+            let Some(path) = file.as_str().map(PathBuf::from).filter(|p| p.is_absolute()) else {
+                return tool_error("`file` must be an absolute path");
+            };
+            let code = match std::fs::read_to_string(&path) {
+                Ok(code) => code,
+                Err(e) => return tool_error(format!("couldn't read {}: {e}", path.display())),
+            };
+            let expression = args
+                .get("expression")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            args["expression"] = json!(format!("{code}\n;{expression}"));
         }
         // attach: true saves next to the task's tree, for task_ask, where it won't land
         // (as well as at saveAs, if that's given too).

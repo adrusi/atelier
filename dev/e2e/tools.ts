@@ -222,13 +222,21 @@ try {
     // Escape closes it.
     const closed = await tool("interact", { tab: menus, selector: "#open-menu", action: "press", key: "Escape" });
     assert.equal(closed.expanded, false);
-    assert.equal((await tool("query", { tab: menus, selector: "[role=menu]" })).count, 0);
+    assert.equal((await tool("query", { tab: menus, selector: "body > [role=menu]" })).count, 0);
     // A hover card shown a moment after mouseenter.
     const hovered = await tool("interact", { tab: menus, selector: "#user", action: "hover" });
     assert.match(JSON.stringify(hovered.appeared), /card/);
     // A popover, which changes no attribute.
     const popped = await tool("interact", { tab: menus, selector: "#open-pop" });
     assert.match(JSON.stringify(popped.appeared), /pop/);
+    // One whose host has no size, opened by popovertarget: listed with its panel's box.
+    const anchored = await tool("interact", { tab: menus, selector: "#open-anchored" });
+    const [overlay] = anchored.appeared;
+    assert.match(overlay?.element ?? "", /anchored/, JSON.stringify(anchored));
+    assert.ok(overlay.rect.width >= 150, JSON.stringify(overlay));
+    // Screenshot says why an element in the layout can't be seen.
+    const pill = await rpc("tools/call", { name: "screenshot", arguments: { tab: menus, selector: "#pill" } });
+    assert.match(JSON.stringify(pill.result.content), /can't be seen: it has opacity 0/, JSON.stringify(pill.result));
     // A link: the page goes elsewhere, and says so.
     const away = await tool("interact", { tab: menus, selector: "#away" });
     assert.match(away.navigated, /\?away/);
@@ -255,6 +263,29 @@ try {
     assert.deepEqual(await tool("eval", { tab, expression: "document.title" }), { result: "tokens fixture" });
     assert.deepEqual(await tool("eval", { tab, expression: "const out = 1; out" }), { result: 1 });
     assert.deepEqual(await tool("eval", { tab, expression: "const out = 2; Promise.resolve(out + 1)" }), { result: 3 });
+  });
+
+  await check("eval runs a file of code before the expression", async () => {
+    const file = `${instance}-snippet.js`;
+    fs.writeFileSync(file, "const double = (x) => x * 2;\n");
+    assert.deepEqual(await tool("eval", { tab, file, expression: "double(21)" }), { result: 42 });
+    fs.writeFileSync(file, "document.title.length\n");
+    assert.deepEqual(await tool("eval", { tab, file }), { result: "tokens fixture".length });
+    await assert.rejects(tool("eval", { tab, file: "snippet.js" }), /absolute path/);
+    fs.rmSync(file);
+  });
+
+  await check("colour_scan lists the colours in use with where they're declared, and leaves out a palette", async () => {
+    const all = await tool("colour_scan", { tab });
+    const title = all.groups.find((g: any) => g.kind === "text" && /h1/.test(g.example));
+    assert.match(title?.declared?.from ?? "", /\.title/, JSON.stringify(all.groups));
+    assert.match(title.colour, /^#[0-9a-f]{6}$/);
+    // Everything else as the palette, written another way: only the title's colour is left.
+    const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(" ")})`;
+    const palette = all.groups.map((g: any) => g.colour).filter((c: string) => c !== title.colour).map(rgb);
+    const off = await tool("colour_scan", { tab, palette });
+    assert.ok(off.groups.length && off.groups.every((g: any) => g.colour === title.colour), JSON.stringify(off));
+    assert.ok(off.inPalette > 0);
   });
 
   await check("screenshot scale enlarges small captures", async () => {
@@ -299,14 +330,21 @@ try {
   await check("styles_status flags a rule in one of our files overridden by a rule in another", async () => {
     const a = path.join(owned, "services/fixtures/e2e/clash-a.user.css");
     const b = path.join(owned, "services/fixtures/e2e/clash-b.user.css");
-    fs.writeFileSync(a, `@-moz-document url-prefix("http://127.0.0.1:") { .note { font-style: italic; } }\n`);
-    fs.writeFileSync(b, `@-moz-document url-prefix("http://127.0.0.1:") { main .note { font-style: normal; } .note { color: inherit; } }\n`);
+    fs.writeFileSync(a, `@-moz-document url-prefix("http://127.0.0.1:") { .note { font-style: italic; } main p { text-decoration: underline; } }\n`);
+    fs.writeFileSync(b, `@-moz-document url-prefix("http://127.0.0.1:") { main .note { font-style: normal; } .note { color: inherit; } main .faint { text-decoration: none; } }\n`);
     const r = await tool("styles_status", { tab });
+    // The underline is refined away on one line only: not listed, only counted.
     assert.equal(r.tab.overriddenByOurs?.length, 1, JSON.stringify(r.tab));
+    assert.match(r.tab.overriddenNote, / 1 more are overridden only in places/);
     const [c] = r.tab.overriddenByOurs;
     assert.equal(c.property, "font-style");
     assert.deepEqual(c.overridden, { file: "services/fixtures/e2e/clash-a.user.css", selector: ".note", value: "italic" });
     assert.deepEqual(c.by, { file: "services/fixtures/e2e/clash-b.user.css", selector: "main .note", value: "normal" });
+    // matched_rules finds a logical property for its physical name.
+    fs.writeFileSync(b, `@-moz-document url-prefix("http://127.0.0.1:") { main { padding-inline: 3px; } }\n`);
+    await tool("styles_status", {});
+    const padding = await tool("matched_rules", { tab, selector: "main", property: "padding-left" });
+    assert.equal(padding.rules[0]?.declarations, "padding-inline-start: 3px (via padding-inline: 3px; sets padding-left)", JSON.stringify(padding));
     fs.rmSync(a);
     fs.rmSync(b);
     await tool("styles_status", {});

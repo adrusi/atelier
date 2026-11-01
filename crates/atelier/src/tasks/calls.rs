@@ -454,11 +454,25 @@ impl Store {
             .map(|(i, r)| format!("{}. {}", i + 1, r.text))
             .collect::<Vec<_>>()
             .join("\n");
-        let note = format!(
+        let mut note = format!(
             "Looking over the calls made in an earlier task ({}), the user changed {}:\n{list}",
             task.id,
             if items.len() == 1 { "one" } else { "these" },
         );
+        // What that task wrote, which may not be what it said it chose.
+        let diff = self.landing_diff(&task.id)?.map(|text| {
+            use base64::Engine;
+            atelier_proto::Upload {
+                name: format!("{}-landed.diff", task.id),
+                data: base64::engine::general_purpose::STANDARD.encode(text),
+            }
+        });
+        if let Some(d) = &diff {
+            note.push_str(&format!(
+                "\nWhat {} changed when it landed is attached ({}): look at what it actually wrote before changing it.",
+                task.id, d.name
+            ));
+        }
         let pending = self
             .list(Some(TaskState::Queued), now)?
             .into_iter()
@@ -475,6 +489,12 @@ impl Store {
             });
             let service = task.service.as_deref().unwrap_or_default();
             pending.brief.description = format!("Revisit calls from earlier work on {service}");
+            if let Some(d) = &diff {
+                let path = self.attach(&pending.id, d)?;
+                if !pending.brief.attachments.contains(&path) {
+                    pending.brief.attachments.push(path);
+                }
+            }
             pending.updated = now;
             self.save(&pending)?;
             return Ok(pending);
@@ -501,7 +521,7 @@ impl Store {
                     container: task.brief.container.clone(),
                     attachments: Vec::new(),
                 },
-                uploads: Vec::new(),
+                uploads: diff.into_iter().collect(),
             },
             theme,
             now,
@@ -931,6 +951,14 @@ mod tests {
                 .unwrap()
                 .contains("they chose: mauve")
         );
+        // With what the earlier task wrote, attached.
+        let [diff] = &revisions[0].brief.attachments[..] else {
+            panic!("one attachment: {:?}", revisions[0].brief.attachments)
+        };
+        assert!(diff.ends_with(&format!("{}-landed.diff", t.id)));
+        let text = fs::read_to_string(diff).unwrap();
+        assert!(text.contains("+++ b/services/site/t/a.user.css"), "{text}");
+        assert!(text.contains("p { color: teal; }"), "{text}");
     }
 
     #[test]

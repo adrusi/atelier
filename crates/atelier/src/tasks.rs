@@ -14,6 +14,7 @@ use crate::loader;
 
 mod calls;
 mod feedback;
+mod landed;
 mod proposals;
 use atelier_proto::{
     ChangeKind, FileChange, JournalEntry, Lease, Severity, SubmitProblem, SubmitResult, Task,

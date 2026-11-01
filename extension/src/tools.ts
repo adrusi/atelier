@@ -267,7 +267,19 @@ browser.webNavigation.onCommitted.addListener(async (d) => {
 async function reloadEmulated(tabId: number, params: any, ctx: ToolContext) {
   await run(tabId, `${markerCode(agentTabs.features(tabId))} 0`);
   await browser.tabs.reload(tabId);
-  return afterLoad(tabId, params, ctx, await settled(tabId));
+  const loaded = (await afterLoad(tabId, params, ctx, await settled(tabId))) as Record<string, unknown>;
+  return { ...loaded, reloaded: "The tab reloaded to apply this, so anything that was open in it (a menu, a dialog, a popover) is closed now: open it again with interact before the next screenshot of it." };
+}
+
+/** The size the user's own pages are shown at: the active tab of the
+ * window they used last, among those whose active tab isn't an agent's. */
+async function userViewport(): Promise<{ width: number; height: number } | null> {
+  const windows = await browser.windows.getAll({ populate: true, windowTypes: ["normal"] });
+  const [last] = windows
+    .map((w) => w.tabs?.find((t) => t.active))
+    .filter((t): t is browser.tabs.Tab => Boolean(t?.width && t.height) && !agentTabs.has(t!.id!))
+    .sort((a, b) => (b.lastAccessed ?? 0) - (a.lastAccessed ?? 0));
+  return last ? { width: last.width!, height: last.height! } : null;
 }
 
 /** Forced states per agent tab, so they can be redone when styles change:
@@ -337,7 +349,12 @@ const handlers: Record<string, Handler> = {
       }
     }
     await browser.tabs.update(tab.id!, { url });
-    const result = { ...(await afterLoad(tab.id!, params, ctx, await settled(tab.id!))), ...(window ? { window } : {}) };
+    const result: Record<string, unknown> = { ...(await afterLoad(tab.id!, params, ctx, await settled(tab.id!))), ...(window ? { window } : {}) };
+    // A window of its own needn't be the size of the user's, and sites lay out by width.
+    const [mine, user] = [await browser.tabs.get(tab.id!), await userViewport()];
+    if (user && mine.width && Math.abs(mine.width - user.width) > user.width * 0.1) {
+      result.sizeNote = `This tab is ${mine.width}×${mine.height}, but the user's window shows pages at ${user.width}×${user.height}. Sites change their layout with width (a sidebar drops away, a nav collapses to icons), so this tab may not show the layout the user sees: tab_viewport with width ${user.width} and height ${user.height} lays it out at theirs.`;
+    }
     return container ? { ...result, cookiesCopied: container.copied } : result;
   },
 
@@ -426,8 +443,10 @@ const handlers: Record<string, Handler> = {
 
     let rect: { x: number; y: number; width: number; height: number } | undefined;
     if (selector) {
-      const r = (await call(tab.id!, "rectOf", selector)) as typeof rect | null;
-      if (!r) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\``);
+      const found = (await call(tab.id!, "rectOf", selector)) as (NonNullable<typeof rect> & { unseen?: string }) | null;
+      if (!found) throw new RpcError(PAGE_ERROR, `no element matches \`${selector}\``);
+      const { unseen, ...r } = found;
+      if (unseen) notes.push(`\`${selector}\` is in the layout but can't be seen: ${unseen}. The page probably keeps it hidden until it's wanted. To see how it looks when shown, take the screenshot again with extraCss that undoes that, e.g. opacity: 1 !important or transform: none !important on that element (the page's scripts can't reset extraCss the way they reset styles set from eval).`);
       if (r!.width === 0 || r!.height === 0) throw new RpcError(PAGE_ERROR, `\`${selector}\` matches an element with no size (hidden?)`);
       // A very tall element (a long sidebar's contents) makes an unreadable
       // strip, or fails to capture at all: take its top.
@@ -601,6 +620,19 @@ const handlers: Record<string, Handler> = {
     return r;
   },
 
+  async "page/colours"(params) {
+    const tab = await agentTab(params);
+    const scope = param<string | null>(params, "scope", "string", null);
+    const palette = params?.palette ?? null;
+    if (palette !== null && !(Array.isArray(palette) && palette.every((c: unknown) => typeof c === "string"))) {
+      throw new RpcError(INVALID_PARAMS, "`palette` is a list of CSS colours, e.g. [\"#1a1a1a\", \"oklch(0.9 0.02 90)\"]");
+    }
+    await call(tab.id!, "finishAnimations");
+    const r = await call(tab.id!, "colourScan", scope, palette, param<number>(params, "tolerance", "number", 6), param<number>(params, "limit", "number", 30));
+    if (r === null) throw new RpcError(PAGE_ERROR, `no element matches \`${scope}\``);
+    return r;
+  },
+
   async "tab/color_scheme"(params, ctx) {
     const tab = await agentTab(params);
     const scheme = param<string | null>(params, "scheme", "string", null);
@@ -667,7 +699,7 @@ const handlers: Record<string, Handler> = {
     if (tab) {
       const applying = (bundle?.styles ?? []).filter((s) => tab.url && cssFor(s, tab.url) !== null).map((s) => s.id);
       const inPage = (await call(tab.id!, "atelierStyleCheck").catch(() => null)) as { present: string[]; dropped: { style: string; selector: string; effect: string }[] } | null;
-      const clashes = (await call(tab.id!, "atelierClashes", 20).catch(() => null)) as { total: number; clashes: unknown[] } | null;
+      const clashes = (await call(tab.id!, "atelierClashes", 20).catch(() => null)) as { total: number; clashes: unknown[]; partlyOverridden: number } | null;
       const missing = inPage ? applying.filter((id) => !inPage.present.includes(id)) : [];
       out.tab = {
         ...describeTab(tab, ctx),
@@ -686,7 +718,7 @@ const handlers: Record<string, Handler> = {
         ...(clashes?.total
           ? {
               overriddenByOurs: clashes.clashes,
-              overriddenNote: `${clashes.total} place(s) on this page where a rule in one of atelier's style files sets a property and a rule in another overrides it with a different value (by !important, specificity, then order; @layer isn't considered). Often that's a specificity clash nobody meant; if it's meant, ignore it. matched_rules on the example element shows the whole cascade.`,
+              overriddenNote: `${clashes.total} declaration(s) in atelier's style files that never take effect on this page: on every element the rule matches (shown or not), another of atelier's rules sets the property differently and wins (by !important, specificity, then order; @layer isn't considered). Usually a new rule losing to an older, broader one. matched_rules on the example element shows the whole cascade. ${clashes.partlyOverridden} more are overridden only in places, which is usually a refinement, so they aren't listed.`,
             }
           : {}),
       };
