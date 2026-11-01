@@ -13,6 +13,7 @@
 use crate::loader;
 
 mod calls;
+mod feedback;
 mod proposals;
 use atelier_proto::{
     ChangeKind, FileChange, JournalEntry, Lease, Severity, SubmitProblem, SubmitResult, Task,
@@ -973,6 +974,16 @@ impl Store {
                     .is_some_and(|d| now.saturating_sub(d) > JOURNAL_MAX_AGE_MS)
                 {
                     remove(&self.state.join("proposals").join(format!("{}.json", p.id)));
+                }
+            }
+        }
+        // Feedback is kept until it's been passed on, and a while after.
+        if let Ok(all) = self.feedback(true) {
+            for f in all {
+                if f.read
+                    .is_some_and(|r| now.saturating_sub(r) > JOURNAL_MAX_AGE_MS)
+                {
+                    remove(&self.state.join("feedback").join(format!("{}.json", f.id)));
                 }
             }
         }

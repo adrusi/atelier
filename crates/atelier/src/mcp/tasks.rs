@@ -87,6 +87,16 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
         schema: || json!({ "type": "object", "properties": { "task": task_prop() } }),
     },
     Tool {
+        name: "feedback",
+        method: "",
+        description: "Tell atelier's developers what got in your way: a tool that was missing, confusing or wrong, \
+            guidance in the brief that misled you, an error that didn't say what to do. It's kept until the user \
+            passes it on, after this session (and this conversation) has ended. Be specific: what you were \
+            trying to do, what happened, and what would have helped. Critical notes are the most useful kind. \
+            Questions about the work itself go to the user with task_ask instead.",
+        schema: || json!({ "type": "object", "properties": { "text": { "type": "string" }, "task": task_prop() }, "required": ["text"] }),
+    },
+    Tool {
         name: "task_submit",
         method: "",
         description: "Land your work: the files you changed in the task's tree are checked and copied into the \
@@ -231,8 +241,10 @@ anything you'd like me to decide.
 and nobody else will be asked to do it instead. If you need to stop partway, task_release keeps your work for \
 whoever continues, with your note.
 
-If atelier's tools get in your way, are missing something, or say something confusing, please tell me \
-specifically. I'm developing atelier, and that's some of the most useful feedback I get.";
+If atelier's tools get in your way, are missing something, or say something confusing, please say so \
+specifically with the feedback tool, as you go or before you finish. I'm developing atelier, and that's some \
+of the most useful feedback I get, critical notes most of all. It's kept after this session ends, which this \
+conversation may not be: atelier closes a session's window when its work is done.";
 
 /// What the work prompt says about whether the user is there to ask. A
 /// session the daemon started headless (ATELIER_SESSION, SPEC §9.1) has
@@ -276,6 +288,7 @@ impl Server {
             "task_create" => self.task_create(args),
             "task_claim" => self.task_claim(args),
             "task_info" => self.task_arg(args).and_then(|id| self.task_info(&id)),
+            "feedback" => self.feedback(args),
             "task_refresh" => self
                 .task_arg(args)
                 .and_then(|id| self.refresh(&id))
@@ -460,6 +473,24 @@ impl Server {
             Some(note) => format!("{note}\n\n{info}"),
             None => info,
         })
+    }
+
+    /// Keeps a note for atelier's developers (feedback/post), with the task
+    /// it's about: the one named, or the one held.
+    fn feedback(&mut self, args: &Value) -> Result<String, String> {
+        let task = args
+            .get("task")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .or_else(|| (self.held.len() == 1).then(|| self.held.keys().next().unwrap().clone()));
+        let f: atelier_proto::Feedback = parse(self.daemon_call(
+            atelier_proto::feedback_method::POST,
+            json!({ "text": args.get("text"), "session": self.session, "task": task }),
+        )?)?;
+        Ok(format!(
+            "Kept ({}). The user passes it on to atelier's developers. Thank you: this is how the tools get better.",
+            f.id
+        ))
     }
 
     /// Brings a held task's tree up to date (task/refresh), and says what

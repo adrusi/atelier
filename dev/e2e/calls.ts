@@ -11,7 +11,7 @@ import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import readline from "node:readline";
-import { withSession } from "../bidi.ts";
+import { evaluate, withSession } from "../bidi.ts";
 
 const NAME = "e2e-calls";
 const instance = path.join(process.env.XDG_RUNTIME_DIR!, "atelier-dev", NAME);
@@ -217,6 +217,27 @@ try {
     assert.match(brief, /marked this theme \*\*settled\*\*/);
     assert.match(brief, /expect to be satisfied with whatever provisional calls you make/);
   });
+  await check("feedback for the developers outlives the session: the CLI and the inbox show it until it's passed on", async () => {
+    assert.match(await tool("feedback", { text: "task_info didn't say where the tree was.\nA path would help." }), /^Kept \(f/);
+    const listed = atelier("feedback");
+    assert.match(listed, /task_info didn't say where the tree was\.\n    A path would help\./);
+    assert.match(listed, /\(.*e2e.*\)/, "with the theme");
+    const shown = await withSession(state.bidiPort, async (bidi) => {
+      const { contexts } = await bidi.send("browsingContext.getTree", { maxDepth: 0 });
+      const ext = contexts.find((c: { url: string }) => c.url.startsWith("moz-extension://"));
+      const { context } = await bidi.send("browsingContext.create", { type: "tab" });
+      await bidi.send("browsingContext.navigate", { context, url: `${ext.url.replace(/\/[^/]*$/, "")}/inbox.html`, wait: "complete" });
+      await new Promise((r) => setTimeout(r, 1500));
+      const text = await evaluate(bidi, context, `document.getElementById("feedback").hidden ? "" : document.getElementById("feedback-list").textContent`);
+      await bidi.send("browsingContext.close", { context });
+      return text as string;
+    });
+    assert.match(shown, /A path would help/);
+    atelier("feedback", "--read");
+    assert.match(atelier("feedback"), /No unread feedback/);
+    assert.match(atelier("feedback", "--all"), /\[read\]/);
+  });
+
   await check("a variant can be flipped live in the user's own tab, and picking one writes it in", async () => {
     const created = await tool("task_create", { description: "variant test", kind: "revise", service: "fixtures", origin: fixture });
     const task = created.match(/task (\S+)\./)![1];

@@ -11,10 +11,12 @@
 //! - if it holds a task, it's mid-work, and stays open;
 //! - if the queue has requests waiting, the agent is asked to carry on (once:
 //!   if it stops again, it stays open, for whoever looks);
-//! - otherwise it's done, and the harness is ended (SIGTERM), a moment later.
+//! - otherwise it's done: if it hasn't left feedback for atelier's developers,
+//!   it's asked once whether it has any (the conversation goes with the
+//!   window), and then the harness is ended (SIGTERM), a moment later.
 
 use crate::{cli::Client, mcp, paths};
-use atelier_proto::{Role, Task, TaskState, task_method};
+use atelier_proto::{Feedback, Role, Task, TaskState, feedback_method, task_method};
 use serde_json::{Value, json};
 use std::fs;
 use std::io::Read;
@@ -114,6 +116,27 @@ fn decide(dir: &Path, pid: u32, asked_already: bool) -> Decision {
                 if queued == 1 { "" } else { "s" }
             ))
         };
+    }
+    // Its last chance to tell atelier's developers anything: the window (and
+    // the conversation) goes once it stops. Asked once; feedback already left
+    // counts as an answer.
+    if !asked_already {
+        let gave = client
+            .call(feedback_method::LIST, json!({ "all": true }))
+            .ok()
+            .and_then(|v| serde_json::from_value::<Vec<Feedback>>(v).ok())
+            .is_some_and(|all| {
+                all.iter()
+                    .any(|f| f.session.as_deref() == Some(me.as_str()))
+            });
+        if !gave {
+            return Decision::CarryOn(
+                "Before this session closes (atelier closes its window now that the work is done): if anything \
+                 about atelier's tools or the brief got in your way, please note it with the feedback tool, which \
+                 keeps it for atelier's developers. If nothing did, just say so."
+                    .into(),
+            );
+        }
     }
     Decision::End
 }

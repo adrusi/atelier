@@ -407,6 +407,8 @@ The kit ships with atelier and is installed by `atelier setup` (§14):
 | agent ↔ user | Clarifying questions; reports; suggestions ("THEME.md says nothing about data tables; here's a proposal") | Shown in the sidebar inbox and CLI. Asynchronous: the contractor either carries on and records assumptions, or blocks the task |
 | agent → developers | A broken or missing MCP tool; unclear kit guidance | Stored as a draft. The user reviews and edits it in the sidebar. Approving opens GitHub's prefilled new-issue URL in a tab. **Never filed automatically.** No credentials needed; the user submits it |
 
+*Built (agent → developers):* the `feedback` tool keeps an agent's note in the state directory (`feedback/<id>.json`, with its session, task, service and theme), so it outlives the session: atelier closes a finished session's window, and the conversation with it, so feedback said only in conversation was being lost (owner, 2026-11). The work prompt points agents at the tool, and before a finished atelier-agent session closes, its stop hook asks once whether it has any, if it hasn't left some. The user passes it on from `atelier feedback` (`--read` marks it passed on) or the inbox's "For atelier's developers" section (copy all, mark passed on). Filing GitHub issues from drafts is still to come.
+
 Before landing, contractors distil any lasting decisions from their threads into the service's `notes.md`. Threads themselves are state and are eventually pruned.
 
 ### 9.5 Questions, answers, and the theme's lifecycle

@@ -6,6 +6,7 @@ import type { Inbox } from "./background";
 import type { Batch } from "./proto/Batch";
 import type { Call } from "./proto/Call";
 import type { Proposal } from "./proto/Proposal";
+import type { Feedback } from "./proto/Feedback";
 import type { Task } from "./proto/Task";
 
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -368,7 +369,7 @@ async function render(force = false) {
     return;
   }
   // Re-render only when the batches change, so answers being typed survive.
-  const key = JSON.stringify([inbox.batches.map((b) => [b.id, b.state, b.created]), inbox.proposals.map((p) => [p.id, p.state, p.reviewed]), inbox.stage]);
+  const key = JSON.stringify([inbox.batches.map((b) => [b.id, b.state, b.created]), inbox.proposals.map((p) => [p.id, p.state, p.reviewed]), inbox.stage, inbox.feedback.map((f) => f.id)]);
   if (key === shown && !force) return;
   shown = key;
 
@@ -387,6 +388,8 @@ async function render(force = false) {
   const decided = inbox.proposals.filter((p) => p.state !== "open" && !unreviewedNote(p));
   el("answered-heading").hidden = answered.length + decided.length === 0;
   el("answered").replaceChildren(...decided.map(proposalCard), ...answered.map((b) => batchCard(b, inbox.tasks[b.task], false)));
+
+  renderFeedback(inbox.feedback);
 
   if (show) {
     const [id, i] = show.key.split("#");
@@ -410,3 +413,44 @@ async function render(force = false) {
 
 void render();
 setInterval(() => void render(), 3000);
+
+/** Feedback as plain text, for pasting into a message to the developers. */
+const feedbackText = (list: Feedback[]) =>
+  list
+    .map((f) => {
+      const about = [f.service, f.task, f.theme].filter(Boolean).join(", ");
+      return `${new Date(Number(f.created)).toISOString().slice(0, 16).replace("T", " ")}${about ? ` (${about})` : ""}\n${f.text}`;
+    })
+    .join("\n\n---\n\n");
+
+let feedbackShown: Feedback[] = [];
+
+function renderFeedback(list: Feedback[]) {
+  feedbackShown = list;
+  el("feedback").hidden = list.length === 0;
+  el("feedback-list").replaceChildren(
+    ...list.map((f) => {
+      const about = [f.service, f.theme].filter(Boolean).join(", ");
+      return h("section", { class: "batch feedback" }, about ? h("header", {}, h("span", { class: "site", textContent: about })) : null, h("p", { class: "summary", textContent: f.text }));
+    }),
+  );
+}
+
+el("feedback-copy").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText(feedbackText(feedbackShown));
+    el("feedback-status").textContent = "Copied.";
+  } catch (e) {
+    el("feedback-status").textContent = e instanceof Error ? e.message : String(e);
+  }
+});
+
+el("feedback-done").addEventListener("click", async () => {
+  try {
+    await browser.runtime.sendMessage({ type: "feedback-read", ids: feedbackShown.map((f) => f.id) });
+    el("feedback-status").textContent = "Marked passed on.";
+    await render(true);
+  } catch (e) {
+    el("feedback-status").textContent = e instanceof Error ? e.message : String(e);
+  }
+});

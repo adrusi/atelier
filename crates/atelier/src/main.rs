@@ -36,6 +36,9 @@ usage: atelier [--dir DIR] <command>
                         accept (land) or decline a proposal
   review PROPOSAL keep|undo
                         keep or undo an addition to the design notes
+  feedback [--all] [--read]
+                        what agents told atelier's developers (unread, or --all);
+                        --read marks what's shown as passed on
   stage [forming|settled]
                         the active theme's stage (SPEC §9.5), set if given
   session start [--force]
@@ -94,7 +97,7 @@ fn main() -> ExitCode {
         "status" => cli::status(dir.as_deref()),
         "lint" => cli::lint(dir.as_deref()),
         "task" | "undo" | "journal" | "session" | "calls" | "answer" | "stage" | "proposals"
-        | "decide" | "review" => {
+        | "feedback" | "decide" | "review" => {
             args.insert(0, command.clone());
             cli::tasks(dir.as_deref(), &args)
         }

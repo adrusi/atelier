@@ -896,9 +896,12 @@ fn the_stop_hook_ends_a_finished_agent_session_and_keeps_a_busy_one_going() {
         "asked once already: left open ({out})"
     );
 
-    // Nothing left for it (the task is someone else's): the session ends.
+    // Nothing left for it (the task is someone else's): asked once for
+    // feedback, since the conversation goes with it, and then ended.
     call(&mut s, 2, "task/claim", json!({ "session": "s1" }));
-    let (_, ended) = agent_hook(&env, "stop", stop(false));
+    let (out, ended) = agent_hook(&env, "stop", stop(false));
+    assert!(out.contains("feedback tool") && !ended, "{out}");
+    let (_, ended) = agent_hook(&env, "stop", stop(true));
     assert!(ended, "a finished session is ended");
 
     // Once the user has said something to it, it's theirs.
@@ -907,7 +910,11 @@ fn the_stop_hook_ends_a_finished_agent_session_and_keeps_a_busy_one_going() {
         "prompt",
         json!({ "session_id": "c2", "prompt": "I'd like your help with atelier's queue. …" }),
     );
-    let (_, ended) = agent_hook(&env, "stop", json!({ "session_id": "c2" }));
+    let (_, ended) = agent_hook(
+        &env,
+        "stop",
+        json!({ "session_id": "c2", "stop_hook_active": true }),
+    );
     assert!(ended, "the work prompt isn't the user talking");
     agent_hook(
         &env,

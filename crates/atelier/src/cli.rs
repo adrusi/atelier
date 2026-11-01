@@ -542,6 +542,57 @@ pub fn tasks(dir: Option<&str>, args: &[String]) -> ExitCode {
                 }
                 Value::Null
             }),
+        (Some("feedback"), _) => {
+            // For passing on to atelier's developers: unread, or --all; --read marks
+            // what's shown as passed on.
+            let all = args.iter().any(|a| a == "--all");
+            client
+                .call(atelier_proto::feedback_method::LIST, json!({ "all": all }))
+                .and_then(|v| {
+                    let list: Vec<atelier_proto::Feedback> =
+                        serde_json::from_value(v).map_err(io::Error::other)?;
+                    if list.is_empty() {
+                        println!(
+                            "{}",
+                            if all {
+                                "No feedback from agents."
+                            } else {
+                                "No unread feedback from agents (--all shows what's been read)."
+                            }
+                        );
+                    }
+                    let now = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map_or(0, |d| d.as_millis() as u64);
+                    for f in &list {
+                        let about = [f.service.clone(), f.task.clone(), f.theme.clone()]
+                            .into_iter()
+                            .flatten()
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        println!(
+                            "{}  {}{}{}",
+                            f.id,
+                            ago(now.saturating_sub(f.created)),
+                            if about.is_empty() {
+                                String::new()
+                            } else {
+                                format!("  ({about})")
+                            },
+                            if f.read.is_some() { "  [read]" } else { "" }
+                        );
+                        for line in f.text.lines() {
+                            println!("    {line}");
+                        }
+                        println!();
+                    }
+                    if args.iter().any(|a| a == "--read") && !list.is_empty() {
+                        let ids: Vec<&str> = list.iter().map(|f| f.id.as_str()).collect();
+                        client.call(atelier_proto::feedback_method::READ, json!({ "ids": ids }))?;
+                    }
+                    Ok(Value::Null)
+                })
+        }
         (Some("decide"), Some(id)) => match arg(2) {
             Some(d @ ("accept" | "decline")) => client.call(
                 atelier_proto::theme_method::DECIDE,
@@ -606,5 +657,16 @@ pub fn tasks(dir: Option<&str>, args: &[String]) -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(e) => fail(e),
+    }
+}
+
+/// How long ago, roughly: "3h ago".
+fn ago(ms: u64) -> String {
+    let s = ms / 1000;
+    match s {
+        0..60 => "just now".into(),
+        60..3600 => format!("{}m ago", s / 60),
+        3600..86_400 => format!("{}h ago", s / 3600),
+        _ => format!("{}d ago", s / 86_400),
     }
 }

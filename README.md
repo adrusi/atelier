@@ -75,6 +75,7 @@ undone:
 atelier journal          # landings and undos, newest first
 atelier undo             # undo the most recent landing
 atelier task list        # the queue
+atelier feedback         # what agents said about atelier's tools, for its developers
 ```
 
 Agents put questions to you in atelier's **inbox** (linked from the toolbar

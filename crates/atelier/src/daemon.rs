@@ -953,6 +953,7 @@ fn dispatch(state: &State, msg: Value, role: Role) -> Option<Value> {
         }
         Some(m) if m.starts_with("call/") => call_call(state, m, params, role),
         Some(m) if m.starts_with("theme/") => theme_call(state, m, params),
+        Some(m) if m.starts_with("feedback/") => feedback_call(state, m, params),
         Some(m) if m.starts_with("task/") || m.starts_with("journal/") => {
             task_call(state, m, params, role)
         }
@@ -1444,6 +1445,52 @@ fn call_call(
                 .and_then(|v| v.as_str())
                 .unwrap_or("forming");
             Ok(json!({ "theme": theme, "stage": stage }))
+        }
+        other => Err((
+            wire::code::METHOD_NOT_FOUND,
+            format!("unknown method `{other}`"),
+        )),
+    }
+}
+
+/// Feedback from agents to atelier's developers (SPEC §9.4).
+fn feedback_call(state: &State, method_name: &str, params: Value) -> Result<Value, (i64, String)> {
+    use atelier_proto::feedback_method as fm;
+    let failed = |e: String| (error_code::TASK_REFUSED, e);
+    let s = |k: &str| params.get(k).and_then(Value::as_str).map(str::to_string);
+    let store = state.tasks.lock().unwrap();
+    let changed = |f: &atelier_proto::Feedback| {
+        let _ = state.notify.send(wire::notification(fm::CHANGED, json!(f)));
+    };
+    match method_name {
+        fm::POST => {
+            let theme = state.inner.lock().unwrap().default.bundle.theme.clone();
+            let f = store
+                .post_feedback(
+                    &s("text").unwrap_or_default(),
+                    s("session"),
+                    s("task"),
+                    theme,
+                    now_ms(),
+                )
+                .map_err(failed)?;
+            changed(&f);
+            Ok(json!(f))
+        }
+        fm::LIST => {
+            let all = params.get("all").and_then(Value::as_bool).unwrap_or(false);
+            Ok(json!(store.feedback(all).map_err(failed)?))
+        }
+        fm::READ => {
+            let ids: Vec<String> = params
+                .get("ids")
+                .and_then(|v| serde_json::from_value(v.clone()).ok())
+                .ok_or((wire::code::INVALID_PARAMS, "`ids` is required".to_string()))?;
+            let read = store.read_feedback(&ids, now_ms()).map_err(failed)?;
+            for f in &read {
+                changed(f);
+            }
+            Ok(json!(read))
         }
         other => Err((
             wire::code::METHOD_NOT_FOUND,

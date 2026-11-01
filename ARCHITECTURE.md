@@ -124,6 +124,7 @@ simply finishes it, and runs the hooks it missed.
 | Owned-directory changes (landings, undos, accepted proposals) | daemon | journal intent records | startup: finish or roll back incomplete intents |
 | Tasks, leases | daemon | task.json | listing (leases expire) |
 | Task trees, calls, proposals, hook files, logs | daemon | the task's state | pruning: kept while useful, then removed |
+| Feedback for the developers | daemon | `feedback/<id>.json` in the state directory | pruning: kept until the user marks it passed on, then 90 days |
 | Spawned sessions | daemon | a record of the launch | startup: a launch counts until it times out |
 | Registered user scripts | background | the bundle | every bundle load (already a diff) |
 | Agent tabs, their bindings and emulation | background (`agenttabs.ts`) | records in `storage.session`, and a tab value (`sessions.setTabValue`, restored with the tab) carrying the browser session's epoch | startup, a few seconds after tabs appear, and every 5 minutes: tabs with an earlier epoch are closed; copies (current epoch, not ours) lose the value and are the user's |

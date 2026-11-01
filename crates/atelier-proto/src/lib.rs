@@ -365,6 +365,42 @@ pub mod theme_method {
     pub const CHANGED: &str = "theme/changed";
 }
 
+/// Feedback from agents to atelier's developers (SPEC §9.4): kept in the
+/// state directory, so it outlives the session that wrote it.
+pub mod feedback_method {
+    /// `{ "text": …, "session"?: …, "task"?: … }` → [`Feedback`].
+    pub const POST: &str = "feedback/post";
+    /// `{ "all"?: bool }` → `Vec<Feedback>`, newest first: unread only, unless `all`.
+    pub const LIST: &str = "feedback/list";
+    /// `{ "ids": [...] }` → `Vec<Feedback>`: marks them read (relayed to the developers).
+    pub const READ: &str = "feedback/read";
+    /// Notification from the daemon: a [`Feedback`] was written or read.
+    pub const CHANGED: &str = "feedback/changed";
+}
+
+/// A note from an agent to atelier's developers: what got in their way.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Feedback {
+    pub id: String,
+    pub text: String,
+    pub created: u64,
+    /// The agent session (`atelier mcp`) that wrote it.
+    #[serde(default)]
+    pub session: Option<String>,
+    /// The task it was working on, with its service and the active theme.
+    #[serde(default)]
+    pub task: Option<String>,
+    #[serde(default)]
+    pub service: Option<String>,
+    #[serde(default)]
+    pub theme: Option<String>,
+    /// When the user marked it read (passed on to the developers).
+    #[serde(default)]
+    pub read: Option<u64>,
+}
+
 /// Calls: questions and assumptions, posted in batches (SPEC §9.5).
 pub mod call_method {
     /// [`CallPostParams`] → [`Batch`]. A `review` or `block` batch parks

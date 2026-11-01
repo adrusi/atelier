@@ -13,6 +13,7 @@ import type { Bundle } from "./proto/Bundle";
 import type { CompiledStyle } from "./proto/CompiledStyle";
 import type { Batch } from "./proto/Batch";
 import type { Proposal } from "./proto/Proposal";
+import type { Feedback } from "./proto/Feedback";
 import type { BundleChanged } from "./proto/BundleChanged";
 import type { InitializeResult } from "./proto/InitializeResult";
 import type { JournalEntry } from "./proto/JournalEntry";
@@ -73,7 +74,7 @@ async function connect() {
       const { source, ...ref } = params as BundleChanged;
       if (source === undefined) void loadBundle(r, ref);
       else if (sources.has(source)) void loadSource(r, source, ref);
-    } else if (method === "call/changed" || method === "theme/changed") {
+    } else if (method === "call/changed" || method === "theme/changed" || method === "feedback/changed") {
       void updateInboxBadge();
     } else if (method === "task/changed") {
       const task = params as Task;
@@ -498,6 +499,8 @@ browser.runtime.onMessage.addListener((msg: unknown) => {
   if (d?.type === "decide" && d.id) return daemon().call<Proposal>("theme/decide", { id: d.id, accept: Boolean(d.accept), note: d.note ?? null, text: d.text ?? null });
   if (d?.type === "review" && d.id) return daemon().call<Proposal>("theme/review", { id: d.id, undo: Boolean(d.undo) });
   if (i?.type === "stage") return daemon().call("call/stage", i.stage ? { stage: i.stage } : {});
+  const f = msg as { type?: string; ids?: string[] };
+  if (f?.type === "feedback-read" && f.ids?.length) return daemon().call<Feedback[]>("feedback/read", { ids: f.ids });
   if (i?.type === "open-inbox") return browser.tabs.create({ url: browser.runtime.getURL("inbox.html") }).then(() => true);
   return undefined;
 });
@@ -513,6 +516,8 @@ export type Inbox = {
   tasks: Record<string, Task>;
   theme: string | null;
   stage: string | null;
+  /** Agents' notes for atelier's developers, not passed on yet. */
+  feedback: Feedback[];
 };
 
 async function inbox(): Promise<Inbox> {
@@ -528,7 +533,8 @@ async function inbox(): Promise<Inbox> {
   const stage = await r.call<{ theme: string; stage: string }>("call/stage", {}).catch(() => null);
   const allProposals = await r.call<Proposal[]>("theme/proposals", {}).catch(() => [] as Proposal[]);
   const proposals = [...allProposals.filter((p) => p.state === "open"), ...allProposals.filter((p) => p.state !== "open").slice(0, 3)];
-  return { batches, proposals, tasks, theme: stage?.theme ?? null, stage: stage?.stage ?? null };
+  const feedback = await r.call<Feedback[]>("feedback/list", {}).catch(() => [] as Feedback[]);
+  return { batches, proposals, tasks, theme: stage?.theme ?? null, stage: stage?.stage ?? null, feedback };
 }
 
 /** An attachment, as a data URL the inbox can show. */
