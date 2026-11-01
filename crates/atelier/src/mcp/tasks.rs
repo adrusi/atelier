@@ -77,6 +77,16 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
         schema: || json!({ "type": "object", "properties": { "task": task_prop() } }),
     },
     Tool {
+        name: "task_refresh",
+        method: "",
+        description: "Bring a task's tree up to date with the user's styles as they are now: files you haven't \
+            changed that changed since the tree was copied (another landing, a design note, the user's own edit) \
+            are replaced with the current version. Files you changed that also changed there are left as they \
+            are, and listed: merge those (task_submit shows their current contents). Done for you when you \
+            claim a task, and after theme_propose adds a design note.",
+        schema: || json!({ "type": "object", "properties": { "task": task_prop() } }),
+    },
+    Tool {
         name: "task_submit",
         method: "",
         description: "Land your work: the files you changed in the task's tree are checked and copied into the \
@@ -265,6 +275,12 @@ impl Server {
             "task_create" => self.task_create(args),
             "task_claim" => self.task_claim(args),
             "task_info" => self.task_arg(args).and_then(|id| self.task_info(&id)),
+            "task_refresh" => self
+                .task_arg(args)
+                .and_then(|id| self.refresh(&id))
+                .map(|r| {
+                    r.unwrap_or_else(|| "The tree is up to date with the user's styles.".into())
+                }),
             "task_submit" => self.task_submit(args),
             "task_decline" => self.task_finish(args, tm::DECLINE, "reason"),
             "task_release" => self.task_finish(args, tm::RELEASE, "handoff"),
@@ -436,7 +452,37 @@ impl Server {
         let tree = PathBuf::from(task.tree.clone().unwrap_or_default());
         self.held.insert(task.id.clone(), tree);
         self.last_heartbeat = Some(Instant::now());
-        self.task_info(&task.id)
+        // A task resumed from the queue may have a tree copied a while ago.
+        let refreshed = self.refresh(&task.id)?;
+        let info = self.task_info(&task.id)?;
+        Ok(match refreshed {
+            Some(note) => format!("{note}\n\n{info}"),
+            None => info,
+        })
+    }
+
+    /// Brings a held task's tree up to date (task/refresh), and says what
+    /// happened, if anything did.
+    fn refresh(&mut self, id: &str) -> Result<Option<String>, String> {
+        let r: atelier_proto::TreeRefresh =
+            parse(self.daemon_call(tm::REFRESH, json!({ "id": id, "session": self.session }))?)?;
+        let mut out = Vec::new();
+        if !r.updated.is_empty() {
+            out.push(format!(
+                "These changed in the user's styles since this task's tree was copied, and the tree now has \
+                 their current version: {}.",
+                r.updated.join(", ")
+            ));
+        }
+        if !r.both.is_empty() {
+            out.push(format!(
+                "These changed there too, but you've changed them in the tree, so they're left as you have them: \
+                 {}. Merge in the current version (task_submit sends it back if you don't, and the next submit \
+                 takes the tree's version as the merged one).",
+                r.both.join(", ")
+            ));
+        }
+        Ok((!out.is_empty()).then(|| out.join(" ")))
     }
 
     fn task_info(&mut self, id: &str) -> Result<String, String> {
@@ -688,9 +734,17 @@ impl Server {
                     "file": args.get("file").and_then(Value::as_str).unwrap_or("THEME.md") }),
         )?)?;
         if p.path.ends_with("/notes.md") {
+            // Into the tree too, so it matches the user's styles.
+            let tree = match task.as_deref().filter(|t| self.held.contains_key(*t)) {
+                Some(t) => match self.refresh(t)? {
+                    Some(note) => format!(" {note}"),
+                    None => " Your task's tree has it too.".into(),
+                },
+                None => String::new(),
+            };
             return Ok(format!(
-                "Added to the theme's design notes ({}, journal entry {}). Your tree's copy predates it; \
-                 other agents' briefs include it from now on.",
+                "Added to the theme's design notes ({}, journal entry {}), in effect at once: other agents' \
+                 briefs include it from now on.{tree}",
                 p.path,
                 p.journal.unwrap_or_default()
             ));
@@ -974,8 +1028,10 @@ fn brief(
          framed page, open its URL in a tab.\n\
          - services/<service>/service.toml: `description` (the site, in a few words), `summary` (what the \
          styles cover, for the user), and `[[prerequisites]]` for site settings a style depends on: \
-         `description` (what the user should set, in their terms) and `check` (a CSS selector that matches \
-         something on the page only when the setting is on). The check runs on each page the style applies to, \
+         `description` (what the user should set, in their terms), `check` (a CSS selector that matches \
+         something on the page only when the setting is on), and `theme` when only this theme needs it (other \
+         themes' styles may build on other settings; a prerequisite with a `theme` applies only while that \
+         theme is active). The check runs on each page the style applies to, \
          once it has loaded; if it matches nothing, the toolbar button shows a badge and the description. \
          Also `[[pages]]`, the site's representative pages: `url`, `what` it shows, and `states` worth \
          checking on it.\n\
@@ -1165,7 +1221,7 @@ properties), and overriding them restyles a site far more thoroughly than restyl
 one, and keeps working when components change. Cover the nested scopes that re-declare tokens too.\n\
 - If the site has its own dark (or light) mode close to what the theme wants, build on it, and record it as \
 a prerequisite in service.toml with a `check` selector that matches only when it's on, so the user is told \
-when it isn't.\n\
+when it isn't. Give it `theme = \"<this theme>\"` unless every theme needs the setting.\n\
 - Prefer stable hooks (ids, aria and data-* attributes, readable class names) to generated class names, \
 which change on every deploy. And remember that a short selector can still reach a long way: check broad \
 rules beyond the pages you started from.\n\

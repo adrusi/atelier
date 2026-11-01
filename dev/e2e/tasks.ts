@@ -124,6 +124,20 @@ try {
     assert.match(untabbed.showing, /^task t\S+'s tree$/);
   });
 
+  await check("a prerequisite added in the task's tree is checked in its tabs before landing", async () => {
+    const toml = path.join(tree, "services/fixtures/service.toml");
+    fs.writeFileSync(toml, `prerequisites = [{ description = "Turn on the site's dark mode", check = "html.dark" }]\n`);
+    const deadline = Date.now() + 5000;
+    let unmet: unknown[] = [];
+    while (Date.now() < deadline) {
+      unmet = (await json("styles_status", { tab })).tab.unmetPrerequisites;
+      if (unmet.length) break;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    assert.match(JSON.stringify(unmet), /dark mode/);
+    fs.rmSync(toml);
+  });
+
   await check("previews are saved into the task's tree", async () => {
     await tool("screenshot", { tab, saveAs: PREVIEW });
     assert.ok(fs.existsSync(path.join(tree, PREVIEW)));

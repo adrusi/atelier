@@ -16,7 +16,7 @@ mod calls;
 mod proposals;
 use atelier_proto::{
     ChangeKind, FileChange, JournalEntry, Lease, Severity, SubmitProblem, SubmitResult, Task,
-    TaskCreateParams, TaskKind, TaskOutcome, TaskState,
+    TaskCreateParams, TaskKind, TaskOutcome, TaskState, TreeRefresh,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -295,6 +295,60 @@ impl Store {
         Ok(Some(task))
     }
 
+    /// Brings a held task's tree up to date with the owned directory: a file
+    /// the task hasn't changed (the tree's copy is still its base) but the
+    /// owned directory has (a landing, the user, a design note) is replaced
+    /// by the current version, and its base moves with it. A file both
+    /// changed is left for the agent to merge; a file already the same on
+    /// both sides just gets the new base.
+    pub fn refresh(&self, id: &str, session: &str, now: u64) -> Result<TreeRefresh> {
+        let task = self.held(id, session, now)?;
+        let tree = self.task_dir(&task.id).join("tree");
+        let base_path = self.task_dir(&task.id).join("base.json");
+        let base: BTreeMap<String, String> =
+            serde_json::from_str(&fs::read_to_string(&base_path).map_err(err)?).map_err(err)?;
+        let owned = hash_tree(&self.dir).map_err(err)?;
+        let mine = hash_tree(&tree).map_err(err)?;
+        let mut rebased = base.clone();
+        let mut out = TreeRefresh::default();
+        let paths: BTreeSet<&String> = base.keys().chain(owned.keys()).collect();
+        for path in paths {
+            let (b, o, t) = (base.get(path), owned.get(path), mine.get(path));
+            if o == b {
+                continue;
+            }
+            if t != o && t != b {
+                out.both.push(path.clone());
+                continue;
+            }
+            if t == b {
+                let to = tree.join(path);
+                match o {
+                    Some(_) => {
+                        fs::create_dir_all(to.parent().expect("has parent")).map_err(err)?;
+                        fs::copy(self.dir.join(path), &to).map_err(err)?;
+                    }
+                    None => fs::remove_file(&to).map_err(err)?,
+                }
+                out.updated.push(path.clone());
+            }
+            match o {
+                Some(h) => rebased.insert(path.clone(), h.clone()),
+                None => rebased.remove(path),
+            };
+        }
+        if rebased != base {
+            write_atomic(
+                &base_path,
+                serde_json::to_string_pretty(&rebased)
+                    .map_err(err)?
+                    .as_bytes(),
+            )
+            .map_err(err)?;
+        }
+        Ok(out)
+    }
+
     fn held(&self, id: &str, session: &str, now: u64) -> Result<Task> {
         let mut task = self.get(id)?;
         self.expire(&mut task, now)?;
@@ -413,11 +467,32 @@ impl Store {
             );
         }
         let tree = self.task_dir(id).join("tree");
-        let base: BTreeMap<String, String> = serde_json::from_str(
+        let mut base: BTreeMap<String, String> = serde_json::from_str(
             &fs::read_to_string(self.task_dir(id).join("base.json")).map_err(err)?,
         )
         .map_err(err)?;
         let now_files = hash_tree(&tree).map_err(err)?;
+        // A file the tree has exactly as the owned directory has it now isn't a
+        // change (an agent may have copied current files in by hand): it
+        // becomes the base, rather than a conflict or a change out of scope.
+        let mut adopted = false;
+        for c in diff(&base, &now_files) {
+            let current = hash_file(&self.dir.join(&c.path)).map_err(err)?;
+            if current.as_ref() == now_files.get(&c.path) {
+                match current {
+                    Some(h) => base.insert(c.path.clone(), h),
+                    None => base.remove(&c.path),
+                };
+                adopted = true;
+            }
+        }
+        if adopted {
+            write_atomic(
+                &self.task_dir(id).join("base.json"),
+                serde_json::to_string_pretty(&base).map_err(err)?.as_bytes(),
+            )
+            .map_err(err)?;
+        }
         let changes = diff(&base, &now_files);
 
         let reject =
@@ -426,7 +501,11 @@ impl Store {
             return reject(vec![problem(
                 "empty",
                 None,
-                "nothing in the task's tree differs from when it started",
+                if adopted {
+                    "everything in the task's tree is as the owned directory has it now, so there's nothing to land"
+                } else {
+                    "nothing in the task's tree differs from when it started"
+                },
             )]);
         }
 
@@ -1280,6 +1359,65 @@ pub(super) mod tests {
             "@-moz-document domain(\"a.example\") { p { color: teal; } }\n",
         );
         assert!(matches!(submit(&e, &t.id), SubmitResult::Landed { .. }));
+    }
+
+    #[test]
+    fn files_copied_in_as_they_are_now_are_neither_conflicts_nor_out_of_scope() {
+        let e = env();
+        create(&e, Some("site"));
+        let t = e.store.claim(None, "s1", 1000).unwrap().unwrap();
+        // Since the copy: another landing, and a design note.
+        let css = "@-moz-document domain(\"a.example\") { p { color: green; } }\n";
+        put(&e.dir, "services/site/t/a.user.css", css);
+        put(&e.dir, "themes/t/notes.md", "# notes\n");
+        // The agent copies the current files in by hand, and adds its own.
+        put(&tree(&t), "services/site/t/a.user.css", css);
+        put(&tree(&t), "themes/t/notes.md", "# notes\n");
+        put(
+            &tree(&t),
+            "services/site/t/b.user.css",
+            "@-moz-document domain(\"a.example\") { a { color: teal; } }\n",
+        );
+        match submit(&e, &t.id) {
+            SubmitResult::Landed { .. } => {}
+            other => panic!("{other:?}"),
+        }
+        let changed = &e.store.journal().unwrap()[0].files;
+        assert_eq!(changed.len(), 1, "{changed:?}");
+        assert_eq!(changed[0].path, "services/site/t/b.user.css");
+    }
+
+    #[test]
+    fn refresh_brings_untouched_files_up_to_date_and_leaves_both_changed_ones() {
+        let e = env();
+        create(&e, Some("site"));
+        let t = e.store.claim(None, "s1", 1000).unwrap().unwrap();
+        put(&tree(&t), "services/site/t/a.user.css", "/* mine */\n");
+        put(&e.dir, "services/site/t/a.user.css", "/* theirs */\n");
+        put(&e.dir, "themes/t/notes.md", "# notes\n");
+        fs::remove_file(e.dir.join("themes/t/THEME.md")).unwrap();
+        let r = e.store.refresh(&t.id, "s1", 1500).unwrap();
+        assert_eq!(r.updated, ["themes/t/THEME.md", "themes/t/notes.md"]);
+        assert_eq!(r.both, ["services/site/t/a.user.css"]);
+        assert_eq!(
+            fs::read_to_string(tree(&t).join("themes/t/notes.md")).unwrap(),
+            "# notes\n"
+        );
+        assert!(!tree(&t).join("themes/t/THEME.md").exists());
+        // The tree's own change is still a change, and still a conflict.
+        assert_eq!(e.store.changes(&t.id).unwrap().len(), 1);
+        match submit(&e, &t.id) {
+            SubmitResult::Rejected { problems } => assert_eq!(problems[0].kind, "conflict"),
+            other => panic!("{other:?}"),
+        }
+        // Nothing more to do the second time.
+        assert_eq!(
+            e.store.refresh(&t.id, "s1", 1600).unwrap(),
+            TreeRefresh {
+                updated: vec![],
+                both: vec![]
+            }
+        );
     }
 
     #[test]

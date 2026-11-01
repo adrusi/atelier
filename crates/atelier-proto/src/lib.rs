@@ -335,6 +335,9 @@ pub mod task_method {
     /// `{ "id": … }` → `Vec<FileChange>`: how the task's tree differs from
     /// when it was claimed.
     pub const CHANGES: &str = "task/changes";
+    /// `{ "id": …, "session": … }` → [`TreeRefresh`]: brings a held task's tree up
+    /// to date with the owned directory, where the task hasn't changed a file.
+    pub const REFRESH: &str = "task/refresh";
     /// `{ "id": …, "handoff": … }` → [`Task`]: sets the note for whoever
     /// resumes a task that isn't being worked on (queued, or waiting).
     pub const NOTE: &str = "task/note";
@@ -562,6 +565,20 @@ pub enum SubmitResult {
 pub struct FileChange {
     pub path: String,
     pub change: ChangeKind,
+}
+
+/// What `task/refresh` did to a task's tree, bringing it up to date with the
+/// owned directory.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct TreeRefresh {
+    /// Files the task hadn't changed that changed in the owned directory:
+    /// the tree now has their current version.
+    pub updated: Vec<String>,
+    /// Files both the task and the owned directory changed: left as they are
+    /// in the tree, to merge (submit sends back the current contents).
+    pub both: Vec<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]

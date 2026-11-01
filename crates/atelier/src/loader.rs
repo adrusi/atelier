@@ -64,7 +64,9 @@ struct PageConfig {
     what: Option<String>,
     states: Vec<String>,
 }
-/// A prerequisite: just a description, or a table with an optional check.
+/// A prerequisite: just a description, or a table with an optional check,
+/// and optionally the one theme it's for (themes may build on different
+/// site settings: one on the site's dark mode, another on "automatic").
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 enum PrerequisiteConfig {
@@ -72,7 +74,18 @@ enum PrerequisiteConfig {
     Checked {
         description: String,
         check: Option<String>,
+        theme: Option<String>,
     },
+}
+
+impl PrerequisiteConfig {
+    /// Whether it applies while `theme` is active.
+    fn applies(&self, theme: &str) -> bool {
+        match self {
+            PrerequisiteConfig::Checked { theme: Some(t), .. } => t == theme,
+            _ => true,
+        }
+    }
 }
 
 impl From<&PrerequisiteConfig> for Prerequisite {
@@ -82,7 +95,9 @@ impl From<&PrerequisiteConfig> for Prerequisite {
                 description: description.clone(),
                 check: None,
             },
-            PrerequisiteConfig::Checked { description, check } => Prerequisite {
+            PrerequisiteConfig::Checked {
+                description, check, ..
+            } => Prerequisite {
                 description: description.clone(),
                 check: check.clone(),
             },
@@ -188,6 +203,7 @@ impl Loader<'_> {
             let prerequisites: Vec<Prerequisite> = config
                 .prerequisites
                 .iter()
+                .filter(|p| p.applies(&theme))
                 .map(Prerequisite::from)
                 .collect();
             let styles_dir = self.dir.join("services").join(&service).join(&theme);
@@ -798,7 +814,7 @@ mod tests {
         write(
             d.path(),
             "services/github/service.toml",
-            "prerequisites = [\"plain\", { description = \"checked\", check = \"html.dark\" }]\n",
+            "prerequisites = [\"plain\", { description = \"checked\", check = \"html.dark\" }, { description = \"another theme's\", check = \"html.light\", theme = \"other\" }, { description = \"this theme's\", theme = \"dusk\" }]\n",
         );
         let bundle = load(d.path(), &BTreeMap::new());
         let github = bundle
@@ -816,6 +832,10 @@ mod tests {
                 Prerequisite {
                     description: "checked".into(),
                     check: Some("html.dark".into())
+                },
+                Prerequisite {
+                    description: "this theme's".into(),
+                    check: None
                 },
             ]
         );

@@ -1109,6 +1109,11 @@ fn task_call(
             Ok(json!(task))
         }
         tm::CHANGES => Ok(json!(store.changes(&str_param("id")?).map_err(failed)?)),
+        tm::REFRESH => Ok(json!(
+            store
+                .refresh(&str_param("id")?, &str_param("session")?, now)
+                .map_err(failed)?
+        )),
         tm::NOTE => Ok(json!(
             store
                 .note(&str_param("id")?, &str_param("handoff")?, now)
