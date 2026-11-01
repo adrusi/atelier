@@ -186,10 +186,14 @@ try {
       edits: [{ replace: "- What a link has jumped to counts as current.\n" }],
     });
     assert.match(out, /^Added to the theme's design notes \(themes\/e2e\/notes\.md, journal entry \d+\)/);
+    // And into the task's tree, which is brought up to date.
+    assert.match(out, /the tree now has their current version: .*themes\/e2e\/notes\.md/);
+    const tree = (await tool("task_info")).match(/The task's tree is (\S+): /)![1];
+    assert.match(fs.readFileSync(path.join(tree, "themes/e2e/notes.md"), "utf8"), /jumped to counts as current/);
     const notes = path.join(owned, "themes/e2e/notes.md");
     assert.match(fs.readFileSync(notes, "utf8"), /jumped to counts as current/);
     assert.doesNotMatch(before, /Added to the design notes/);
-    assert.match(await tool("task_info"), /Added to the design notes \(in the owned directory; your tree may predate it\): Anchor targets count as current/);
+    assert.doesNotMatch(await tool("task_info"), /your tree may predate it/, "the tree has it");
     const id = atelier("proposals").match(/^(\S+)\s+themes\/e2e\/notes\.md: Anchor targets count as current\s+\(added; review keep\|undo\)$/m)![1];
     atelier("review", id, "undo");
     assert.ok(!fs.existsSync(notes), "undone");
