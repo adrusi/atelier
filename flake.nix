@@ -130,13 +130,16 @@
             # Claude Code on atelier's queue (SPEC §9.1): in the atelier
             # directory, with only atelier's MCP server and its tools allowed,
             # and atelier's state directory (where task trees are) writable.
+            # The work prompt goes in as text: Claude Code connects MCP
+            # servers in the background, so /mcp__atelier__work on its
+            # command line would run before the command exists.
             cd "''${ATELIER_DIR:-${dir}}" || exit 1
             exec ${lib.escapeShellArg cfg.agent.command} \
               --mcp-config ${mcpConfig} --strict-mcp-config \
               --allowedTools mcp__atelier \
               --add-dir "''${XDG_STATE_HOME:-$HOME/.local/state}/atelier" \
               ${lib.escapeShellArgs cfg.agent.extraArgs} \
-              "$@" /mcp__atelier__work
+              "$@" "$(${exe} work-prompt)"
           '';
           toml = pkgs.formats.toml { };
           settings =

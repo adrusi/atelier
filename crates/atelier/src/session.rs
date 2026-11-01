@@ -7,7 +7,7 @@
 //! ```toml
 //! [session]
 //! start = "spawn"     # or "pull" (the default: never start one), or "headless"
-//! command = 'foot -D {dir} -e claude /mcp__atelier__work'
+//! command = 'foot -D {dir} -e claude "$(atelier work-prompt)"'
 //! ```
 //!
 //! `command` is a string, run with `sh -c` after its placeholders are

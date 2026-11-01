@@ -342,6 +342,14 @@ const TOOLS: &[Tool] = &[
     },
 ];
 
+/// The `work` prompt's text, for `atelier work-prompt`. Claude Code connects
+/// MCP servers in the background, so `/mcp__atelier__work` given on its
+/// command line can run before the command exists ("Unknown command");
+/// the text needs no connection.
+pub fn work_prompt(request: Option<&str>) -> String {
+    tasks::work_prompt(request.map(str::trim).filter(|r| !r.is_empty()))
+}
+
 pub fn run(dir: Option<&str>) -> ExitCode {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

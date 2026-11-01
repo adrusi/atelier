@@ -99,8 +99,12 @@ starting one yourself, give it a command in `~/.config/atelier/config.toml`:
 ```toml
 [session]
 start = "spawn"   # or "headless" for a command nobody watches; "pull" (default) never starts one
-command = 'foot -D {dir} claude --add-dir {state} /mcp__atelier__work'
+command = 'foot -D {dir} claude --add-dir {state} "$(atelier work-prompt)"'
 ```
+
+(The prompt goes in as text because Claude Code connects to MCP servers in
+the background: `/mcp__atelier__work` on its command line runs before the
+command exists.)
 
 `{dir}` is the owned directory, `{state}` atelier's state directory for it
 (where agents edit their copies of your styles, so Claude Code needs

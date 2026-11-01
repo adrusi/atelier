@@ -43,6 +43,9 @@ usage: atelier [--dir DIR] <command>
   browser METHOD [JSON] [--out FILE]
                         call a browser tool through the daemon (see extension/src/tools.ts)
   mcp                   MCP server (stdio) with browser tools for agents
+  work-prompt [REQUEST] print the MCP server's work prompt, to start a session with
+                        on a command line (where /mcp__atelier__work can run before
+                        Claude Code has connected to the server)
   daemon                serve the owned directory (normally started for you)
   native-host           bridge for the browser extension (started by the browser)
 
@@ -79,6 +82,10 @@ fn main() -> ExitCode {
         "setup" => setup::run(dir.as_deref()),
         "daemon" => daemon::run(dir.as_deref()),
         "mcp" => mcp::run(dir.as_deref()),
+        "work-prompt" => {
+            println!("{}", mcp::work_prompt(args.first().map(String::as_str)));
+            ExitCode::SUCCESS
+        }
         "status" => cli::status(dir.as_deref()),
         "lint" => cli::lint(dir.as_deref()),
         "task" | "undo" | "journal" | "session" | "calls" | "answer" | "stage" | "proposals"
