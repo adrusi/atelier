@@ -29,11 +29,16 @@ const artifacts = path.join(root, "signed");
 fs.rmSync(artifacts, { recursive: true, force: true });
 execFileSync(
   "web-ext",
-  ["sign", "--channel", "unlisted", "--source-dir", path.join(root, "dist-release"), "--artifacts-dir", artifacts],
+  // AMO's review of an unlisted version usually takes minutes; wait up to
+  // half an hour. If it takes longer, `npm run fetch-signed` gets it later.
+  ["sign", "--channel", "unlisted", "--source-dir", path.join(root, "dist-release"), "--artifacts-dir", artifacts, "--approval-timeout", "1800000"],
   { stdio: "inherit" },
 );
 const signed = fs.readdirSync(artifacts).find((f) => f.endsWith(".xpi"));
-if (!signed) throw new Error(`web-ext didn't leave a signed .xpi in ${artifacts}`);
+if (!signed) {
+  console.error(`\nNo signed file came back (AMO may still be reviewing ${version}). Once it's approved: npm run fetch-signed ${version}`);
+  process.exit(1);
+}
 const out = path.join(root, "..", "release", "atelier.xpi");
 fs.mkdirSync(path.dirname(out), { recursive: true });
 fs.copyFileSync(path.join(artifacts, signed), out);

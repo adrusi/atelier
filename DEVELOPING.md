@@ -199,5 +199,8 @@ WEB_EXT_API_KEY=<JWT issuer> WEB_EXT_API_SECRET=<JWT secret> npm run sign
 It versions the build by date and time (AMO needs a new version each time),
 signs it as unlisted (not listed publicly), and saves
 `release/atelier.xpi` and `release/VERSION`; commit both, since the
+home-manager module installs from the flake. If AMO is still reviewing when
+`web-ext` stops waiting, no file comes back; `npm run fetch-signed VERSION`
+(same keys) downloads it once it's approved. As before, the
 home-manager module installs from the flake. `web-ext lint --source-dir
 extension/dist-release --self-hosted` runs AMO's validator locally first.
