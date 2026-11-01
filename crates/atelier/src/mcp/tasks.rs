@@ -144,6 +144,7 @@ pub(super) const TASK_TOOLS: &[Tool] = &[
                 "summary": { "type": "string", "description": "A line to go with the batch, e.g. what state the work is in." },
                 "waitForAnswers": { "type": "integer", "description": "With review or block, when the user may be around to answer soon: keep the task, and wait this many seconds (up to 600) for the answers, which then come back to you here. If they don't come in time, the task waits for them as usual. Not useful in a session nobody is watching." },
                 "handoff": { "type": "string", "description": "With review or block: a note for whoever picks the task up after the answers (perhaps you): what's done, what's left." },
+                "replaces": { "type": "string", "description": "The id of a batch you posted for this task that hasn't been answered yet: this batch takes its place, to correct or add to it. Send all its calls again, not just the changed ones." },
                 "calls": { "type": "array", "items": { "type": "object", "properties": {
                     "question": { "type": "string" },
                     "context": { "type": "string", "description": "What it's about and why it matters, for someone looking at your screenshot rather than the page." },
@@ -633,7 +634,7 @@ impl Server {
             .collect();
         let batch: Batch = parse(self.daemon_call(
             atelier_proto::call_method::POST,
-            json!({ "task": id, "session": self.session, "wait": wait, "summary": args.get("summary"), "calls": calls, "holdMs": hold.map(|s| (s + 30) * 1000) }),
+            json!({ "task": id, "session": self.session, "wait": wait, "summary": args.get("summary"), "calls": calls, "holdMs": hold.map(|s| (s + 30) * 1000), "replaces": args.get("replaces") }),
         )?)?;
         if batch.wait != Wait::Record
             && let Some(secs) = hold
@@ -654,8 +655,14 @@ impl Server {
         let n = batch.calls.len();
         Ok(match batch.wait {
             Wait::Record => format!(
-                "Posted {n} call(s) for the record ({}). Carry on and land when you're ready; if the user changes \
-                 one, that becomes a new task. task_info shows answers that come in while you're still working.",
+                "{} {n} call(s) for the record ({}). Carry on and land when you're ready; if the user changes \
+                 one, that becomes a new task. task_info shows answers that come in while you're still working. \
+                 To correct the batch before it's answered, post it again with `replaces`.",
+                if args.get("replaces").is_some() {
+                    "Replaced the batch with"
+                } else {
+                    "Posted"
+                },
                 batch.id
             ),
             Wait::Review | Wait::Block => {

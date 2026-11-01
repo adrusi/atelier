@@ -64,7 +64,29 @@ impl Store {
         if p.calls.iter().any(|c| c.question.trim().is_empty()) {
             return Err("every call needs a question".into());
         }
-        let n = self.next_batch(&task.id);
+        let n = match &p.replaces {
+            Some(old) => {
+                let (of, n) = Self::parse_batch_id(old)?;
+                let b = self.batch(old)?;
+                if of != task.id {
+                    return Err(format!("batch {old} is another task's"));
+                }
+                if b.state != BatchState::Open {
+                    return Err(format!(
+                        "batch {old} has been answered already, so it can't be replaced; post a new one"
+                    ));
+                }
+                // Its attachments go with it.
+                let dir = self.batch_dir(&task.id, n);
+                for e in fs::read_dir(&dir).map_err(err)?.flatten() {
+                    if e.file_name() != "batch.json" {
+                        fs::remove_file(e.path()).map_err(err)?;
+                    }
+                }
+                n
+            }
+            None => self.next_batch(&task.id),
+        };
         let dir = self.batch_dir(&task.id, n);
         let task_dir = self.task_dir(&task.id).canonicalize().map_err(err)?;
         let mut calls = p.calls;
@@ -780,6 +802,7 @@ mod tests {
                     summary: None,
                     calls: vec![ask, call("Kept the pill shapes", Some("teal"))],
                     hold_ms: None,
+                    replaces: None,
                 },
                 2000,
             )
@@ -807,6 +830,7 @@ mod tests {
                     summary: Some("first pass".into()),
                     calls: vec![c, call("Hide the banner?", None)],
                     hold_ms: None,
+                    replaces: None,
                 },
                 2000,
             )
@@ -870,6 +894,7 @@ mod tests {
                     summary: None,
                     calls: vec![call("Header accent", Some("teal"))],
                     hold_ms: None,
+                    replaces: None,
                 },
                 1500,
             )
@@ -909,6 +934,46 @@ mod tests {
     }
 
     #[test]
+    fn an_unanswered_batch_can_be_replaced_and_an_answered_one_cant() {
+        let e = env();
+        create(&e, Some("site"));
+        let t = e.store.claim(None, "s1", 1000).unwrap().unwrap();
+        let post = |q: &str, replaces: Option<String>| {
+            e.store.post(
+                CallPostParams {
+                    task: t.id.clone(),
+                    session: "s1".into(),
+                    wait: Wait::Record,
+                    summary: None,
+                    calls: vec![call(q, Some("teal"))],
+                    hold_ms: None,
+                    replaces,
+                },
+                2000,
+            )
+        };
+        let (_, first) = post("Header accent (no good)", None).unwrap();
+        let (_, fixed) = post("Header accent", Some(first.id.clone())).unwrap();
+        assert_eq!(fixed.id, first.id);
+        let all = e.store.batches(false, Some(&t.id)).unwrap();
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].calls[0].question, "Header accent");
+
+        e.store
+            .answer(
+                CallAnswerParams {
+                    batch: first.id.clone(),
+                    answers: vec![],
+                },
+                None,
+                3000,
+            )
+            .unwrap();
+        let late = post("Header accent, again", Some(first.id)).unwrap_err();
+        assert!(late.contains("answered already"), "{late}");
+    }
+
+    #[test]
     fn a_tasks_changed_calls_go_to_one_revise_which_later_changes_join() {
         let e = env();
         create(&e, Some("site"));
@@ -923,6 +988,7 @@ mod tests {
                         summary: None,
                         calls: vec![call(q, Some("teal"))],
                         hold_ms: None,
+                        replaces: None,
                     },
                     at,
                 )
@@ -972,6 +1038,7 @@ mod tests {
                     summary: None,
                     calls: vec![call("Footer rule", Some("1px"))],
                     hold_ms: None,
+                    replaces: None,
                 },
                 3600,
             )
@@ -1011,6 +1078,7 @@ mod tests {
                     summary: None,
                     calls: vec![c],
                     hold_ms: Some(60_000),
+                    replaces: None,
                 },
                 2000,
             )
@@ -1043,6 +1111,7 @@ mod tests {
                     summary: None,
                     calls: vec![c],
                     hold_ms: Some(1000),
+                    replaces: None,
                 },
                 4000,
             )
@@ -1108,6 +1177,7 @@ mod tests {
                     summary: None,
                     calls: vec![variant_call(Wait::Review)],
                     hold_ms: None,
+                    replaces: None,
                 },
                 2000,
             )
@@ -1163,6 +1233,7 @@ mod tests {
                     summary: None,
                     calls: vec![variant_call(Wait::Record)],
                     hold_ms: None,
+                    replaces: None,
                 },
                 2000,
             )
@@ -1215,6 +1286,7 @@ mod tests {
                 summary: None,
                 calls: vec![c],
                 hold_ms: None,
+                replaces: None,
             },
             2000,
         );

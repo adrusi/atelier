@@ -762,6 +762,11 @@ pub struct CallPostParams {
     #[serde(default)]
     #[ts(optional)]
     pub hold_ms: Option<u64>,
+    /// A batch of this task's, posted earlier and not answered yet, that this
+    /// one takes the place of (same id), to correct or add to it.
+    #[serde(default)]
+    #[ts(optional)]
+    pub replaces: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

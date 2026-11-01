@@ -368,7 +368,7 @@ async function render(force = false) {
     return;
   }
   // Re-render only when the batches change, so answers being typed survive.
-  const key = JSON.stringify([inbox.batches.map((b) => [b.id, b.state]), inbox.proposals.map((p) => [p.id, p.state, p.reviewed]), inbox.stage]);
+  const key = JSON.stringify([inbox.batches.map((b) => [b.id, b.state, b.created]), inbox.proposals.map((p) => [p.id, p.state, p.reviewed]), inbox.stage]);
   if (key === shown && !force) return;
   shown = key;
 

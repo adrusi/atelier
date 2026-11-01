@@ -17,4 +17,9 @@ calls: Array<Call>,
  * because the user may answer soon, instead of parking it at once. If
  * the hold runs out unanswered, the task parks then.
  */
-holdMs?: bigint, };
+holdMs?: bigint, 
+/**
+ * A batch of this task's, posted earlier and not answered yet, that this
+ * one takes the place of (same id), to correct or add to it.
+ */
+replaces?: string, };
