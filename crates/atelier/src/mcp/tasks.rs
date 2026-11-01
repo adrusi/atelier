@@ -781,6 +781,52 @@ fn parse<T: serde::de::DeserializeOwned>(v: Value) -> Result<T, String> {
     serde_json::from_value(v).map_err(|e| format!("unexpected reply from atelier's daemon: {e}"))
 }
 
+/// The service whose styles (for any theme) apply to `url`, and those
+/// themes, from the files in `tree`.
+fn site_service(tree: &std::path::Path, url: &str) -> Option<(String, Vec<String>)> {
+    let dirs = |p: &std::path::Path| -> Vec<String> {
+        let mut out: Vec<String> = std::fs::read_dir(p)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| e.path().is_dir())
+            .filter_map(|e| e.file_name().to_str().map(str::to_string))
+            .filter(|d| !d.starts_with('.'))
+            .collect();
+        out.sort();
+        out
+    };
+    let services = tree.join("services");
+    for service in dirs(&services) {
+        let themes: Vec<String> = dirs(&services.join(&service))
+            .into_iter()
+            .filter(|theme| {
+                std::fs::read_dir(services.join(&service).join(theme))
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .filter(|f| {
+                        f.file_name()
+                            .to_str()
+                            .is_some_and(|n| n.ends_with(".user.css"))
+                    })
+                    .filter_map(|f| std::fs::read_to_string(f.path()).ok())
+                    .filter_map(|text| crate::usercss::parse(&text).ok())
+                    .any(|style| {
+                        style
+                            .sections
+                            .iter()
+                            .any(|s| s.matchers.iter().any(|m| m.matches(url)))
+                    })
+            })
+            .collect();
+        if !themes.is_empty() {
+            return Some((service, themes));
+        }
+    }
+    None
+}
+
 fn kind_name(k: TaskKind) -> &'static str {
     match k {
         TaskKind::Create => "create",
@@ -848,11 +894,25 @@ fn brief(
         };
         let _ = writeln!(out, "Attached: {a} ({what})");
     }
-    match &t.service {
-        Some(s) => {
+    // A site new to this theme may be styled for others already: then its
+    // service, notes and those styles are the place to start.
+    let known = match (&t.service, &t.brief.origin) {
+        (None, Some(origin)) => site_service(std::path::Path::new(tree), origin),
+        _ => None,
+    };
+    match (&t.service, &known) {
+        (Some(s), _) => {
             let _ = writeln!(out, "Service: {s} (services/{s}/)");
         }
-        None => {
+        (None, Some((s, themes))) => {
+            let _ = writeln!(
+                out,
+                "Service: services/{s}/ already styles this site, for {} (new to this theme, not to atelier), \
+                 so it's probably that one: this theme's styles go in services/{s}/{theme}/.",
+                themes.join(", ")
+            );
+        }
+        (None, None) => {
             let _ = writeln!(
                 out,
                 "Service: not chosen yet. Name it after the site (lowercase, e.g. `lobsters` for lobste.rs) and \
@@ -901,7 +961,7 @@ fn brief(
              situation other sites will meet too, start them with theme_propose (file: notes.md)."
         );
     }
-    match &t.service {
+    match t.service.as_ref().or(known.as_ref().map(|(s, _)| s)) {
         Some(s) => {
             let present: Vec<String> = [
                 format!("services/{s}/notes.md"),
@@ -1247,7 +1307,8 @@ For a this-or-that question about part of a style, show the user both. Quickest:
 Better, when the choice matters: mark the part in the style file with the comments \
 `/* atelier:variant NAME */` and `/* atelier:end NAME */` around your choice, put each option's CSS (yours \
 too) in variants/NAME/<option>.css beside the style file (just the rules that go between the markers, \
-with no @-moz-document around them), and give the call `variant: NAME`. The user can \
+with no @-moz-document around them; if the markers sit inside nested rules, the option files are \
+nested the same way, so `&`-relative rules work), and give the call `variant: NAME`. The user can \
 then flip between the options live in their own tab, and picking another one writes it into the style \
 for you, even after the work has landed.\n";
 
@@ -1303,5 +1364,42 @@ mod tests {
 
         let b = brief_for(&[]);
         assert!(b.contains("There's no themes/t/THEME.md"), "{b}");
+    }
+
+    #[test]
+    fn a_site_styled_for_another_theme_is_recognised() {
+        let dir = tempfile::tempdir().unwrap();
+        let tree = dir.path().join("tree");
+        let put = |f: &str, text: &str| {
+            let p = tree.join(f);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        };
+        put(
+            "services/hackernews/old/base.user.css",
+            "@-moz-document domain(\"news.ycombinator.com\") { body { color: red; } }\n",
+        );
+        put("services/hackernews/notes.md", "x\n");
+        put(
+            "services/other/old/base.user.css",
+            "@-moz-document domain(\"example.com\") { body { color: red; } }\n",
+        );
+        let mut t = task(&tree);
+        t.service = None;
+        t.brief.origin = Some("https://news.ycombinator.com/item?id=1".into());
+        let b = brief(&t, &[], &[], &Default::default(), &[]);
+        assert!(
+            b.contains("services/hackernews/ already styles this site, for old"),
+            "{b}"
+        );
+        assert!(b.contains("services/hackernews/notes.md"), "{b}");
+        assert!(
+            b.contains("services/hackernews/old/: this site's styles for another theme"),
+            "{b}"
+        );
+
+        t.brief.origin = Some("https://lobste.rs/".into());
+        let b = brief(&t, &[], &[], &Default::default(), &[]);
+        assert!(b.contains("Service: not chosen yet"), "{b}");
     }
 }

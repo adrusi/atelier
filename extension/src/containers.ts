@@ -30,8 +30,9 @@ function siteOf(host: string): string {
 }
 
 /** Creates a throwaway container with a copy of the cookies `url`'s site has
- * in `from` (a cookieStoreId; the default container if omitted). */
-export async function fork(url: string, from = "firefox-default"): Promise<{ cookieStoreId: string; copied: number }> {
+ * in `from` (a cookieStoreId; the default container if omitted), or with no
+ * cookies at all when `copy` is false (the site as a new visitor sees it). */
+export async function fork(url: string, from = "firefox-default", copy = true): Promise<{ cookieStoreId: string; copied: number }> {
   const identity = await browser.contextualIdentities.create({ name: NAME, color: "purple", icon: "fence" });
   const store = identity.cookieStoreId;
   const list = await made;
@@ -40,6 +41,7 @@ export async function fork(url: string, from = "firefox-default"): Promise<{ coo
   opening.add(store);
   setTimeout(() => opening.delete(store), 30_000);
   let copied = 0;
+  if (!copy) return { cookieStoreId: store, copied };
   let host: string;
   try {
     host = new URL(url).hostname;

@@ -66,8 +66,9 @@ const TOOLS: &[Tool] = &[
             the user's cookies for the site: logged in as them, but what you change there (a theme switch, a \
             dismissed notice, other site settings) stays there, and the container goes when the tab closes. \
             Settings a site keeps in local storage start at its defaults. Use it to see or test a setting other \
-            than the user's. Close tabs you're finished with (tab_close).",
-        schema: || json!({ "type": "object", "properties": { "url": { "type": "string" }, "throwaway": { "type": "boolean", "description": "Open in a temporary container with a copy of the user's cookies for this site." }, "task": { "type": ["string", "null"], "description": "The task whose tree this tab shows. Default: the task you hold." }, "waitFor": { "type": "string", "description": "For pages that render after load (JavaScript apps): also wait until this CSS selector matches, up to waitForMs (default 10000)." }, "waitForMs": { "type": "integer" } }, "required": ["url"] }),
+            than the user's. With `cookies: false` too, it starts with no cookies: the site as a new visitor sees \
+            it (logged out, default settings). Close tabs you're finished with (tab_close).",
+        schema: || json!({ "type": "object", "properties": { "url": { "type": "string" }, "throwaway": { "type": "boolean", "description": "Open in a temporary container with a copy of the user's cookies for this site." }, "cookies": { "type": "boolean", "description": "With throwaway: false starts the container empty instead of copying the user's cookies. Default true." }, "task": { "type": ["string", "null"], "description": "The task whose tree this tab shows. Default: the task you hold." }, "waitFor": { "type": "string", "description": "For pages that render after load (JavaScript apps): also wait until this CSS selector matches, up to waitForMs (default 10000)." }, "waitForMs": { "type": "integer" } }, "required": ["url"] }),
     },
     Tool {
         name: "tab_navigate",

@@ -299,7 +299,7 @@ const handlers: Record<string, Handler> = {
     let container: { cookieStoreId: string; copied: number } | null = null;
     if (param<boolean>(params, "throwaway", "boolean", false)) {
       try {
-        container = await containers.fork(url, param<string>(params, "from", "string", "firefox-default"));
+        container = await containers.fork(url, param<string>(params, "from", "string", "firefox-default"), param<boolean>(params, "cookies", "boolean", true));
       } catch (e) {
         throw new RpcError(PAGE_ERROR, `couldn't make a throwaway container: ${e instanceof Error ? e.message : e} (Firefox's containers may be turned off)`);
       }

@@ -444,6 +444,11 @@ try {
     await tool("eval", { tab: away, expression: "document.cookie = 'theme=dark; path=/'; 0" });
     assert.doesNotMatch((await tool("eval", { tab, expression: "document.cookie" })).result, /theme=dark/, "the user's cookies are untouched");
     await tool("tab_close", { tab: away });
+    // Or with none: the site as a new visitor sees it.
+    const fresh = await tool("tab_open", { url: fixture, throwaway: true, cookies: false });
+    assert.equal(fresh.cookiesCopied, 0);
+    assert.doesNotMatch((await tool("eval", { tab: fresh.tab, expression: "document.cookie" })).result, /seen=1/);
+    await tool("tab_close", { tab: fresh.tab });
   });
 
   await check("tab_navigate and tab_close", async () => {
