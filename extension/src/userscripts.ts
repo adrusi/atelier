@@ -35,8 +35,30 @@ export function onUserScriptConnect(): PortEvent | undefined {
   return (browser.runtime as unknown as { onUserScriptConnect?: PortEvent }).onUserScriptConnect;
 }
 
-/** For permissions.request/contains; the @types don't list "userScripts". */
-export const USER_SCRIPTS_PERMISSION = { permissions: ["userScripts"] } as unknown as browser.permissions.Permissions;
+/** What atelier needs granted to work, each asked for on its own (Firefox
+ * won't request userScripts with anything else), and each with a click:
+ * user scripts (optional-only in Firefox), and access to every site, which
+ * an installed MV3 extension may not get without asking (one installed by
+ * policy or into a profile never sees a prompt). Without site access its
+ * styles aren't injected, and APIs like tabs.captureTab don't exist in pages
+ * started without it. (The @types don't list "userScripts".) */
+export const REQUIRED_PERMISSIONS: { label: string; permissions: browser.permissions.Permissions }[] = [
+  { label: "Allow user scripts", permissions: { permissions: ["userScripts"] } as unknown as browser.permissions.Permissions },
+  { label: "Allow access to your sites", permissions: { origins: ["<all_urls>"] } },
+];
+
+/** The first permission atelier still needs, or null if it has them all. */
+export async function missingPermission(): Promise<(typeof REQUIRED_PERMISSIONS)[number] | null> {
+  for (const p of REQUIRED_PERMISSIONS) {
+    if (!(await browser.permissions.contains(p.permissions).catch(() => false))) return p;
+  }
+  return null;
+}
+
+/** Whether everything in REQUIRED_PERMISSIONS is granted. */
+export async function hasRequiredPermissions(): Promise<boolean> {
+  return Boolean(userScripts()) && (await missingPermission()) === null;
+}
 
 type MessageEvent = {
   addListener(cb: (msg: unknown, sender: browser.runtime.MessageSender) => Promise<unknown> | undefined): void;

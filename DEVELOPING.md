@@ -118,7 +118,8 @@ owned directory, daemon, native host, extension and page shim. Build first
 `node dev/e2e/tasks.ts` (a task from queue to landing through `atelier mcp`),
 `node dev/e2e/popup.ts` (requests and undo from the popup, driven by keystrokes),
 `node dev/e2e/calls.ts` (questions from agents, the inbox, answers, theme stage),
-`node dev/e2e/recovery.ts` (agent tabs and containers reconciled after a restart, simulated by reloading the extension), and
+`node dev/e2e/recovery.ts` (agent tabs and containers reconciled after a restart, simulated by reloading the extension),
+`node dev/e2e/permissions.ts` (an install without site access: asking for it, and restarting to use it), and
 `node dev/e2e/fidelity.ts` (emulation against the real thing, through the fidelity harness). A failing run keeps the instance and its owned
 directory (`$XDG_RUNTIME_DIR/atelier-dev/<name>{,-owned}`) for inspection.
 
@@ -178,7 +179,7 @@ Public smoke tests use sites that don't need logging in (Wikipedia, MDN, Hacker 
 
 ### Notes
 
-- Temporarily installed MV3 extensions get their content-script host permissions without a prompt: the smoke extension's `<all_urls>` CSS applies immediately. Don't assume the same for a signed install.
+- Temporarily installed MV3 extensions get their host permissions without a prompt. A signed install may not: one installed by policy or into a profile (home-manager) never sees a prompt, so it starts without site access, and then its styles aren't injected and APIs like `tabs.captureTab` don't exist (in any page or background started without it). atelier asks for it (`dev/e2e/permissions.ts`).
 - Agent harnesses may themselves run tools inside a bubblewrap sandbox (Claude Code does on Linux). Nested bwrap usually works when unprivileged user namespaces are enabled. If it doesn't, run `atelier-dev` outside the harness's sandbox.
 
 ### Signing a release

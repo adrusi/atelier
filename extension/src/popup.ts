@@ -1,7 +1,7 @@
 import type { SiteInfo, State, Unmet } from "./background";
 import { cssFor } from "./matching";
 import type { Task } from "./proto/Task";
-import { USER_SCRIPTS_PERMISSION } from "./userscripts";
+import { missingPermission } from "./userscripts";
 
 const el = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -39,6 +39,10 @@ async function render() {
   row("theme", state.bundle?.theme ?? "none");
   row("styles", String(state.bundle?.styles.length ?? 0));
   el("grant").hidden = !state.needsPermission;
+  void missingPermission().then((m) => {
+    missing = m;
+    if (m) el("grant").textContent = `${m.label} (atelier needs it to style your sites)`;
+  });
   if (state.connection !== "connected") el<HTMLDetailsElement>("details").open = true;
 
   const page = el("page");
@@ -196,8 +200,13 @@ el("start").addEventListener("click", async () => {
   }
 });
 
+/** The permission the grant button asks for, worked out before the click:
+ * permissions.request must be called straight from the click handler. */
+let missing: Awaited<ReturnType<typeof missingPermission>> = null;
+
+// One permission per click (Firefox asks for each on its own).
 el("grant").addEventListener("click", async () => {
-  await browser.permissions.request(USER_SCRIPTS_PERMISSION);
+  if (missing) await browser.permissions.request(missing.permissions);
   await render();
 });
 

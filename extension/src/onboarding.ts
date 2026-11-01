@@ -1,5 +1,5 @@
 import type { State } from "./background";
-import { USER_SCRIPTS_PERMISSION } from "./userscripts";
+import { missingPermission } from "./userscripts";
 
 const result = document.getElementById("result")!;
 const next = document.getElementById("next")!;
@@ -25,11 +25,42 @@ async function check() {
   }
 }
 
-document.getElementById("grant")!.addEventListener("click", async () => {
-  const granted = await browser.permissions.request(USER_SCRIPTS_PERMISSION);
-  document.body.dataset.granted = String(granted);
-  result.textContent = granted
-    ? "Allowed. Your styles apply from now on; reload pages that are already open."
-    : "Not allowed. You can allow it later from atelier's toolbar button.";
-  if (granted) await check();
+// Back after the restart a grant of site access causes: finish (any
+// permission still missing is asked for first).
+if (new URLSearchParams(location.search).has("granted")) void nextStep();
+
+const grant = document.getElementById("grant") as HTMLButtonElement;
+
+/** The permission the button asks for, worked out before the click:
+ * permissions.request must be called straight from the click handler. */
+let current: Awaited<ReturnType<typeof missingPermission>> = null;
+
+/** Shows the next permission to ask for, or finishes when there's none. */
+async function nextStep() {
+  const missing = await missingPermission();
+  current = missing;
+  if (missing) {
+    grant.textContent = missing.label;
+    grant.hidden = false;
+    grant.focus();
+    return;
+  }
+  grant.hidden = true;
+  document.body.dataset.granted = "true";
+  result.textContent = "Allowed. Your styles apply from now on; reload pages that are already open.";
+  await check();
+}
+
+// One permission per click: Firefox asks for each on its own. Granting site
+// access restarts atelier (to use it), which reopens this page to finish.
+grant.addEventListener("click", async () => {
+  if (!current) return nextStep();
+  const granted = await browser.permissions.request(current.permissions);
+  if (!granted) {
+    result.textContent = "Not allowed. You can allow it later from atelier's toolbar button, or in about:addons → atelier → Permissions.";
+    return;
+  }
+  await nextStep();
 });
+
+if (!new URLSearchParams(location.search).has("granted")) void nextStep();

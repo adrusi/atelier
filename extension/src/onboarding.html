@@ -7,10 +7,13 @@
 </head>
 <body>
   <main>
-    <h1>One permission to go</h1>
-    <p>atelier applies your styles with Firefox's <em>user scripts</em> feature: it's the only way to get a style into a page before the page first appears, so you never see it unstyled. Firefox asks for this permission separately, and only with a click.</p>
-    <p>atelier only runs its own code, which inserts the styles from your atelier directory into the pages they're written for.</p>
-    <button id="grant" autofocus>Allow user scripts</button>
+    <h1>One step to go</h1>
+    <p>atelier needs two permissions, which Firefox asks for one at a time, each with a click:</p>
+    <ul>
+      <li><strong>Access to your sites</strong>, to apply your styles to them, and for the agents you ask for changes to see the pages they're working on (in tabs of their own; yours are only read for a screenshot when you ask).</li>
+      <li><strong>User scripts</strong>: the only way to get a style into a page before it first appears, so you never see it unstyled. atelier only runs its own code, which inserts the styles from your atelier directory into the pages they're written for.</li>
+    </ul>
+    <button id="grant" autofocus>Allow</button>
     <p id="result" role="status"></p>
     <section id="next" hidden>
       <div id="connected" hidden>

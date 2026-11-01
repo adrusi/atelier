@@ -150,10 +150,11 @@ try {
       };
       const inner = async () =>
         Promise.all((await frames()).map((c) => evaluate(bidi, c, "getComputedStyle(document.getElementById('inner')).color")));
-      assert.deepEqual(await eventually(inner, (v) => v.every((c) => c === "rgb(9, 9, 9)")), ["rgb(9, 9, 9)", "rgb(9, 9, 9)"]);
+      // Three frames: from this origin, from another, and full width.
+      assert.deepEqual(await eventually(inner, (v) => v.every((c) => c === "rgb(9, 9, 9)")), ["rgb(9, 9, 9)", "rgb(9, 9, 9)", "rgb(9, 9, 9)"]);
       assert.notEqual(await computed("#outer", "color"), "rgb(9, 9, 9)", "the page around them isn't matched");
       write(FRAMES, framed("rgb(8, 8, 8)"));
-      assert.deepEqual(await eventually(inner, (v) => v.every((c) => c === "rgb(8, 8, 8)")), ["rgb(8, 8, 8)", "rgb(8, 8, 8)"]);
+      assert.deepEqual(await eventually(inner, (v) => v.every((c) => c === "rgb(8, 8, 8)")), ["rgb(8, 8, 8)", "rgb(8, 8, 8)", "rgb(8, 8, 8)"]);
       fs.rmSync(FRAMES);
     });
     await check("removing a style removes it from open pages", async () => {

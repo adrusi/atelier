@@ -23,7 +23,7 @@ import { Rpc } from "./rpc";
 import * as agentTabs from "./agenttabs";
 import * as tools from "./tools";
 import { EMULATION_MARKER, SOURCE_MARKER } from "./page/markers";
-import { onUserScriptConnect, onUserScriptMessage, type UserScript, userScripts } from "./userscripts";
+import { hasRequiredPermissions, onUserScriptConnect, onUserScriptMessage, type UserScript, userScripts } from "./userscripts";
 
 declare const ATELIER_NATIVE_HOST: string;
 /** The compiled page shim, inlined by build.ts. */
@@ -46,6 +46,7 @@ export type State = {
 };
 
 const state: State = { connection: "disconnected", needsPermission: !userScripts() };
+void hasRequiredPermissions().then((ok) => (state.needsPermission = !ok));
 let rpc: Rpc | null = null;
 let retryDelay = 1000;
 let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -270,7 +271,7 @@ const scriptId = (styleId: string) => `style:${styleId}`;
 
 async function applyBundle(bundle: Bundle) {
   const us = userScripts();
-  state.needsPermission = !us;
+  state.needsPermission = !(await hasRequiredPermissions());
   if (!us) {
     console.info("atelier: can't apply styles until the userScripts permission is granted");
     return;
@@ -444,15 +445,30 @@ browser.tabs.onRemoved.addListener((tabId) => {
 });
 
 browser.permissions.onAdded.addListener((p) => {
+  // APIs that need site access (tabs.captureTab) only exist in pages started
+  // with it, this background included: start again to have them. (Rare: only
+  // when the person grants it.)
+  console.info(`atelier: permissions added: ${JSON.stringify(p)}`);
+  if (p.origins?.length) {
+    console.info("atelier: site access granted; restarting to use it");
+    // Onboarding closes with the restart: open it again after, to finish.
+    void browser.storage.local.set({ resumeOnboarding: true }).then(() => browser.runtime.reload());
+    return;
+  }
   if (!(p.permissions as string[] | undefined)?.includes("userScripts")) return;
   console.info("atelier: userScripts permission granted");
   if (state.bundle) void applyBundle(state.bundle);
 });
 
 browser.runtime.onInstalled.addListener((details) => {
-  if (details.reason === "install" && !userScripts()) {
-    void browser.tabs.create({ url: browser.runtime.getURL("onboarding.html") });
-  }
+  // On install, and on an update that still lacks something (an install
+  // without a prompt never got site access); and after the restart a grant of
+  // site access causes, to finish what onboarding was doing.
+  if (details.reason !== "install" && details.reason !== "update") return;
+  void Promise.all([hasRequiredPermissions(), browser.storage.local.get("resumeOnboarding")]).then(([ok, v]) => {
+    if (v.resumeOnboarding) void browser.storage.local.remove("resumeOnboarding");
+    if (!ok || v.resumeOnboarding) void browser.tabs.create({ url: browser.runtime.getURL(`onboarding.html${ok ? "?granted" : ""}`) });
+  });
 });
 
 browser.runtime.onMessage.addListener((msg: unknown) => {
@@ -673,7 +689,8 @@ async function request(tabId: number, text: string, screenshot: boolean): Promis
   const description = text.trim() || (service === null ? `Style ${hostOf(tab.url)}` : "");
   if (!description) throw new Error("Say what you'd like changed.");
   const uploads: { name: string; data: string }[] = [];
-  if (screenshot) {
+  // Without site access there's no captureTab: the request goes without one.
+  if (screenshot && typeof (browser.tabs as { captureTab?: unknown }).captureTab === "function") {
     const dataUrl: string = await (browser.tabs as any).captureTab(tabId, { format: "jpeg", quality: 85 });
     uploads.push({ name: "page.jpg", data: dataUrl.split(",", 2)[1] });
   }
